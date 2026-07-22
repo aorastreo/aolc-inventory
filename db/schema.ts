@@ -34,6 +34,23 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 // ============================================
+// EMPLOYEES (Local auth with username/password)
+// ============================================
+export const employees = mysqlTable("employees", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  username: varchar("username", { length: 100 }).notNull().unique(),
+  password: varchar("password", { length: 255 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  role: mysqlEnum("role", ["employee", "manager", "admin"]).default("employee").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Employee = typeof employees.$inferSelect;
+export type InsertEmployee = typeof employees.$inferInsert;
+
+// ============================================
 // STORES (Multi-tenancy)
 // ============================================
 export const stores = mysqlTable("stores", {

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router";
-import { useAuth } from "@/hooks/useAuth";
+import { useLocalAuth } from "@/hooks/useLocalAuth";
 import { trpc } from "@/providers/trpc";
 import { useState } from "react";
 import {
@@ -20,9 +20,9 @@ const menuItems = [
 
 export function Sidebar({ open }: { open: boolean }) {
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, user } = useLocalAuth();
   const { data: stores } = trpc.inventory.stores.useQuery();
-  const [selectedStore, setSelectedStore] = useState<string>("los-chiles");
+  const [selectedStore, setSelectedStore] = useState("los-chiles");
 
   return (
     <aside
