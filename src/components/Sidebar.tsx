@@ -7,6 +7,7 @@ import {
   Package,
   ClipboardList,
   Receipt,
+  Settings,
   Store,
   LogOut
 } from "lucide-react";
@@ -16,6 +17,7 @@ const menuItems = [
   { path: "/pallets", label: "Contenedores", icon: Package },
   { path: "/adjustments", label: "Ajustes", icon: ClipboardList },
   { path: "/closings", label: "Cierres", icon: Receipt },
+  { path: "/settings", label: "Configuracion", icon: Settings },
 ];
 
 export function Sidebar({ open }: { open: boolean }) {

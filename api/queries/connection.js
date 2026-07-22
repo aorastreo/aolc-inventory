@@ -7,7 +7,7 @@ let instance;
 export function getDb() {
     if (!instance) {
         instance = drizzle(env.databaseUrl, {
-            mode: "default",
+            mode: "planetscale",
             schema: fullSchema,
         });
     }

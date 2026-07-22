@@ -1,12 +1,13 @@
 import { getDb } from "../api/queries/connection";
 import { employees } from "./schema";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 async function seedAdmin() {
     const db = getDb();
     console.log("[Seed] Creating admin user...");
     // Check if admin exists
     const existing = await db.select().from(employees)
-        .where(employees.username.eq("admin"));
+        .where(eq(employees.username, "admin"));
     if (existing.length === 0) {
         const hashedPassword = await bcrypt.hash("admin123", 10);
         await db.insert(employees).values({
