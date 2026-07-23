@@ -246,34 +246,30 @@ export const labelConfig = mysqlTable("labelConfig", {
   // Label dimensions
   labelWidth: varchar("labelWidth", { length: 20 }).notNull().default("50mm"),
   labelHeight: varchar("labelHeight", { length: 20 }).notNull().default("25mm"),
-  // Product name
+  // Product name (absolute position Y=top)
   nameFontSize: varchar("nameFontSize", { length: 10 }).notNull().default("5pt"),
-  nameMarginTop: varchar("nameMarginTop", { length: 10 }).notNull().default("1.5mm"),
-  nameMarginBottom: varchar("nameMarginBottom", { length: 10 }).notNull().default("0.3mm"),
+  nameTop: varchar("nameTop", { length: 10 }).notNull().default("1mm"),
   nameTextAlign: varchar("nameTextAlign", { length: 10 }).notNull().default("center"),
-  // Price
+  // Price (absolute position Y=top)
   priceFontSize: varchar("priceFontSize", { length: 10 }).notNull().default("20pt"),
   ivaFontSize: varchar("ivaFontSize", { length: 10 }).notNull().default("8pt"),
-  priceMarginTop: varchar("priceMarginTop", { length: 10 }).notNull().default("0.2mm"),
-  priceMarginBottom: varchar("priceMarginBottom", { length: 10 }).notNull().default("0.2mm"),
+  priceTop: varchar("priceTop", { length: 10 }).notNull().default("6mm"),
   priceTextAlign: varchar("priceTextAlign", { length: 10 }).notNull().default("center"),
-  // Barcode
+  // Barcode (absolute position Y=top)
   barcodeWidth: varchar("barcodeWidth", { length: 10 }).notNull().default("35mm"),
   barcodeHeight: varchar("barcodeHeight", { length: 10 }).notNull().default("7.5mm"),
   barcodeModuleWidth: varchar("barcodeModuleWidth", { length: 10 }).notNull().default("0.50"),
   barcodeBarHeight: varchar("barcodeBarHeight", { length: 10 }).notNull().default("9"),
-  barcodeMarginTop: varchar("barcodeMarginTop", { length: 10 }).notNull().default("0.5mm"),
+  barcodeTop: varchar("barcodeTop", { length: 10 }).notNull().default("12mm"),
   barcodeAlign: varchar("barcodeAlign", { length: 10 }).notNull().default("center"),
-  // Barcode number
+  // Barcode number (absolute position Y=top)
   barcodeNumberFontSize: varchar("barcodeNumberFontSize", { length: 10 }).notNull().default("8pt"),
   barcodeNumberLetterSpacing: varchar("barcodeNumberLetterSpacing", { length: 10 }).notNull().default("2px"),
-  barcodeNumberMarginTop: varchar("barcodeNumberMarginTop", { length: 10 }).notNull().default("0.3mm"),
-  barcodeNumberMarginBottom: varchar("barcodeNumberMarginBottom", { length: 10 }).notNull().default("0.2mm"),
+  barcodeNumberTop: varchar("barcodeNumberTop", { length: 10 }).notNull().default("17mm"),
   barcodeNumberAlign: varchar("barcodeNumberAlign", { length: 10 }).notNull().default("center"),
-  // Footer
+  // Footer (absolute position Y=top)
   footerFontSize: varchar("footerFontSize", { length: 10 }).notNull().default("5pt"),
-  footerMarginTop: varchar("footerMarginTop", { length: 10 }).notNull().default("2mm"),
-  footerMarginBottom: varchar("footerMarginBottom", { length: 10 }).notNull().default("0.3mm"),
+  footerTop: varchar("footerTop", { length: 10 }).notNull().default("20mm"),
   footerTextAlign: varchar("footerTextAlign", { length: 10 }).notNull().default("center"),
   // Show/hide elements
   showPrice: boolean("showPrice").notNull().default(true),

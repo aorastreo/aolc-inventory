@@ -524,20 +524,17 @@ export default function LabelsPage() {
         </div>
       </div>
 
-      {/* Hidden print area - uses dynamic config from DB */}
+      {/* Hidden print area - uses absolute positioning, each element independent */}
       <div className="print-only">
-        <div className="label-sheet" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           {expandedItems.map((item, idx) => (
             <div
               key={idx}
               style={{
                 width: labelCfg?.labelWidth || "50mm",
                 height: labelCfg?.labelHeight || "25mm",
-                padding: "1mm 2mm",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
+                padding: 0,
+                position: "relative",
                 pageBreakInside: "avoid",
                 background: "white",
                 boxSizing: "border-box",
@@ -545,29 +542,28 @@ export default function LabelsPage() {
                 overflow: "hidden",
               }}
             >
+              {/* Name - absolute position */}
               <div style={{
-                fontSize: labelCfg?.nameFontSize || "5.5pt",
-                fontWeight: "bold",
-                color: "#000",
+                position: "absolute",
+                top: labelCfg?.nameTop || "1mm",
+                left: "1mm", right: "1mm",
+                fontSize: labelCfg?.nameFontSize || "5pt",
+                fontWeight: "bold", color: "#000",
                 textTransform: "uppercase",
-                letterSpacing: "0.2px",
-                lineHeight: 1.3,
-                marginTop: labelCfg?.nameMarginTop || "1mm",
-                marginBottom: labelCfg?.nameMarginBottom || "0.5mm",
+                letterSpacing: "0.2px", lineHeight: 1.3,
                 textAlign: (labelCfg?.nameTextAlign || "center") as any,
-                whiteSpace: "nowrap",
-                width: "100%",
+                whiteSpace: "nowrap", overflow: "hidden",
               }}>{item.nombre.toUpperCase()}</div>
 
+              {/* Price - absolute position */}
               {(labelCfg?.showPrice ?? true) && (
                 <div style={{
-                  display: "flex",
-                  alignItems: "baseline",
+                  position: "absolute",
+                  top: labelCfg?.priceTop || "6mm",
+                  left: "1mm", right: "1mm",
+                  display: "flex", alignItems: "baseline",
                   justifyContent: (labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center",
                   gap: "1.5mm",
-                  marginTop: labelCfg?.priceMarginTop || "0.2mm",
-                  marginBottom: labelCfg?.priceMarginBottom || "0.2mm",
-                  width: "100%",
                 }}>
                   <span style={{ fontSize: labelCfg?.priceFontSize || "20pt", fontWeight: "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
                     {Math.round(Number(item.precio))}
@@ -578,37 +574,45 @@ export default function LabelsPage() {
                 </div>
               )}
 
+              {/* Barcode - absolute position */}
               {(labelCfg?.showBarcode ?? true) && item.codigoBarras && (
-                <div style={{ marginTop: labelCfg?.barcodeMarginTop || "0.5mm", textAlign: (labelCfg?.barcodeAlign || "center") as any, width: "100%" }}>
+                <div style={{
+                  position: "absolute",
+                  top: labelCfg?.barcodeTop || "12mm",
+                  left: "1mm", right: "1mm",
+                  textAlign: (labelCfg?.barcodeAlign || "center") as any,
+                }}>
                   <Barcode128 code={item.codigoBarras} />
                 </div>
               )}
 
+              {/* Barcode Number - absolute position */}
               {(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras && (
                 <div style={{
+                  position: "absolute",
+                  top: labelCfg?.barcodeNumberTop || "17mm",
+                  left: "1mm", right: "1mm",
                   fontSize: labelCfg?.barcodeNumberFontSize || "8pt",
                   color: "#000",
                   letterSpacing: labelCfg?.barcodeNumberLetterSpacing || "2px",
                   fontFamily: "Courier New, Courier, monospace",
-                  marginTop: labelCfg?.barcodeNumberMarginTop || "0.3mm",
-                  marginBottom: labelCfg?.barcodeNumberMarginBottom || "0.2mm",
                   textAlign: (labelCfg?.barcodeNumberAlign || "center") as any,
                   whiteSpace: "nowrap",
-                  width: "100%",
                 }}>{item.codigoBarras}</div>
               )}
 
+              {/* Footer - absolute position */}
               {(labelCfg?.showFooter ?? true) && (
                 <div style={{
+                  position: "absolute",
+                  top: labelCfg?.footerTop || "20mm",
+                  left: "1mm", right: "1mm",
                   fontSize: labelCfg?.footerFontSize || "5pt",
                   color: "#000",
-                  marginTop: labelCfg?.footerMarginTop || "2mm",
-                  marginBottom: labelCfg?.footerMarginBottom || "0.3mm",
                   letterSpacing: "0.2px",
                   fontFamily: "Arial Narrow, Arial, sans-serif",
                   textAlign: (labelCfg?.footerTextAlign || "center") as any,
                   whiteSpace: "nowrap",
-                  width: "100%",
                 }}>
                   {(labelCfg?.showDate ?? true) ? `${getLocalDateString()} - ` : ""}
                   {labelCfg?.footerText || "American Outlet Los Chiles"}
