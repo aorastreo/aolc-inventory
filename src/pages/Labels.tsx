@@ -33,36 +33,92 @@ function getLocalDateString() {
   return `${y}-${m}-${d}`;
 }
 
-// Code 128 barcode patterns (simplified subset for numeric + common chars)
-const CODE128_PATTERNS: Record<string, string> = {
-  "0": "11011001100", "1": "11001101100", "2": "11001100110", "3": "10010011000",
-  "4": "10010001100", "5": "10001001100", "6": "10011001000", "7": "10011000100",
-  "8": "10001100100", "9": "11001001000", " ": "11001110010", "-": "10100111000",
+// Complete Code 128 barcode patterns (bar=1, space=0)
+// Each pattern is 11 modules (3 bars + 3 spaces)
+const CODE128: Record<number, string> = {
+  0: "11011001100", 1: "11001101100", 2: "11001100110", 3: "10010011000", 4: "10010001100",
+  5: "10001001100", 6: "10011001000", 7: "10011000100", 8: "10001100100", 9: "11001001000",
+  10: "11001000100", 11: "11000100100", 12: "10110011100", 13: "10011011100", 14: "10011001110",
+  15: "10111001100", 16: "10011101100", 17: "10011100110", 18: "11001110010", 19: "11001011100",
+  20: "11001001110", 21: "11011100100", 22: "11001110100", 23: "11101101110", 24: "11101001100",
+  25: "11100101100", 26: "11100100110", 27: "11101100100", 28: "11100110100", 29: "11100110010",
+  30: "11011011000", 31: "11011000110", 32: "11000110110", 33: "10100011000", 34: "10001011000",
+  35: "10001000110", 36: "10110001000", 37: "10001101000", 38: "10001100010", 39: "11010001000",
+  40: "11000101000", 41: "11000100010", 42: "10110111000", 43: "10110001110", 44: "10001101110",
+  45: "10111011000", 46: "10111000110", 47: "10001110110", 48: "11101110110", 49: "11010001110",
+  50: "11000101110", 51: "11011101000", 52: "11011100010", 53: "11011101110", 54: "11101011000",
+  55: "11101000110", 56: "11100010110", 57: "11101101000", 58: "11101100010", 59: "11100011010",
+  60: "11101111010", 61: "11001000010", 62: "11110001010", 63: "10100110000",
+  64: "10100001100", 65: "10010110000", 66: "10010000110", 67: "10000101100", 68: "10000100110",
+  69: "10110010000", 70: "10110000100", 71: "10011010000", 72: "10011000010", 73: "10000110100",
+  74: "10000110010", 75: "11000010010", 76: "11001010000", 77: "11110111010", 78: "11000010100",
+  79: "10001111010", 80: "10100111100", 81: "10010111100", 82: "10010011110", 83: "10111100100",
+  84: "10011110100", 85: "10011110010", 86: "11110100100", 87: "11110010100", 88: "11110010010",
+  89: "11011011110", 90: "11011110110", 91: "11110110110", 92: "10101111000", 93: "10100011110",
+  94: "10001011110", 95: "10111101000", 96: "10111100010", 97: "11110101000", 98: "11110100010",
+  99: "10111011110", 100: "10111101110", 101: "11101011110", 102: "11110101110",
+  103: "11010000100", 104: "11010010000", 105: "11010011100", 106: "11000111010",
 };
 
+// Generate Code 128 barcode SVG
 function BarcodeSVG({ code }: { code: string }) {
-  // Simple barcode visualization using alternating bars
-  // For real scanning, use a proper Code 128 library
-  const bars: JSX.Element[] = [];
-  let x = 0;
-  const barWidth = 0.4; // mm per narrow bar
-  const height = 4; // mm
+  // Clean code: keep only digits for Code C encoding
+  const digits = code.replace(/\D/g, "");
+  if (digits.length < 2) return <div className="label-barcode-number">{code}</div>;
 
-  for (let i = 0; i < code.length; i++) {
-    const digit = parseInt(code[i], 10);
-    // Generate bars based on digit value
-    const pattern = CODE128_PATTERNS[String(digit)] || "110";
-    for (let j = 0; j < pattern.length; j++) {
-      if (pattern[j] === "1") {
-        bars.push(<rect key={`${i}-${j}`} x={x} y={0} width={barWidth} height={height} fill="#000" />);
-      }
-      x += barWidth;
-    }
-    x += barWidth; // gap between digits
+  // Pad with leading zero if odd number of digits
+  const padded = digits.length % 2 === 1 ? "0" + digits : digits;
+
+  // Build Code 128C encoded data
+  const values: number[] = [];
+
+  // Start C = 105
+  values.push(105);
+
+  // Encode digits in pairs using Code C
+  for (let i = 0; i < padded.length; i += 2) {
+    const pair = parseInt(padded.substring(i, i + 2), 10);
+    values.push(pair);
   }
 
+  // Calculate checksum (mod 103)
+  let sum = values[0]; // Start code value
+  for (let i = 1; i < values.length; i++) {
+    sum += values[i] * i;
+  }
+  const checksum = sum % 103;
+  values.push(checksum);
+
+  // Stop pattern = 106
+  values.push(106);
+
+  // Render as SVG
+  const bars: JSX.Element[] = [];
+  let x = 0;
+  const narrowWidth = 0.33; // mm per narrow module
+  const height = 5; // mm
+
+  // Quiet zone (10 modules white space at start)
+  x += 10 * narrowWidth;
+
+  for (let i = 0; i < values.length; i++) {
+    const pattern = CODE128[values[i]] || "";
+    let isBar = true; // Code 128 patterns start with bar
+    for (let j = 0; j < pattern.length; j++) {
+      const width = pattern[j] === "1" ? narrowWidth : narrowWidth;
+      if (isBar && pattern[j] === "1") {
+        bars.push(<rect key={`${i}-${j}`} x={x} y={0} width={narrowWidth * 1.5} height={height} fill="#000" />);
+      }
+      x += narrowWidth;
+      isBar = !isBar;
+    }
+  }
+
+  // Quiet zone at end
+  x += 10 * narrowWidth;
+
   return (
-    <svg className="label-barcode" viewBox={`0 0 ${x} ${height}`} preserveAspectRatio="xMidYMid meet" style={{ width: "38mm", height: "4mm" }}>
+    <svg className="label-barcode" viewBox={`0 0 ${x} ${height}`} preserveAspectRatio="xMidYMid meet" style={{ width: "40mm", height: "4.5mm" }}>
       {bars}
     </svg>
   );
@@ -492,14 +548,73 @@ export default function LabelsPage() {
           .print-only, .print-only * { visibility: visible; }
           .print-only { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
           .label-sheet { display: flex; flex-direction: column; gap: 0; }
-          .aolc-label { width: 50mm; height: 25mm; padding: 1.5mm 2mm; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; page-break-inside: avoid; background: white; box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
-          .label-product-name { font-size: 6pt; font-weight: bold; color: #000; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.1; max-height: 7mm; overflow: hidden; width: 100%; }
-          .label-price-row { display: flex; align-items: baseline; justify-content: center; gap: 1mm; margin: 0.5mm 0; }
-          .label-price { font-size: 16pt; font-weight: bold; color: #000; letter-spacing: 0.5px; }
-          .label-iva { font-size: 6pt; font-weight: bold; color: #000; }
-          .label-barcode { display: flex; justify-content: center; align-items: center; height: 5mm; }
-          .label-barcode-number { font-size: 6pt; color: #000; letter-spacing: 1.5px; font-family: monospace; margin-top: 0.3mm; }
-          .label-footer { font-size: 4.5pt; color: #000; margin-top: 0.5mm; letter-spacing: 0.2px; }
+          .aolc-label {
+            width: 50mm;
+            height: 25mm;
+            padding: 1.5mm 2mm;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            text-align: center;
+            page-break-inside: avoid;
+            background: white;
+            box-sizing: border-box;
+            font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+            overflow: hidden;
+            border: none;
+          }
+          .label-product-name {
+            font-size: 5.5pt;
+            font-weight: bold;
+            color: #000;
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+            line-height: 1.1;
+            max-height: 5mm;
+            overflow: hidden;
+            width: 100%;
+            margin-bottom: 0.5mm;
+          }
+          .label-price-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            gap: 1.5mm;
+            margin: 0.5mm 0;
+          }
+          .label-price {
+            font-size: 18pt;
+            font-weight: bold;
+            color: #000;
+            letter-spacing: 0.5px;
+            line-height: 1;
+          }
+          .label-iva {
+            font-size: 7pt;
+            font-weight: bold;
+            color: #000;
+          }
+          .label-barcode {
+            margin-top: 0.8mm;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+          }
+          .label-barcode-number {
+            font-size: 6.5pt;
+            color: #000;
+            letter-spacing: 2px;
+            font-family: "Courier New", Courier, monospace;
+            margin-top: 0.2mm;
+          }
+          .label-footer {
+            font-size: 4.5pt;
+            color: #000;
+            margin-top: 0.8mm;
+            letter-spacing: 0.1px;
+            font-family: "Arial Narrow", Arial, sans-serif;
+          }
         }
       `}</style>
     </div>
