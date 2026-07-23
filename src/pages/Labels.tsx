@@ -33,65 +33,97 @@ function getLocalDateString() {
   return `${y}-${m}-${d}`;
 }
 
-// Code 128 encoder for Libre Barcode 128 font
-// Reference: https://dev.to/saulodias/generating-valid-code-128-barcodes-with-javascript-5ana
-function encodeCode128(text: string): string {
-  // Use Code Set C for numeric data (double density)
-  const digits = text.replace(/\D/g, "");
-  if (digits.length < 2) return text; // fallback
+// Code 128 bar/space widths for each pattern (alternating bar, space, bar, space, bar, space)
+// Each value is the width in modules. Sum must be 11. Stop has 13.
+const CODE128_WIDTHS: number[][] = [
+  [2,1,2,2,2,2], [2,2,2,1,2,2], [2,2,2,2,1,2], [1,2,1,2,2,3], [1,2,1,3,2,2],
+  [1,3,1,2,2,2], [1,2,2,2,1,3], [1,2,2,3,1,2], [1,3,2,2,1,2], [2,1,2,1,2,3],
+  [2,1,2,3,1,2], [2,3,1,2,1,2], [1,1,2,1,3,3], [1,1,2,3,2,3], [1,3,2,1,2,3],
+  [1,1,3,1,2,3], [1,1,3,3,2,1], [1,3,3,1,2,1], [3,1,2,1,3,1], [2,1,1,3,2,2],
+  [2,3,1,1,2,2], [2,1,2,3,1,1], [2,1,3,2,1,2], [2,3,2,1,1,2], [1,2,1,3,2,2],
+  [1,2,3,1,2,1], [1,2,2,3,1,2], [3,1,1,2,2,2], [3,2,1,1,2,2], [3,2,1,2,1,2],
+  [1,1,2,2,3,2], [1,2,2,1,3,2], [1,2,3,1,1,3], [1,2,2,3,1,1], [3,2,1,2,1,1],
+  [3,1,2,1,2,2], [2,3,1,2,1,1], [2,3,2,1,1,2], [2,3,2,2,1,1], [2,1,2,2,1,3],
+  [2,1,3,1,2,2], [2,3,1,1,2,2], [2,2,1,3,1,2], [2,2,3,1,1,2], [2,2,1,1,3,2],
+  [3,1,2,1,3,1], [2,1,1,3,1,3], [2,3,1,1,1,3], [1,2,2,1,3,2], [3,1,1,3,1,2],
+  [2,1,1,3,2,2], [2,2,1,1,2,3], [2,2,1,3,2,1], [2,1,1,2,3,2], [1,1,3,2,2,2],
+  [2,1,3,1,1,3], [3,1,2,1,3,1], [1,1,2,3,2,2], [1,3,2,2,2,1], [3,2,2,1,1,2],
+  [2,2,1,1,2,3], [2,2,3,1,1,2], [3,1,2,2,1,1], [1,1,2,2,2,3], [1,3,2,1,2,2],
+  [1,2,3,1,1,2], [1,1,2,2,3,1], [1,1,3,2,2,1], [1,2,2,3,1,1], [3,1,2,2,1,2],
+  [3,2,2,1,2,1], [1,1,2,1,2,4], [1,1,2,1,4,2], [1,1,4,1,2,2], [1,2,2,1,1,4],
+  [1,2,2,4,1,1], [1,4,2,1,1,2], [4,1,2,1,2,1], [2,1,4,1,2,1], [2,1,2,1,4,1],
+  [2,1,2,3,2,1], [1,2,1,4,1,2], [1,2,3,2,1,2], [4,2,1,2,1,1], [1,1,1,1,4,3],
+  [1,1,1,3,4,1], [1,3,1,1,4,1], [1,1,4,1,1,3], [1,1,4,3,1,1], [4,1,1,1,1,3],
+  [4,1,1,3,1,1], [1,1,3,1,4,1], [1,1,4,1,2,2], [3,1,1,2,2,2], [2,2,1,1,1,4],
+  [4,3,1,1,1,1], [1,1,1,1,4,2], [1,1,1,2,4,1], [1,2,1,1,4,2], [1,2,1,2,4,1],
+  [1,1,4,1,1,2], [1,1,4,2,1,1], [1,4,1,1,2,2], [1,4,2,1,1,2], [1,4,2,2,1,1],
+  [4,1,1,2,1,2], [4,2,1,1,1,2], [4,2,2,1,1,1], [2,1,2,1,4,1], [2,1,3,2,1,2],
+  [2,3,1,1,1,3], [2,3,3,1,1,1], [3,1,2,1,3,1], [1,1,1,3,2,3], [1,3,1,2,2,2],
+  [1,1,1,1,3,4], [2,1,1,1,2,4], [2,1,4,1,1,2], [2,1,2,1,2,3], [1,2,2,1,3,2],
+];
+
+// Calculate Code 128 checksum
+function code128Checksum(values: number[]): number {
+  let sum = values[0]; // start code value
+  for (let i = 1; i < values.length; i++) {
+    sum += values[i] * i;
+  }
+  return sum % 103;
+}
+
+// Generate SVG barcode with proper Code 128 encoding
+function Barcode128({ code }: { code: string }) {
+  // Clean: keep only digits for Code C
+  const digits = code.replace(/\D/g, "");
+  if (digits.length < 2) {
+    return <div className="label-barcode-number" style={{ fontSize: "6pt" }}>{code}</div>;
+  }
 
   // Pad with leading zero if odd
   const padded = digits.length % 2 === 1 ? "0" + digits : digits;
 
-  // Convert digit pairs to Code C characters
-  let encoded = "";
+  // Build symbol values
+  const values: number[] = [];
+  values.push(105); // Start C
+
   for (let i = 0; i < padded.length; i += 2) {
     const pair = parseInt(padded.substring(i, i + 2), 10);
-    // Code C value 0-99 -> char code (value + 32, or +100 if > 94)
-    const charCode = pair > 94 ? pair + 100 : pair + 32;
-    encoded += String.fromCharCode(charCode);
+    values.push(pair);
   }
 
-  // Start C = char 205
-  const start = String.fromCharCode(205);
-  // Stop = char 206
-  const stop = String.fromCharCode(206);
+  values.push(code128Checksum(values));
+  values.push(106); // Stop
 
-  // Calculate checksum
-  let sum = 105; // Start C value
-  for (let i = 0; i < encoded.length; i++) {
-    const code = encoded.charCodeAt(i);
-    const value = code > 199 ? code - 100 : code - 32;
-    sum += (i + 1) * value;
+  // Render SVG bars
+  const moduleWidth = 0.28; // mm per module
+  const barHeight = 5; // mm
+  let x = 10 * moduleWidth; // quiet zone (10 modules)
+  const bars: JSX.Element[] = [];
+
+  for (let v = 0; v < values.length; v++) {
+    const widths = CODE128_WIDTHS[values[v]];
+    let isBar = true;
+    for (let i = 0; i < widths.length; i++) {
+      const w = widths[i] * moduleWidth;
+      if (isBar) {
+        bars.push(<rect key={`${v}-${i}`} x={x} y={0} width={w} height={barHeight} fill="#000" />);
+      }
+      x += w;
+      isBar = !isBar;
+    }
   }
-  let checksum = (sum % 103) + 32;
-  if (checksum > 126) checksum += 68;
-  const check = String.fromCharCode(checksum);
 
-  return start + encoded + check + stop;
-}
+  const totalWidth = x + 10 * moduleWidth;
 
-// Barcode component using Libre Barcode 128 font
-function Barcode128({ code }: { code: string }) {
-  const encoded = encodeCode128(code);
   return (
-    <div
-      className="label-barcode-font"
-      style={{
-        fontFamily: '"Libre Barcode 128", "Libre Barcode 128 Text", monospace',
-        fontSize: "20pt",
-        lineHeight: 0.9,
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textAlign: "center",
-        height: "4mm",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
+    <svg
+      className="label-barcode-svg"
+      viewBox={`0 0 ${totalWidth} ${barHeight}`}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ width: "42mm", height: "4mm" }}
     >
-      {encoded}
-    </div>
+      {bars}
+    </svg>
   );
 }
 
@@ -566,14 +598,10 @@ export default function LabelsPage() {
             font-weight: bold;
             color: #000;
           }
-          .label-barcode-font {
-            font-family: "Libre Barcode 128", "Libre Barcode 128 Text", monospace !important;
-            font-size: 20pt !important;
-            line-height: 0.9 !important;
-            height: 4mm !important;
+          .label-barcode-svg {
+            display: block;
+            margin: 0.3mm auto 0;
             text-align: center;
-            margin-top: 0.3mm;
-            width: 100%;
           }
           .label-barcode-number {
             font-size: 6pt;
