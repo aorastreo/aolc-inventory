@@ -13,21 +13,27 @@ import {
   ChevronLeft,
   ChevronRight,
   ShoppingBag,
+  Database,
+  Tag,
 } from "lucide-react";
 
 const menuItems = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/pallets", label: "Contenedores", icon: Package },
-  { path: "/adjustments", label: "Ajustes", icon: ClipboardList },
-  { path: "/closings", label: "Cierres", icon: Receipt },
-  { path: "/settings", label: "Configuracion", icon: Settings },
+  { path: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "manager"] },
+  { path: "/pallets", label: "Contenedores", icon: Package, roles: ["admin", "manager"] },
+  { path: "/adjustments", label: "Ajustes", icon: ClipboardList, roles: ["admin", "manager"] },
+  { path: "/closings", label: "Cierres", icon: Receipt, roles: ["admin", "manager", "employee"] },
+  { path: "/catalog", label: "Catalogo", icon: Database, roles: ["admin", "manager"] },
+  { path: "/labels", label: "Etiquetas", icon: Tag, roles: ["admin", "manager", "employee"] },
+  { path: "/settings", label: "Configuracion", icon: Settings, roles: ["admin"] },
 ];
 
 export function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const location = useLocation();
-  const { logout, user } = useLocalAuth();
+  const { logout, user, role } = useLocalAuth();
   const { data: stores } = trpc.inventory.stores.useQuery();
   const [selectedStore, setSelectedStore] = useState("los-chiles");
+
+  const visibleItems = menuItems.filter(item => item.roles.includes(role || "admin"));
 
   return (
     <aside
@@ -108,7 +114,7 @@ export function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => voi
 
       {/* Navigation */}
       <nav className="flex-1 py-4 px-2 space-y-1">
-        {menuItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive = location.pathname === item.path || (item.path !== "/" && location.pathname.startsWith(item.path));
           const Icon = item.icon;
           return (

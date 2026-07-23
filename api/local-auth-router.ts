@@ -118,4 +118,30 @@ export const localAuthRouter = createRouter({
         await conn.end();
       }
     }),
+
+  // Seed default employees (idempotent)
+  seedDefaults: publicQuery
+    .mutation(async () => {
+      const conn = await getRawDb();
+      try {
+        // Check if German exists
+        const [existing]: any = await conn.execute(
+          "SELECT id FROM employees WHERE username = ?",
+          ["german"]
+        );
+
+        if (existing.length === 0) {
+          const hashedPassword = await bcrypt.hash("german123", 10);
+          await conn.execute(
+            "INSERT INTO employees (storeId, username, password, name, role) VALUES (?, ?, ?, ?, ?)",
+            [1, "german", hashedPassword, "German", "employee"]
+          );
+          return { created: true, message: "Usuario German creado exitosamente" };
+        }
+
+        return { created: false, message: "Usuario German ya existe" };
+      } finally {
+        await conn.end();
+      }
+    }),
 });

@@ -56,12 +56,17 @@ export function useLocalAuth() {
     window.location.href = "/login";
   }, []);
 
+  const role = user?.role || null;
+
   return {
     user,
     isLoading,
     login,
     logout,
-    isAdmin: user?.role === "admin",
+    role,
+    isAdmin: role === "admin",
+    isManager: role === "admin" || role === "manager",
+    isEmployee: role === "employee",
     error: loginMutation.error?.message,
   };
 }

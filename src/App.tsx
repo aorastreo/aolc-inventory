@@ -9,6 +9,8 @@ import ProductsPage from "@/pages/Products";
 import AdjustmentsPage from "@/pages/Adjustments";
 import ClosingsPage from "@/pages/Closings";
 import SettingsPage from "@/pages/Settings";
+import CatalogPage from "@/pages/Catalog";
+import LabelsPage from "@/pages/Labels";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { useState } from "react";
@@ -46,6 +48,8 @@ function App() {
         <Route path="/adjustments" element={<ProtectedRoute><AdjustmentsPage /></ProtectedRoute>} />
         <Route path="/closings" element={<ProtectedRoute><ClosingsPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+        <Route path="/catalog" element={<ProtectedRoute><CatalogPage /></ProtectedRoute>} />
+        <Route path="/labels" element={<ProtectedRoute><LabelsPage /></ProtectedRoute>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </TRPCProvider>

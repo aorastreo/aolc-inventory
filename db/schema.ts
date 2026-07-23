@@ -194,19 +194,6 @@ export type Closing = typeof closings.$inferSelect;
 export type InsertClosing = typeof closings.$inferInsert;
 
 // ============================================
-// PRINTED LABELS
-// ============================================
-export const printedLabels = mysqlTable("printedLabels", {
-  id: serial("id").primaryKey(),
-  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
-  palletId: varchar("palletId", { length: 20 }),
-  productId: bigint("productId", { mode: "number", unsigned: true }),
-  codigoBarras: varchar("codigoBarras", { length: 50 }),
-  cantidad: int("cantidad").default(1),
-  printedAt: timestamp("printedAt").defaultNow().notNull(),
-});
-
-// ============================================
 // ASSEMBLERS (Armadores)
 // ============================================
 export const assemblers = mysqlTable("assemblers", {
@@ -233,3 +220,19 @@ export const assemblyAssignments = mysqlTable("assemblyAssignments", {
   estado: mysqlEnum("estado", ["pendiente", "en_progreso", "completado"]).default("pendiente"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+
+export type AssemblyAssignment = typeof assemblyAssignments.$inferSelect;
+
+// ============================================
+// PRINTED LABELS (Etiquetas impresas)
+// ============================================
+export const printedLabels = mysqlTable("printedLabels", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  palletId: bigint("palletId", { mode: "number", unsigned: true }).notNull(),
+  productId: bigint("productId", { mode: "number", unsigned: true }).notNull(),
+  printedAt: timestamp("printedAt").defaultNow().notNull(),
+});
+
+export type PrintedLabel = typeof printedLabels.$inferSelect;

@@ -1,7 +1,7 @@
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router";
-import { Plus, Eye, ArrowUpDown, Container } from "lucide-react";
+import { Plus, Eye, ArrowUpDown, Container, ClipboardList } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -168,20 +168,37 @@ export default function PalletsPage() {
                       {pallet.articulos}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right text-sm" style={{ color: "hsl(207 20% 55%)" }}>-</TableCell>
-                  <TableCell className="text-right text-sm" style={{ color: "hsl(207 20% 55%)" }}>-</TableCell>
+                  <TableCell className="text-right text-sm font-semibold" style={{ color: "#1B3A5C" }}>
+                    ₡{pallet.ventas.toLocaleString("es-CR")}
+                  </TableCell>
+                  <TableCell className="text-right text-sm font-bold" style={{ color: pallet.ganancia >= 0 ? "#16A34A" : "#DC2626" }}>
+                    {pallet.ganancia >= 0 ? "+" : "-"}₡{Math.abs(pallet.ganancia).toLocaleString("es-CR")}
+                  </TableCell>
                   <TableCell className="text-center">
-                    <Link to={`/pallets/${pallet.id}/products`}>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs font-medium transition-all duration-200 hover:shadow-md"
-                        style={{ borderColor: "hsl(210 20% 88%)", color: BRAND_BLUE }}
-                      >
-                        <Eye className="w-3.5 h-3.5 mr-1" />
-                        Ver
-                      </Button>
-                    </Link>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <Link to={`/pallets/${pallet.id}/products`}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs font-medium transition-all duration-200 hover:shadow-md"
+                          style={{ borderColor: "hsl(210 20% 88%)", color: BRAND_BLUE }}
+                        >
+                          <Eye className="w-3.5 h-3.5 mr-1" />
+                          Ver
+                        </Button>
+                      </Link>
+                      <Link to={`/adjustments?palletId=${pallet.id}`}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs font-medium transition-all duration-200 hover:shadow-md hover:bg-amber-50"
+                          style={{ borderColor: "hsl(210 20% 88%)", color: "#B45309" }}
+                        >
+                          <ClipboardList className="w-3.5 h-3.5 mr-1" />
+                          Ajustes
+                        </Button>
+                      </Link>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

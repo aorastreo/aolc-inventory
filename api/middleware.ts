@@ -40,3 +40,10 @@ function requireRole(role: string) {
 
 export const authedQuery = t.procedure.use(requireAuth);
 export const adminQuery = authedQuery.use(requireRole("admin"));
+export const managerQuery = t.procedure.use(requireAuth).use(t.middleware(async (opts) => {
+  const { ctx, next } = opts;
+  if (!ctx.user || (ctx.user.role !== "admin" && ctx.user.role !== "manager")) {
+    throw new TRPCError({ code: "FORBIDDEN", message: ErrorMessages.insufficientRole });
+  }
+  return next({ ctx: { ...ctx, user: ctx.user } });
+}));

@@ -5,17 +5,29 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
-  ClipboardList, CheckCircle, Clock, XCircle, Plus, Eye, Trash2, ArrowLeft, Save, RotateCcw,
+  ClipboardList, CheckCircle, Clock, XCircle, Plus, Eye, Trash2, ArrowLeft, Package, X, Barcode,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router";
+import ProductAutocomplete from "@/components/ProductAutocomplete";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
 
 export default function AdjustmentsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const palletFilter = searchParams.get("palletId");
+  const palletFilterNum = palletFilter ? Number(palletFilter) : null;
+
   const utils = trpc.useUtils();
-  const { data: adjustments, isLoading } = trpc.inventory.adjustments.useQuery({ storeId: 1 });
+  const { data: adjustments, isLoading } = trpc.inventory.adjustments.useQuery(
+    palletFilterNum ? { storeId: 1, palletId: palletFilterNum } : { storeId: 1 }
+  );
   const { data: pallets } = trpc.inventory.pallets.useQuery({ storeId: 1 });
+  const { data: filteredPallet } = trpc.inventory.palletById.useQuery(
+    { id: palletFilterNum! },
+    { enabled: !!palletFilterNum }
+  );
 
   const createAdj = trpc.inventory.createAdjustment.useMutation({ onSuccess: () => utils.inventory.adjustments.invalidate() });
   const completeAdj = trpc.inventory.completeAdjustment.useMutation({ onSuccess: () => { utils.inventory.adjustments.invalidate(); utils.inventory.products.invalidate(); } });
@@ -24,9 +36,16 @@ export default function AdjustmentsPage() {
   const removeItem = trpc.inventory.removeAdjustmentItem.useMutation({ onSuccess: () => utils.inventory.adjustmentItems.invalidate() });
 
   const [viewingAdj, setViewingAdj] = useState<number | null>(null);
-  const [newAdj, setNewAdj] = useState({ adjustmentId: "", description: "", palletId: "" });
+  const [newAdj, setNewAdj] = useState({ adjustmentId: "", description: "", palletId: palletFilter || "" });
   const [newItem, setNewItem] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Pre-fill palletId when coming from a filtered view
+  useEffect(() => {
+    if (palletFilter) {
+      setNewAdj(prev => ({ ...prev, palletId: palletFilter }));
+    }
+  }, [palletFilter]);
 
   const { data: adjDetail } = trpc.inventory.adjustmentById.useQuery({ id: viewingAdj! }, { enabled: !!viewingAdj });
   const { data: adjItems } = trpc.inventory.adjustmentItems.useQuery({ adjustmentId: viewingAdj! }, { enabled: !!viewingAdj });
@@ -105,16 +124,42 @@ export default function AdjustmentsPage() {
                 <Plus className="w-4 h-4" />
                 Agregar Articulo al Ajuste
               </h3>
-              <div className="grid grid-cols-4 gap-3">
-                <Input placeholder="Nombre" value={newItem.nombre} onChange={(e) => setNewItem({ ...newItem, nombre: e.target.value })} />
-                <Input placeholder="Precio" type="number" value={newItem.precio} onChange={(e) => setNewItem({ ...newItem, precio: e.target.value })} />
-                <Input placeholder="Cantidad" type="number" value={newItem.cantidad} onChange={(e) => setNewItem({ ...newItem, cantidad: Number(e.target.value) })} />
-                <Input placeholder="Cod. Barras" value={newItem.codigoBarras} onChange={(e) => setNewItem({ ...newItem, codigoBarras: e.target.value })} />
+              <div className="space-y-4">
+                {/* Autocomplete */}
+                <ProductAutocomplete
+                  nombre={newItem.nombre}
+                  precio={newItem.precio}
+                  codigoBarras={newItem.codigoBarras}
+                  cantidad={newItem.cantidad}
+                  onChange={(fields) => setNewItem({ ...newItem, ...fields })}
+                />
+
+                {/* Precio */}
+                <div>
+                  <Label>Precio</Label>
+                  <Input type="number" placeholder="0" value={newItem.precio} onChange={(e) => setNewItem({ ...newItem, precio: e.target.value })} />
+                </div>
+
+                {/* Cantidad */}
+                <div>
+                  <Label>Cantidad</Label>
+                  <Input type="number" placeholder="1" value={newItem.cantidad} onChange={(e) => setNewItem({ ...newItem, cantidad: Number(e.target.value) })} />
+                </div>
+
+                {/* Codigo de barras */}
+                <div>
+                  <Label className="flex items-center gap-1">
+                    <Barcode className="w-3.5 h-3.5" />
+                    Cod. Barras
+                  </Label>
+                  <Input placeholder="Opcional" value={newItem.codigoBarras} onChange={(e) => setNewItem({ ...newItem, codigoBarras: e.target.value })} />
+                </div>
+
+                <Button onClick={handleAddItem} className="font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar al Ajuste
+                </Button>
               </div>
-              <Button onClick={handleAddItem} className="mt-4 font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
-                <Plus className="w-4 h-4 mr-2" />
-                Agregar al Ajuste
-              </Button>
             </CardContent>
           </Card>
         )}
@@ -183,8 +228,26 @@ export default function AdjustmentsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "hsl(207 55% 15%)" }}>Ajustes</h1>
-          <p className="text-sm mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>Gestiona los ajustes de inventario</p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight" style={{ color: "hsl(207 55% 15%)" }}>Ajustes</h1>
+            {palletFilterNum && filteredPallet && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={{ background: "rgba(178,34,52,0.1)", color: BRAND_RED }}>
+                <Package className="w-3.5 h-3.5" />
+                {filteredPallet.palletId}
+                <button
+                  onClick={() => { setSearchParams({}); setNewAdj({ adjustmentId: "", description: "", palletId: "" }); }}
+                  className="ml-1 hover:opacity-70"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+          </div>
+          <p className="text-sm mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>
+            {palletFilterNum && filteredPallet
+              ? `Ajustes del contenedor: ${filteredPallet.description}`
+              : "Gestiona los ajustes de inventario"}
+          </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
