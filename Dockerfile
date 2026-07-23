@@ -1,7 +1,7 @@
 FROM node:20
 WORKDIR /app
 
-# Install ALL dependencies (including devDependencies for tsx, drizzle-kit, vite)
+# Install ALL dependencies (including devDependencies for build tools)
 COPY package*.json ./
 RUN npm install --include=dev
 
@@ -9,9 +9,8 @@ RUN npm install --include=dev
 COPY . .
 RUN npm run build
 
-# Push DB schema
-RUN npx drizzle-kit push --force || true
-
-# Expose and start with tsx
+# Expose port
 EXPOSE 3000
-CMD ["node", "--import", "tsx", "api/boot.ts"]
+
+# Start: push DB schema then start server
+CMD npx drizzle-kit push --force 2>/dev/null || true && node --import tsx api/boot.ts
