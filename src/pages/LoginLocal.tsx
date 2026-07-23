@@ -3,7 +3,7 @@ import { useLocalAuth } from "@/hooks/useLocalAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogIn, ShoppingBag, Store } from "lucide-react";
+import { LogIn, Store } from "lucide-react";
 
 export default function LoginLocalPage() {
   const { login, error } = useLocalAuth();
@@ -38,12 +38,15 @@ export default function LoginLocalPage() {
         </div>
 
         <div className="relative z-10 flex flex-col justify-center items-center w-full px-12 text-white">
-          {/* Logo icon */}
+          {/* Logo */}
           <div className="mb-8">
             <div className="relative">
-              <div className="w-24 h-24 rounded-2xl flex items-center justify-center" style={{ background: "hsl(354 78% 42%)" }}>
-                <ShoppingBag className="w-12 h-12 text-white" />
-              </div>
+              <img
+                src="/logo.jpg"
+                alt="American Outlet"
+                className="w-24 h-24 rounded-2xl object-cover border-2"
+                style={{ borderColor: "hsl(354 78% 42%)" }}
+              />
               <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "hsl(43 89% 50%)" }}>
                 <Store className="w-4 h-4 text-white" />
               </div>
@@ -70,9 +73,12 @@ export default function LoginLocalPage() {
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl mb-4" style={{ background: "hsl(354 78% 42%)" }}>
-              <ShoppingBag className="w-8 h-8 text-white" />
-            </div>
+            <img
+              src="/logo.jpg"
+              alt="American Outlet"
+              className="w-16 h-16 rounded-xl mx-auto mb-4 object-cover border-2"
+              style={{ borderColor: "hsl(354 78% 42%)" }}
+            />
             <h1 className="text-2xl font-bold" style={{ color: "hsl(207 55% 23%)" }}>American Outlet</h1>
             <p className="text-sm mt-1" style={{ color: "hsl(354 78% 42%)" }}>Los Chiles</p>
           </div>

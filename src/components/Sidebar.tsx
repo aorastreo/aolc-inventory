@@ -62,17 +62,17 @@ export function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => voi
 
       {/* Logo */}
       <div
-        className="h-16 flex items-center justify-center border-b"
+        className="flex items-center justify-center border-b"
         style={{ borderColor: "hsl(207 40% 20%)" }}
       >
         {open ? (
-          <div className="flex items-center gap-3 px-4 w-full">
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: "hsl(354 78% 42%)" }}
-            >
-              <ShoppingBag className="w-5 h-5 text-white" />
-            </div>
+          <div className="flex items-center gap-3 px-4 py-3 w-full">
+            <img
+              src="/logo.jpg"
+              alt="American Outlet"
+              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+              style={{ background: "white" }}
+            />
             <div className="overflow-hidden">
               <h1 className="text-sm font-bold text-white leading-tight tracking-tight">American Outlet</h1>
               <p className="text-[10px] font-medium leading-tight" style={{ color: "hsl(354 78% 60%)" }}>
@@ -81,12 +81,12 @@ export function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => voi
             </div>
           </div>
         ) : (
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center"
-            style={{ background: "hsl(354 78% 42%)" }}
-          >
-            <ShoppingBag className="w-5 h-5 text-white" />
-          </div>
+          <img
+            src="/logo.jpg"
+            alt="AO"
+            className="w-9 h-9 rounded-lg object-cover"
+            style={{ background: "white" }}
+          />
         )}
       </div>
 
