@@ -1,16 +1,19 @@
 FROM node:20
 WORKDIR /app
 
-# Install ALL dependencies (including devDependencies for build tools)
+# Install dependencies
 COPY package*.json ./
 RUN npm install --include=dev
 
-# Copy source and build frontend
+# Install tsx globally as fallback
+RUN npm install -g tsx
+
+# Copy source and build
 COPY . .
 RUN npm run build
 
 # Expose port
 EXPOSE 3000
 
-# Start: push DB schema then start server
-CMD npx drizzle-kit push --force 2>/dev/null || true && node --import tsx api/boot.ts
+# Start with npx tsx (will use global or local)
+CMD npx drizzle-kit push --force 2>/dev/null || true && npx tsx api/boot.ts
