@@ -35,44 +35,78 @@ function getLocalDateString() {
 }
 
 // Barcode using jsbarcode - the library we used in the original system
-function BarcodeCanvas({ code, barcodeWidth, barcodeHeight }: {
-  code: string;
-  barcodeWidth?: string;
-  barcodeHeight?: string;
-  barcodeModuleWidth?: string;
-  barcodeBarHeight?: string;
-}) {
-  const [dataUrl, setDataUrl] = useState<string>("");
-
-  let digits = code.replace(/\D/g, "");
+// Code 128 font-based barcode using Libre Barcode 128 font
+// This is the same approach that worked in the original system
+function BarcodeCanvas({ code }: { code: string; barcodeWidth?: string; barcodeHeight?: string; barcodeModuleWidth?: string; barcodeBarHeight?: string }) {
+  const digits = code.replace(/\D/g, "");
   if (digits.length === 0) return <div style={{ fontSize: "6pt" }}>{code}</div>;
-  if (digits.length < 8) digits = digits.padStart(8, "0");
-  if (digits.length > 8) digits = digits.slice(0, 8);
 
-  useEffect(() => {
-    const canvas = document.createElement("canvas");
-    try {
-      JsBarcode(canvas, digits, {
-        format: "ean8",
-        width: 3,
-        height: 120,
-        displayValue: false,
-        margin: 10,
-        background: "#ffffff",
-        lineColor: "#000000",
-      });
-      setDataUrl(canvas.toDataURL("image/png"));
-    } catch (err) {
-      console.error("Barcode error:", err);
-    }
-  }, [digits]);
+  // Encode digits as Code 128C for Libre Barcode 128 font
+  const encoded = encodeCode128C(digits);
 
-  const w = barcodeWidth || "35mm";
-  const h = barcodeHeight || "7.5mm";
+  return (
+    <div
+      style={{
+        fontFamily: '"Libre Barcode 128", "Libre Barcode 128 Text", cursive',
+        fontSize: "52pt",
+        lineHeight: 0.8,
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textAlign: "center",
+        height: "7mm",
+      }}
+    >
+      {encoded}
+    </div>
+  );
+}
 
-  if (!dataUrl) return <div style={{ width: w, height: h }} />;
+// Encode a string of digits as Code 128C for Libre Barcode 128 font
+function encodeCode128C(digits: string): string {
+  // Pad to even length
+  const padded = digits.length % 2 === 1 ? "0" + digits : digits;
 
-  return <img src={dataUrl} alt="" style={{ width: w, height: h, display: "inline-block" }} />;
+  // Map digit pairs (00-99) to Code 128C characters
+  // 00-94 -> ASCII 32-126
+  // 95-99 -> special chars
+  const mapPair = (pair: number): string => {
+    if (pair <= 94) return String.fromCharCode(pair + 32);
+    // 95-99
+    return String.fromCharCode(pair + 100);
+  };
+
+  let data = "";
+  const values: number[] = [];
+
+  // Start C = 105
+  values.push(105);
+  data += String.fromCharCode(210); // Start C special char for the font
+
+  // Encode digit pairs
+  for (let i = 0; i < padded.length; i += 2) {
+    const pair = parseInt(padded.substring(i, i + 2), 10);
+    values.push(pair);
+    data += mapPair(pair);
+  }
+
+  // Calculate checksum
+  let sum = values[0]; // start code
+  for (let i = 1; i < values.length; i++) {
+    sum += values[i] * i;
+  }
+  const checksum = sum % 103;
+
+  // Map checksum to character
+  if (checksum <= 94) {
+    data += String.fromCharCode(checksum + 32);
+  } else {
+    data += String.fromCharCode(checksum + 100);
+  }
+
+  // Stop character
+  data += String.fromCharCode(211);
+
+  return data;
 }
 
 // Custom Dropdown Component
