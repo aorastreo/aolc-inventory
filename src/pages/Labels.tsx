@@ -554,7 +554,7 @@ export default function LabelsPage() {
           .aolc-label {
             width: 50mm;
             height: 25mm;
-            padding: 0.8mm 2mm 0.5mm;
+            padding: 1.5mm 2mm 0.5mm;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -568,13 +568,13 @@ export default function LabelsPage() {
             overflow: hidden;
           }
           .label-product-name {
-            font-size: 5.5pt;
+            font-size: 5pt;
             font-weight: bold;
             color: #000;
             text-transform: uppercase;
             letter-spacing: 0.2px;
             line-height: 1.1;
-            margin-bottom: 0.5mm;
+            margin-bottom: 0.3mm;
             white-space: nowrap;
             overflow: hidden;
             width: 100%;
@@ -584,7 +584,7 @@ export default function LabelsPage() {
             align-items: baseline;
             justify-content: center;
             gap: 1.5mm;
-            margin: 0.3mm 0;
+            margin: 0.2mm 0;
           }
           .label-price {
             font-size: 20pt;
@@ -603,18 +603,18 @@ export default function LabelsPage() {
             margin: 0.5mm auto 0;
           }
           .label-barcode-number {
-            font-size: 11pt;
+            font-size: 8pt;
             color: #000;
-            letter-spacing: 2.5px;
+            letter-spacing: 2px;
             font-family: "Courier New", Courier, monospace;
-            margin-top: 0.5mm;
+            margin-top: 0.3mm;
             white-space: nowrap;
             word-break: keep-all;
           }
           .label-footer {
-            font-size: 6pt;
+            font-size: 5pt;
             color: #000;
-            margin-top: 1mm;
+            margin-top: 2mm;
             letter-spacing: 0.2px;
             font-family: "Arial Narrow", Arial, sans-serif;
             white-space: nowrap;

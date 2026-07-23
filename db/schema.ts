@@ -236,3 +236,45 @@ export const printedLabels = mysqlTable("printedLabels", {
 });
 
 export type PrintedLabel = typeof printedLabels.$inferSelect;
+
+// ============================================
+// LABEL CONFIG (Configuracion de etiquetas)
+// ============================================
+export const labelConfig = mysqlTable("labelConfig", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull().default(1),
+  // Label dimensions
+  labelWidth: varchar("labelWidth", { length: 20 }).notNull().default("50mm"),
+  labelHeight: varchar("labelHeight", { length: 20 }).notNull().default("25mm"),
+  // Product name
+  nameFontSize: varchar("nameFontSize", { length: 10 }).notNull().default("5pt"),
+  nameMarginTop: varchar("nameMarginTop", { length: 10 }).notNull().default("1.5mm"),
+  nameMarginBottom: varchar("nameMarginBottom", { length: 10 }).notNull().default("0.3mm"),
+  // Price
+  priceFontSize: varchar("priceFontSize", { length: 10 }).notNull().default("20pt"),
+  ivaFontSize: varchar("ivaFontSize", { length: 10 }).notNull().default("8pt"),
+  // Barcode
+  barcodeWidth: varchar("barcodeWidth", { length: 10 }).notNull().default("35mm"),
+  barcodeHeight: varchar("barcodeHeight", { length: 10 }).notNull().default("7.5mm"),
+  barcodeModuleWidth: varchar("barcodeModuleWidth", { length: 10 }).notNull().default("0.50"),
+  barcodeBarHeight: varchar("barcodeBarHeight", { length: 10 }).notNull().default("9"),
+  // Barcode number
+  barcodeNumberFontSize: varchar("barcodeNumberFontSize", { length: 10 }).notNull().default("8pt"),
+  barcodeNumberLetterSpacing: varchar("barcodeNumberLetterSpacing", { length: 10 }).notNull().default("2px"),
+  barcodeNumberMarginTop: varchar("barcodeNumberMarginTop", { length: 10 }).notNull().default("0.3mm"),
+  // Footer
+  footerFontSize: varchar("footerFontSize", { length: 10 }).notNull().default("5pt"),
+  footerMarginTop: varchar("footerMarginTop", { length: 10 }).notNull().default("2mm"),
+  // Show/hide elements
+  showPrice: boolean("showPrice").notNull().default(true),
+  showIva: boolean("showIva").notNull().default(true),
+  showBarcode: boolean("showBarcode").notNull().default(true),
+  showBarcodeNumber: boolean("showBarcodeNumber").notNull().default(true),
+  showFooter: boolean("showFooter").notNull().default(true),
+  showDate: boolean("showDate").notNull().default(true),
+  footerText: varchar("footerText", { length: 100 }).notNull().default("American Outlet Los Chiles"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type LabelConfig = typeof labelConfig.$inferSelect;

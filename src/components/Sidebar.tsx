@@ -15,6 +15,7 @@ import {
   ShoppingBag,
   Database,
   Tag,
+  Printer,
 } from "lucide-react";
 
 const menuItems = [
@@ -24,6 +25,7 @@ const menuItems = [
   { path: "/closings", label: "Cierres", icon: Receipt, roles: ["admin", "manager", "employee"] },
   { path: "/catalog", label: "Catalogo", icon: Database, roles: ["admin", "manager"] },
   { path: "/labels", label: "Etiquetas", icon: Tag, roles: ["admin", "manager", "employee"] },
+  { path: "/label-config", label: "Config. Etiquetas", icon: Printer, roles: ["admin", "manager"] },
   { path: "/settings", label: "Configuracion", icon: Settings, roles: ["admin"] },
 ];
 
