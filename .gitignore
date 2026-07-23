@@ -3,3 +3,6 @@ dist/
 .env
 .DS_Store
 *.tmp
+# Force Railway to use npm install instead of npm ci
+package-lock.json
+package-lock.json
