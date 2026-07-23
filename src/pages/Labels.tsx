@@ -72,7 +72,13 @@ function code128Checksum(values: number[]): number {
 }
 
 // Generate SVG barcode with proper Code 128 encoding
-function Barcode128({ code }: { code: string }) {
+function Barcode128({ code, barcodeWidth, barcodeHeight, barcodeModuleWidth, barcodeBarHeight }: {
+  code: string;
+  barcodeWidth?: string;
+  barcodeHeight?: string;
+  barcodeModuleWidth?: string;
+  barcodeBarHeight?: string;
+}) {
   // Clean: keep only digits for Code C
   const digits = code.replace(/\D/g, "");
   if (digits.length < 2) {
@@ -95,32 +101,34 @@ function Barcode128({ code }: { code: string }) {
   values.push(106); // Stop
 
   // Render SVG bars
-  const moduleWidth = 0.50; // mm per module (thicker bars)
-  const barHeight = 9; // mm barcode height
-  let x = 10 * moduleWidth; // quiet zone (10 modules)
+  const modW = parseFloat(barcodeModuleWidth || "0.50");
+  const barH = parseInt(barcodeBarHeight || "9", 10);
+  let x = 10 * modW; // quiet zone (10 modules)
   const bars: JSX.Element[] = [];
 
   for (let v = 0; v < values.length; v++) {
     const widths = CODE128_WIDTHS[values[v]];
     let isBar = true;
     for (let i = 0; i < widths.length; i++) {
-      const w = widths[i] * moduleWidth;
+      const w = widths[i] * modW;
       if (isBar) {
-        bars.push(<rect key={`${v}-${i}`} x={x} y={0} width={w} height={barHeight} fill="#000" />);
+        bars.push(<rect key={`${v}-${i}`} x={x} y={0} width={w} height={barH} fill="#000" />);
       }
       x += w;
       isBar = !isBar;
     }
   }
 
-  const totalWidth = x + 10 * moduleWidth;
+  const totalWidth = x + 10 * modW;
+  const svgW = barcodeWidth || "35mm";
+  const svgH = barcodeHeight || "7.5mm";
 
   return (
     <svg
       className="label-barcode-svg"
-      viewBox={`0 0 ${totalWidth} ${barHeight}`}
+      viewBox={`0 0 ${totalWidth} ${barH}`}
       preserveAspectRatio="xMidYMid meet"
-      style={{ width: "35mm", height: "7.5mm" }}
+      style={{ width: svgW, height: svgH, display: "inline-block" }}
     >
       {bars}
     </svg>
@@ -582,7 +590,13 @@ export default function LabelsPage() {
                   left: "1mm", right: "1mm",
                   textAlign: (labelCfg?.barcodeAlign || "center") as any,
                 }}>
-                  <Barcode128 code={item.codigoBarras} />
+                  <Barcode128
+                    code={item.codigoBarras}
+                    barcodeWidth={labelCfg?.barcodeWidth}
+                    barcodeHeight={labelCfg?.barcodeHeight}
+                    barcodeModuleWidth={labelCfg?.barcodeModuleWidth}
+                    barcodeBarHeight={labelCfg?.barcodeBarHeight}
+                  />
                 </div>
               )}
 
