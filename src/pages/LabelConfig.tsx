@@ -56,7 +56,10 @@ const defaultConfig: Record<string, any> = {
 export default function LabelConfigPage() {
   const utils = trpc.useUtils();
   const { data: savedConfig } = trpc.labelConfig.get.useQuery({ storeId: 1 });
-  const upsertConfig = trpc.labelConfig.upsert.useMutation({ onSuccess: () => { utils.labelConfig.get.invalidate(); toast.success("Configuracion guardada"); } });
+  const upsertConfig = trpc.labelConfig.upsert.useMutation({
+    onSuccess: () => { utils.labelConfig.get.invalidate(); toast.success("Configuracion guardada"); },
+    onError: (err) => { toast.error("Error: " + err.message); console.error(err); },
+  });
   const [config, setConfig] = useState<Record<string, any>>({ ...defaultConfig });
 
   useEffect(() => {
@@ -82,7 +85,13 @@ export default function LabelConfigPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => { setConfig({ ...defaultConfig }); toast.info("Reseteado"); }} className="gap-2"><RotateCcw className="w-4 h-4" /> Resetear</Button>
-          <Button onClick={() => upsertConfig.mutate({ storeId: 1, ...config })} className="gap-2" style={{ background: BRAND_RED }}><Save className="w-4 h-4" /> Guardar</Button>
+          <Button onClick={() => {
+            const payload: Record<string, any> = { storeId: 1 };
+            for (const [k, v] of Object.entries(config)) {
+              if (v !== undefined && v !== null) payload[k] = v;
+            }
+            upsertConfig.mutate(payload);
+          }} className="gap-2" style={{ background: BRAND_RED }}><Save className="w-4 h-4" /> Guardar</Button>
         </div>
       </div>
 
