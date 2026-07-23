@@ -15,5 +15,5 @@ RUN npm run build
 # Expose port
 EXPOSE 3000
 
-# Start with npx tsx (will use global or local)
-CMD npx drizzle-kit push --force 2>/dev/null || true && npx tsx api/boot.ts
+# Start: install deps (safety net), push DB schema, start server
+CMD npm install 2>/dev/null && npx drizzle-kit push --force 2>/dev/null || true && npx tsx api/boot.ts
