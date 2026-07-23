@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import { SignJWT, jwtVerify } from "jose";
 import mysql from "mysql2/promise";
 
-const JWT_SECRET = process.env.JWT_SECRET || "aolc-secret-key-2024";
+const JWT_SECRET_TEXT = process.env.JWT_SECRET || "aolc-secret-key-2024";
+const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_TEXT);
 
 // Create raw MySQL connection
 async function getRawDb() {
@@ -36,11 +37,10 @@ export const localAuthRouter = createRouter({
           throw new Error("Usuario o contraseña incorrectos");
         }
 
-        const token = jwt.sign(
-          { id: user.id, username: user.username, name: user.name, role: user.role, storeId: user.storeId },
-          JWT_SECRET,
-          { expiresIn: "7d" }
-        );
+        const token = await new SignJWT({ id: user.id, username: user.username, name: user.name, role: user.role, storeId: user.storeId })
+          .setProtectedHeader({ alg: "HS256" })
+          .setExpirationTime("7d")
+          .sign(JWT_SECRET);
 
         return {
           token,
@@ -90,13 +90,13 @@ export const localAuthRouter = createRouter({
     .input(z.object({ token: z.string() }))
     .query(async ({ input }) => {
       try {
-        const decoded = jwt.verify(input.token, JWT_SECRET) as any;
+        const { payload } = await jwtVerify(input.token, JWT_SECRET, { clockTolerance: 60 });
         return {
-          id: decoded.id,
-          name: decoded.name,
-          username: decoded.username,
-          role: decoded.role,
-          storeId: decoded.storeId,
+          id: payload.id as number,
+          name: payload.name as string,
+          username: payload.username as string,
+          role: payload.role as string,
+          storeId: payload.storeId as number,
         };
       } catch {
         return null;
