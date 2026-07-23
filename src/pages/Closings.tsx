@@ -8,7 +8,7 @@ import {
   Receipt, Plus, Trash2, Banknote, CreditCard, Smartphone, FileX, Calculator,
   TrendingUp, Calendar, BarChart3, Printer, FileSpreadsheet, ArrowDownToLine,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell } from "recharts";
 import { useLocalAuth } from "@/hooks/useLocalAuth";
 
@@ -71,6 +71,15 @@ export default function ClosingsPage() {
     fecha: new Date().toISOString().split("T")[0], dia: "",
     efectivo: "", tarjeta: "", sinpe: "", sinFactura: "",
   });
+
+  // Auto-fill the day when dialog opens (using today's date)
+  useEffect(() => {
+    if (dialogOpen) {
+      const hoy = new Date().toISOString().split("T")[0];
+      handleDateChange(hoy);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialogOpen]);
 
   const totalCalculado = useMemo(() =>
     Number(newClosing.efectivo || 0) + Number(newClosing.tarjeta || 0) + Number(newClosing.sinpe || 0) + Number(newClosing.sinFactura || 0),
