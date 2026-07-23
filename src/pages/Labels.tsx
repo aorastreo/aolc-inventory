@@ -35,49 +35,60 @@ function getLocalDateString() {
 }
 
 // Barcode using jsbarcode - the library we used in the original system
-// Barcode using jsbarcode - generate offscreen canvas → PNG → img
+// Code 128 encoder for Libre Barcode 128 font
 // This is the EXACT same approach that worked in the original system
-function BarcodeCanvas({ code }: { code: string; barcodeWidth?: string; barcodeHeight?: string; barcodeModuleWidth?: string; barcodeBarHeight?: string }) {
-  const [pngUrl, setPngUrl] = useState("");
+function encodeCode128(text: string): string {
+  const digits = text.replace(/\D/g, "");
+  if (digits.length < 2) return text;
+  const padded = digits.length % 2 === 1 ? "0" + digits : digits;
+  let encoded = "";
+  for (let i = 0; i < padded.length; i += 2) {
+    const pair = parseInt(padded.substring(i, i + 2), 10);
+    const charCode = pair > 94 ? pair + 100 : pair + 32;
+    encoded += String.fromCharCode(charCode);
+  }
+  const start = String.fromCharCode(205);
+  const stop = String.fromCharCode(206);
+  let sum = 105;
+  for (let i = 0; i < encoded.length; i++) {
+    const code = encoded.charCodeAt(i);
+    const value = code > 199 ? code - 100 : code - 32;
+    sum += (i + 1) * value;
+  }
+  let checksum = (sum % 103) + 32;
+  if (checksum > 126) checksum += 68;
+  const check = String.fromCharCode(checksum);
+  return start + encoded + check + stop;
+}
 
-  useEffect(() => {
-    // Create offscreen canvas (not in DOM)
-    const canvas = document.createElement("canvas");
-    canvas.width = 400;
-    canvas.height = 160;
-
-    try {
-      JsBarcode(canvas, code, {
-        format: "CODE128",
-        width: 2,
-        height: 100,
-        displayValue: false,
-        margin: 10,
-        background: "#ffffff",
-        lineColor: "#000000",
-      });
-
-      // Convert to PNG data URL
-      const url = canvas.toDataURL("image/png");
-      setPngUrl(url);
-    } catch (e) {
-      console.error("Barcode generation error:", e);
-    }
-  }, [code]);
-
-  if (!pngUrl) return <div style={{ height: "10mm" }} />;
-
+// Barcode component using Libre Barcode 128 font - THE ORIGINAL WORKING CODE
+function BarcodeCanvas({ code, barcodeWidth, barcodeHeight, barcodeFontSize }: {
+  code: string;
+  barcodeWidth?: string;
+  barcodeHeight?: string;
+  barcodeFontSize?: string;
+  barcodeModuleWidth?: string;
+  barcodeBarHeight?: string;
+}) {
+  const encoded = encodeCode128(code);
   return (
-    <img
-      src={pngUrl}
-      alt=""
+    <div
       style={{
-        width: "42mm",
-        height: "10mm",
-        display: "inline-block",
-        objectFit: "contain",
+        fontFamily: '"Libre Barcode 128", "Libre Barcode 128 Text", monospace',
+        fontSize: barcodeFontSize || "28pt",
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textAlign: "center",
+        height: barcodeHeight || "7mm",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: barcodeWidth || "42mm",
       }}
-    />
+    >
+      {encoded}
+    </div>
   );
 }
 
@@ -502,7 +513,7 @@ export default function LabelsPage() {
                 top: labelCfg?.nameTop || "1mm",
                 left: "1mm", right: "1mm",
                 fontSize: labelCfg?.nameFontSize || "5pt",
-                fontWeight: "bold", color: "#000",
+                fontWeight: labelCfg?.nameFontWeight || "bold", color: "#000",
                 textTransform: "uppercase",
                 letterSpacing: "0.2px", lineHeight: 1.3,
                 textAlign: (labelCfg?.nameTextAlign || "center") as any,
@@ -519,7 +530,7 @@ export default function LabelsPage() {
                   justifyContent: (labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center",
                   gap: "1.5mm",
                 }}>
-                  <span style={{ fontSize: labelCfg?.priceFontSize || "20pt", fontWeight: "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
+                  <span style={{ fontSize: labelCfg?.priceFontSize || "20pt", fontWeight: labelCfg?.priceFontWeight || "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
                     {Math.round(Number(item.precio))}
                   </span>
                   {(labelCfg?.showIva ?? true) && (
@@ -540,8 +551,7 @@ export default function LabelsPage() {
                     code={item.codigoBarras}
                     barcodeWidth={labelCfg?.barcodeWidth}
                     barcodeHeight={labelCfg?.barcodeHeight}
-                    barcodeModuleWidth={labelCfg?.barcodeModuleWidth}
-                    barcodeBarHeight={labelCfg?.barcodeBarHeight}
+                    barcodeFontSize={labelCfg?.barcodeFontSize}
                   />
                 </div>
               )}

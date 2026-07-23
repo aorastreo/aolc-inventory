@@ -4,9 +4,9 @@ import mysql from "mysql2/promise";
 
 const D: Record<string, string | boolean> = {
   labelWidth: "50mm", labelHeight: "25mm",
-  nameFontSize: "5pt", nameTop: "1mm", nameTextAlign: "center",
-  priceFontSize: "20pt", ivaFontSize: "8pt", priceTop: "6mm", priceTextAlign: "center",
-  barcodeWidth: "35mm", barcodeHeight: "7.5mm", barcodeModuleWidth: "0.50", barcodeBarHeight: "9", barcodeTop: "12mm", barcodeAlign: "center",
+  nameFontSize: "5pt", nameTop: "1mm", nameTextAlign: "center", nameFontWeight: "bold",
+  priceFontSize: "20pt", ivaFontSize: "8pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold",
+  barcodeWidth: "42mm", barcodeHeight: "7mm", barcodeFontSize: "28pt", barcodeTop: "12mm", barcodeAlign: "center",
   barcodeNumberFontSize: "8pt", barcodeNumberLetterSpacing: "2px", barcodeNumberTop: "17mm", barcodeNumberAlign: "center",
   footerFontSize: "5pt", footerTop: "20mm", footerTextAlign: "center",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
@@ -32,14 +32,15 @@ async function ensureTable() {
         nameFontSize VARCHAR(10) NOT NULL DEFAULT '5pt',
         nameTop VARCHAR(10) NOT NULL DEFAULT '1mm',
         nameTextAlign VARCHAR(10) NOT NULL DEFAULT 'center',
+        nameFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold',
         priceFontSize VARCHAR(10) NOT NULL DEFAULT '20pt',
         ivaFontSize VARCHAR(10) NOT NULL DEFAULT '8pt',
         priceTop VARCHAR(10) NOT NULL DEFAULT '6mm',
         priceTextAlign VARCHAR(10) NOT NULL DEFAULT 'center',
-        barcodeWidth VARCHAR(10) NOT NULL DEFAULT '35mm',
-        barcodeHeight VARCHAR(10) NOT NULL DEFAULT '7.5mm',
-        barcodeModuleWidth VARCHAR(10) NOT NULL DEFAULT '0.50',
-        barcodeBarHeight VARCHAR(10) NOT NULL DEFAULT '9',
+        priceFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold',
+        barcodeWidth VARCHAR(10) NOT NULL DEFAULT '42mm',
+        barcodeHeight VARCHAR(10) NOT NULL DEFAULT '7mm',
+        barcodeFontSize VARCHAR(10) NOT NULL DEFAULT '28pt',
         barcodeTop VARCHAR(10) NOT NULL DEFAULT '12mm',
         barcodeAlign VARCHAR(10) NOT NULL DEFAULT 'center',
         barcodeNumberFontSize VARCHAR(10) NOT NULL DEFAULT '8pt',
@@ -61,6 +62,13 @@ async function ensureTable() {
         UNIQUE KEY uk_store (storeId)
       )
     `);
+    // Add new column for existing tables
+    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN barcodeFontSize VARCHAR(10) NOT NULL DEFAULT '28pt'`); } catch { /* */ }
+    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN nameFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold'`); } catch { /* */ }
+    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN priceFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold'`); } catch { /* */ }
+    // Remove old columns from existing tables
+    try { await conn.execute(`ALTER TABLE labelConfig DROP COLUMN barcodeModuleWidth`); } catch { /* */ }
+    try { await conn.execute(`ALTER TABLE labelConfig DROP COLUMN barcodeBarHeight`); } catch { /* */ }
   } finally { await conn.end(); }
 }
 

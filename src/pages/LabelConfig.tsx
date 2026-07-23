@@ -9,6 +9,31 @@ import { toast } from "sonner";
 
 const BRAND_RED = "#B22234";
 
+// Same encoder as Labels.tsx for preview
+function encodeCode128Preview(text: string): string {
+  const digits = text.replace(/\D/g, "");
+  if (digits.length < 2) return text;
+  const padded = digits.length % 2 === 1 ? "0" + digits : digits;
+  let encoded = "";
+  for (let i = 0; i < padded.length; i += 2) {
+    const pair = parseInt(padded.substring(i, i + 2), 10);
+    const charCode = pair > 94 ? pair + 100 : pair + 32;
+    encoded += String.fromCharCode(charCode);
+  }
+  const start = String.fromCharCode(205);
+  const stop = String.fromCharCode(206);
+  let sum = 105;
+  for (let i = 0; i < encoded.length; i++) {
+    const code = encoded.charCodeAt(i);
+    const value = code > 199 ? code - 100 : code - 32;
+    sum += (i + 1) * value;
+  }
+  let checksum = (sum % 103) + 32;
+  if (checksum > 126) checksum += 68;
+  const check = String.fromCharCode(checksum);
+  return start + encoded + check + stop;
+}
+
 function parseValue(val: string): { num: number; unit: string } {
   const match = val.match(/^([0-9.]+)(.*)$/);
   if (match) return { num: parseFloat(match[1]), unit: match[2] };
@@ -44,9 +69,9 @@ function AlignButtons({ value, onChange }: { value: string; onChange: (v: string
 
 const defaultConfig: Record<string, any> = {
   labelWidth: "50mm", labelHeight: "25mm",
-  nameFontSize: "5pt", nameTop: "1mm", nameTextAlign: "center",
-  priceFontSize: "20pt", ivaFontSize: "8pt", priceTop: "6mm", priceTextAlign: "center",
-  barcodeWidth: "35mm", barcodeHeight: "7.5mm", barcodeModuleWidth: "0.50", barcodeBarHeight: "9", barcodeTop: "12mm", barcodeAlign: "center",
+  nameFontSize: "5pt", nameTop: "1mm", nameTextAlign: "center", nameFontWeight: "bold",
+  priceFontSize: "20pt", ivaFontSize: "8pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold",
+  barcodeWidth: "42mm", barcodeHeight: "7mm", barcodeFontSize: "28pt", barcodeTop: "12mm", barcodeAlign: "center",
   barcodeNumberFontSize: "8pt", barcodeNumberLetterSpacing: "2px", barcodeNumberTop: "17mm", barcodeNumberAlign: "center",
   footerFontSize: "5pt", footerTop: "20mm", footerTextAlign: "center",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
@@ -111,6 +136,17 @@ export default function LabelConfigPage() {
             <div className="grid grid-cols-3 gap-3">
               <StepperInput label="Tamano fuente" value={s("nameFontSize")} onChange={v => update("nameFontSize", v)} step={0.5} />
               <StepperInput label="Posicion Y (arriba)" value={s("nameTop")} onChange={v => update("nameTop", v)} step={0.5} />
+              <div>
+                <Label className="text-xs mb-1 block">Grosor</Label>
+                <select
+                  value={s("nameFontWeight")}
+                  onChange={e => update("nameFontWeight", e.target.value)}
+                  className="w-full h-8 border rounded px-2 text-sm"
+                >
+                  <option value="normal">Normal</option>
+                  <option value="bold">Negrita</option>
+                </select>
+              </div>
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("nameTextAlign")} onChange={v => update("nameTextAlign", v)} /></div>
           </div>
@@ -121,6 +157,17 @@ export default function LabelConfigPage() {
               <StepperInput label="Tamano precio" value={s("priceFontSize")} onChange={v => update("priceFontSize", v)} step={1} />
               <StepperInput label="Tamano IVA" value={s("ivaFontSize")} onChange={v => update("ivaFontSize", v)} step={1} />
               <StepperInput label="Posicion Y" value={s("priceTop")} onChange={v => update("priceTop", v)} step={0.5} />
+              <div>
+                <Label className="text-xs mb-1 block">Grosor precio</Label>
+                <select
+                  value={s("priceFontWeight")}
+                  onChange={e => update("priceFontWeight", e.target.value)}
+                  className="w-full h-8 border rounded px-2 text-sm"
+                >
+                  <option value="normal">Normal</option>
+                  <option value="bold">Negrita</option>
+                </select>
+              </div>
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("priceTextAlign")} onChange={v => update("priceTextAlign", v)} /></div>
             <div className="flex gap-6 mt-3">
@@ -132,10 +179,9 @@ export default function LabelConfigPage() {
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Codigo de Barras</h3>
             <div className="grid grid-cols-3 gap-3">
-              <StepperInput label="Ancho SVG" value={s("barcodeWidth")} onChange={v => update("barcodeWidth", v)} step={1} />
-              <StepperInput label="Alto SVG" value={s("barcodeHeight")} onChange={v => update("barcodeHeight", v)} step={0.5} />
-              <StepperInput label="Ancho modulo" value={s("barcodeModuleWidth")} onChange={v => update("barcodeModuleWidth", v)} step={0.05} />
-              <StepperInput label="Alto barras" value={s("barcodeBarHeight")} onChange={v => update("barcodeBarHeight", v)} step={1} />
+              <StepperInput label="Ancho" value={s("barcodeWidth")} onChange={v => update("barcodeWidth", v)} step={1} />
+              <StepperInput label="Alto" value={s("barcodeHeight")} onChange={v => update("barcodeHeight", v)} step={0.5} />
+              <StepperInput label="Tamano fuente" value={s("barcodeFontSize")} onChange={v => update("barcodeFontSize", v)} step={1} />
               <StepperInput label="Posicion Y" value={s("barcodeTop")} onChange={v => update("barcodeTop", v)} step={0.5} />
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("barcodeAlign")} onChange={v => update("barcodeAlign", v)} /></div>
@@ -187,7 +233,7 @@ export default function LabelConfigPage() {
               {/* Name */}
               <div style={{
                 position: "absolute", top: s("nameTop"), left: "1mm", right: "1mm",
-                fontSize: s("nameFontSize"), fontWeight: "bold", color: "#000",
+                fontSize: s("nameFontSize"), fontWeight: s("nameFontWeight") || "bold", color: "#000",
                 textTransform: "uppercase", letterSpacing: "0.2px", lineHeight: 1.3,
                 textAlign: s("nameTextAlign") as any, whiteSpace: "nowrap", overflow: "hidden",
               }}>{previewItem.nombre}</div>
@@ -198,26 +244,28 @@ export default function LabelConfigPage() {
                   position: "absolute", top: s("priceTop"), left: "1mm", right: "1mm",
                   display: "flex", alignItems: "baseline", justifyContent: alignStyle(s("priceTextAlign")), gap: "1.5mm",
                 }}>
-                  <span style={{ fontSize: s("priceFontSize"), fontWeight: "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>{previewItem.precio}</span>
-                  {s("showIva") && <span style={{ fontSize: s("ivaFontSize"), fontWeight: "bold", color: "#000" }}>IVA</span>}
+                  <span style={{ fontSize: s("priceFontSize"), fontWeight: s("priceFontWeight") || "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>{previewItem.precio}</span>
+                  {s("showIva") && <span style={{ fontSize: s("ivaFontSize"), fontWeight: s("priceFontWeight") || "bold", color: "#000" }}>IVA</span>}
                 </div>
               )}
 
               {/* Barcode */}
               {s("showBarcode") && (
-                <div style={{ position: "absolute", top: s("barcodeTop"), left: "1mm", right: "1mm", textAlign: s("barcodeAlign") as any }}>
-                  <svg viewBox="0 0 100 20" preserveAspectRatio="xMidYMid meet" style={{ width: s("barcodeWidth"), height: s("barcodeHeight"), display: "inline-block" }}>
-                    <rect x="5" y="0" width="3" height="20" fill="#000" /><rect x="10" y="0" width="1" height="20" fill="#000" />
-                    <rect x="13" y="0" width="4" height="20" fill="#000" /><rect x="19" y="0" width="2" height="20" fill="#000" />
-                    <rect x="23" y="0" width="1" height="20" fill="#000" /><rect x="26" y="0" width="5" height="20" fill="#000" />
-                    <rect x="33" y="0" width="2" height="20" fill="#000" /><rect x="37" y="0" width="3" height="20" fill="#000" />
-                    <rect x="42" y="0" width="1" height="20" fill="#000" /><rect x="45" y="0" width="4" height="20" fill="#000" />
-                    <rect x="51" y="0" width="2" height="20" fill="#000" /><rect x="55" y="0" width="3" height="20" fill="#000" />
-                    <rect x="60" y="0" width="1" height="20" fill="#000" /><rect x="63" y="0" width="5" height="20" fill="#000" />
-                    <rect x="70" y="0" width="2" height="20" fill="#000" /><rect x="74" y="0" width="3" height="20" fill="#000" />
-                    <rect x="79" y="0" width="4" height="20" fill="#000" /><rect x="85" y="0" width="2" height="20" fill="#000" />
-                    <rect x="90" y="0" width="5" height="20" fill="#000" />
-                  </svg>
+                <div style={{
+                  position: "absolute", top: s("barcodeTop"), left: "1mm", right: "1mm",
+                  textAlign: s("barcodeAlign") as any,
+                  fontFamily: '"Libre Barcode 128", "Libre Barcode 128 Text", monospace',
+                  fontSize: s("barcodeFontSize"),
+                  lineHeight: 1,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  height: s("barcodeHeight"),
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: s("barcodeAlign") === "left" ? "flex-start" : s("barcodeAlign") === "right" ? "flex-end" : "center",
+                  color: "#000",
+                }}>
+                  {encodeCode128Preview("77001116")}
                 </div>
               )}
 
