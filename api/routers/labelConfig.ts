@@ -19,10 +19,56 @@ async function getRawDb() {
   return mysql.createConnection(process.env.DATABASE_URL!);
 }
 
+// Ensure labelConfig table exists
+async function ensureTable() {
+  const conn = await getRawDb();
+  try {
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS labelConfig (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        storeId BIGINT UNSIGNED NOT NULL DEFAULT 1,
+        labelWidth VARCHAR(20) NOT NULL DEFAULT '50mm',
+        labelHeight VARCHAR(20) NOT NULL DEFAULT '25mm',
+        nameFontSize VARCHAR(10) NOT NULL DEFAULT '5pt',
+        nameTop VARCHAR(10) NOT NULL DEFAULT '1mm',
+        nameTextAlign VARCHAR(10) NOT NULL DEFAULT 'center',
+        priceFontSize VARCHAR(10) NOT NULL DEFAULT '20pt',
+        ivaFontSize VARCHAR(10) NOT NULL DEFAULT '8pt',
+        priceTop VARCHAR(10) NOT NULL DEFAULT '6mm',
+        priceTextAlign VARCHAR(10) NOT NULL DEFAULT 'center',
+        barcodeWidth VARCHAR(10) NOT NULL DEFAULT '35mm',
+        barcodeHeight VARCHAR(10) NOT NULL DEFAULT '7.5mm',
+        barcodeModuleWidth VARCHAR(10) NOT NULL DEFAULT '0.50',
+        barcodeBarHeight VARCHAR(10) NOT NULL DEFAULT '9',
+        barcodeTop VARCHAR(10) NOT NULL DEFAULT '12mm',
+        barcodeAlign VARCHAR(10) NOT NULL DEFAULT 'center',
+        barcodeNumberFontSize VARCHAR(10) NOT NULL DEFAULT '8pt',
+        barcodeNumberLetterSpacing VARCHAR(10) NOT NULL DEFAULT '2px',
+        barcodeNumberTop VARCHAR(10) NOT NULL DEFAULT '17mm',
+        barcodeNumberAlign VARCHAR(10) NOT NULL DEFAULT 'center',
+        footerFontSize VARCHAR(10) NOT NULL DEFAULT '5pt',
+        footerTop VARCHAR(10) NOT NULL DEFAULT '20mm',
+        footerTextAlign VARCHAR(10) NOT NULL DEFAULT 'center',
+        showPrice BOOLEAN NOT NULL DEFAULT TRUE,
+        showIva BOOLEAN NOT NULL DEFAULT TRUE,
+        showBarcode BOOLEAN NOT NULL DEFAULT TRUE,
+        showBarcodeNumber BOOLEAN NOT NULL DEFAULT TRUE,
+        showFooter BOOLEAN NOT NULL DEFAULT TRUE,
+        showDate BOOLEAN NOT NULL DEFAULT TRUE,
+        footerText VARCHAR(100) NOT NULL DEFAULT 'American Outlet Los Chiles',
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_store (storeId)
+      )
+    `);
+  } finally { await conn.end(); }
+}
+
 export const labelConfigRouter = createRouter({
   get: publicQuery
     .input(z.object({ storeId: z.number().default(1) }))
     .query(async ({ input }) => {
+      await ensureTable();
       const conn = await getRawDb();
       try {
         const [rows]: any = await conn.execute("SELECT * FROM labelConfig WHERE storeId = ?", [input.storeId]);
@@ -43,6 +89,7 @@ export const labelConfigRouter = createRouter({
       footerText: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
+      await ensureTable();
       const conn = await getRawDb();
       try {
         const { storeId, ...data } = input;
