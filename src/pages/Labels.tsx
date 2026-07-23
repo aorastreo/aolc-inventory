@@ -79,12 +79,12 @@ function Barcode128({ code }: { code: string }) {
       className="label-barcode-font"
       style={{
         fontFamily: '"Libre Barcode 128", "Libre Barcode 128 Text", monospace',
-        fontSize: "28pt",
-        lineHeight: 1,
+        fontSize: "20pt",
+        lineHeight: 0.9,
         whiteSpace: "nowrap",
         overflow: "hidden",
         textAlign: "center",
-        height: "4.5mm",
+        height: "4mm",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -496,7 +496,7 @@ export default function LabelsPage() {
             <div key={idx} className="aolc-label">
               <div className="label-product-name">{item.nombre.toUpperCase()}</div>
               <div className="label-price-row">
-                <span className="label-price">{Number(item.precio).toLocaleString("es-CR")}</span>
+                <span className="label-price">{Number(item.precio)}</span>
                 <span className="label-iva">IVA</span>
               </div>
               {item.codigoBarras && (
@@ -522,7 +522,7 @@ export default function LabelsPage() {
           .aolc-label {
             width: 50mm;
             height: 25mm;
-            padding: 1.5mm 2mm;
+            padding: 1mm 1.5mm;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -545,17 +545,17 @@ export default function LabelsPage() {
             max-height: 5mm;
             overflow: hidden;
             width: 100%;
-            margin-bottom: 0.5mm;
+            margin-bottom: 0.3mm;
           }
           .label-price-row {
             display: flex;
             align-items: baseline;
             justify-content: center;
-            gap: 1.5mm;
-            margin: 0.5mm 0;
+            gap: 1mm;
+            margin: 0.3mm 0;
           }
           .label-price {
-            font-size: 18pt;
+            font-size: 20pt;
             font-weight: bold;
             color: #000;
             letter-spacing: 0.5px;
@@ -568,25 +568,32 @@ export default function LabelsPage() {
           }
           .label-barcode-font {
             font-family: "Libre Barcode 128", "Libre Barcode 128 Text", monospace !important;
-            font-size: 26pt !important;
-            line-height: 0.8 !important;
-            height: 4.5mm !important;
+            font-size: 20pt !important;
+            line-height: 0.9 !important;
+            height: 4mm !important;
             text-align: center;
-            margin-top: 0.5mm;
+            margin-top: 0.3mm;
+            width: 100%;
           }
           .label-barcode-number {
-            font-size: 6.5pt;
+            font-size: 6pt;
             color: #000;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
             font-family: "Courier New", Courier, monospace;
             margin-top: 0.2mm;
+            white-space: nowrap;
+            overflow: hidden;
+            width: 100%;
           }
           .label-footer {
             font-size: 4.5pt;
             color: #000;
-            margin-top: 0.8mm;
+            margin-top: 0.5mm;
             letter-spacing: 0.1px;
             font-family: "Arial Narrow", Arial, sans-serif;
+            white-space: nowrap;
+            overflow: hidden;
+            width: 100%;
           }
         }
       `}</style>
