@@ -238,6 +238,9 @@ export default function LabelsPage() {
     onSuccess: () => utils.inventory.productsForLabels.invalidate(),
   });
 
+  // Load label configuration from DB
+  const { data: labelCfg } = trpc.labelConfig.get.useQuery({ storeId: 1 });
+
   const toggleProduct = (id: number) => {
     setSelectedProducts(prev => {
       const next = new Set(prev);
@@ -521,23 +524,96 @@ export default function LabelsPage() {
         </div>
       </div>
 
-      {/* Hidden print area */}
+      {/* Hidden print area - uses dynamic config from DB */}
       <div className="print-only">
-        <div className="label-sheet">
+        <div className="label-sheet" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           {expandedItems.map((item, idx) => (
-            <div key={idx} className="aolc-label">
-              <div className="label-product-name">{item.nombre.toUpperCase()}</div>
-              <div className="label-price-row">
-                <span className="label-price">{Math.round(Number(item.precio))}</span>
-                <span className="label-iva">IVA</span>
-              </div>
-              {item.codigoBarras && (
-                <>
-                  <Barcode128 code={item.codigoBarras} />
-                  <div className="label-barcode-number">{item.codigoBarras}</div>
-                </>
+            <div
+              key={idx}
+              style={{
+                width: labelCfg?.labelWidth || "50mm",
+                height: labelCfg?.labelHeight || "25mm",
+                padding: "1mm 2mm",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                pageBreakInside: "avoid",
+                background: "white",
+                boxSizing: "border-box",
+                fontFamily: "Arial Narrow, Arial, Helvetica, sans-serif",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{
+                fontSize: labelCfg?.nameFontSize || "5.5pt",
+                fontWeight: "bold",
+                color: "#000",
+                textTransform: "uppercase",
+                letterSpacing: "0.2px",
+                lineHeight: 1.3,
+                marginTop: labelCfg?.nameMarginTop || "1mm",
+                marginBottom: labelCfg?.nameMarginBottom || "0.5mm",
+                textAlign: (labelCfg?.nameTextAlign || "center") as any,
+                whiteSpace: "nowrap",
+                width: "100%",
+              }}>{item.nombre.toUpperCase()}</div>
+
+              {(labelCfg?.showPrice ?? true) && (
+                <div style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: (labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center",
+                  gap: "1.5mm",
+                  marginTop: labelCfg?.priceMarginTop || "0.2mm",
+                  marginBottom: labelCfg?.priceMarginBottom || "0.2mm",
+                  width: "100%",
+                }}>
+                  <span style={{ fontSize: labelCfg?.priceFontSize || "20pt", fontWeight: "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
+                    {Math.round(Number(item.precio))}
+                  </span>
+                  {(labelCfg?.showIva ?? true) && (
+                    <span style={{ fontSize: labelCfg?.ivaFontSize || "8pt", fontWeight: "bold", color: "#000" }}>IVA</span>
+                  )}
+                </div>
               )}
-              <div className="label-footer">{getLocalDateString()} - American Outlet Los Chiles</div>
+
+              {(labelCfg?.showBarcode ?? true) && item.codigoBarras && (
+                <div style={{ marginTop: labelCfg?.barcodeMarginTop || "0.5mm", textAlign: (labelCfg?.barcodeAlign || "center") as any, width: "100%" }}>
+                  <Barcode128 code={item.codigoBarras} />
+                </div>
+              )}
+
+              {(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras && (
+                <div style={{
+                  fontSize: labelCfg?.barcodeNumberFontSize || "8pt",
+                  color: "#000",
+                  letterSpacing: labelCfg?.barcodeNumberLetterSpacing || "2px",
+                  fontFamily: "Courier New, Courier, monospace",
+                  marginTop: labelCfg?.barcodeNumberMarginTop || "0.3mm",
+                  marginBottom: labelCfg?.barcodeNumberMarginBottom || "0.2mm",
+                  textAlign: (labelCfg?.barcodeNumberAlign || "center") as any,
+                  whiteSpace: "nowrap",
+                  width: "100%",
+                }}>{item.codigoBarras}</div>
+              )}
+
+              {(labelCfg?.showFooter ?? true) && (
+                <div style={{
+                  fontSize: labelCfg?.footerFontSize || "5pt",
+                  color: "#000",
+                  marginTop: labelCfg?.footerMarginTop || "2mm",
+                  marginBottom: labelCfg?.footerMarginBottom || "0.3mm",
+                  letterSpacing: "0.2px",
+                  fontFamily: "Arial Narrow, Arial, sans-serif",
+                  textAlign: (labelCfg?.footerTextAlign || "center") as any,
+                  whiteSpace: "nowrap",
+                  width: "100%",
+                }}>
+                  {(labelCfg?.showDate ?? true) ? `${getLocalDateString()} - ` : ""}
+                  {labelCfg?.footerText || "American Outlet Los Chiles"}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -550,76 +626,6 @@ export default function LabelsPage() {
           body * { visibility: hidden; }
           .print-only, .print-only * { visibility: visible; }
           .print-only { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
-          .label-sheet { display: flex; flex-direction: column; gap: 0; }
-          .aolc-label {
-            width: 50mm;
-            height: 25mm;
-            padding: 1.5mm 2mm 0.5mm;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            text-align: center;
-            page-break-inside: avoid;
-            background: white;
-            box-sizing: border-box;
-            font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-            border: none;
-            overflow: hidden;
-          }
-          .label-product-name {
-            font-size: 5pt;
-            font-weight: bold;
-            color: #000;
-            text-transform: uppercase;
-            letter-spacing: 0.2px;
-            line-height: 1.1;
-            margin-bottom: 0.3mm;
-            white-space: nowrap;
-            overflow: hidden;
-            width: 100%;
-          }
-          .label-price-row {
-            display: flex;
-            align-items: baseline;
-            justify-content: center;
-            gap: 1.5mm;
-            margin: 0.2mm 0;
-          }
-          .label-price {
-            font-size: 20pt;
-            font-weight: bold;
-            color: #000;
-            letter-spacing: 0.5px;
-            line-height: 1;
-          }
-          .label-iva {
-            font-size: 8pt;
-            font-weight: bold;
-            color: #000;
-          }
-          .label-barcode-svg {
-            display: block;
-            margin: 0.5mm auto 0;
-          }
-          .label-barcode-number {
-            font-size: 8pt;
-            color: #000;
-            letter-spacing: 2px;
-            font-family: "Courier New", Courier, monospace;
-            margin-top: 0.3mm;
-            white-space: nowrap;
-            word-break: keep-all;
-          }
-          .label-footer {
-            font-size: 5pt;
-            color: #000;
-            margin-top: 2mm;
-            letter-spacing: 0.2px;
-            font-family: "Arial Narrow", Arial, sans-serif;
-            white-space: nowrap;
-            word-break: keep-all;
-          }
         }
       `}</style>
     </div>

@@ -250,21 +250,31 @@ export const labelConfig = mysqlTable("labelConfig", {
   nameFontSize: varchar("nameFontSize", { length: 10 }).notNull().default("5pt"),
   nameMarginTop: varchar("nameMarginTop", { length: 10 }).notNull().default("1.5mm"),
   nameMarginBottom: varchar("nameMarginBottom", { length: 10 }).notNull().default("0.3mm"),
+  nameTextAlign: varchar("nameTextAlign", { length: 10 }).notNull().default("center"),
   // Price
   priceFontSize: varchar("priceFontSize", { length: 10 }).notNull().default("20pt"),
   ivaFontSize: varchar("ivaFontSize", { length: 10 }).notNull().default("8pt"),
+  priceMarginTop: varchar("priceMarginTop", { length: 10 }).notNull().default("0.2mm"),
+  priceMarginBottom: varchar("priceMarginBottom", { length: 10 }).notNull().default("0.2mm"),
+  priceTextAlign: varchar("priceTextAlign", { length: 10 }).notNull().default("center"),
   // Barcode
   barcodeWidth: varchar("barcodeWidth", { length: 10 }).notNull().default("35mm"),
   barcodeHeight: varchar("barcodeHeight", { length: 10 }).notNull().default("7.5mm"),
   barcodeModuleWidth: varchar("barcodeModuleWidth", { length: 10 }).notNull().default("0.50"),
   barcodeBarHeight: varchar("barcodeBarHeight", { length: 10 }).notNull().default("9"),
+  barcodeMarginTop: varchar("barcodeMarginTop", { length: 10 }).notNull().default("0.5mm"),
+  barcodeAlign: varchar("barcodeAlign", { length: 10 }).notNull().default("center"),
   // Barcode number
   barcodeNumberFontSize: varchar("barcodeNumberFontSize", { length: 10 }).notNull().default("8pt"),
   barcodeNumberLetterSpacing: varchar("barcodeNumberLetterSpacing", { length: 10 }).notNull().default("2px"),
   barcodeNumberMarginTop: varchar("barcodeNumberMarginTop", { length: 10 }).notNull().default("0.3mm"),
+  barcodeNumberMarginBottom: varchar("barcodeNumberMarginBottom", { length: 10 }).notNull().default("0.2mm"),
+  barcodeNumberAlign: varchar("barcodeNumberAlign", { length: 10 }).notNull().default("center"),
   // Footer
   footerFontSize: varchar("footerFontSize", { length: 10 }).notNull().default("5pt"),
   footerMarginTop: varchar("footerMarginTop", { length: 10 }).notNull().default("2mm"),
+  footerMarginBottom: varchar("footerMarginBottom", { length: 10 }).notNull().default("0.3mm"),
+  footerTextAlign: varchar("footerTextAlign", { length: 10 }).notNull().default("center"),
   // Show/hide elements
   showPrice: boolean("showPrice").notNull().default(true),
   showIva: boolean("showIva").notNull().default(true),
