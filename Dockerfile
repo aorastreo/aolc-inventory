@@ -4,14 +4,14 @@ WORKDIR /app
 # Copy everything
 COPY . .
 
-# Install all dependencies
+# Install ALL dependencies (including devDependencies for tsx, vite, drizzle-kit)
 RUN npm install --include=dev
 
-# Build frontend (generates dist/public/)
+# Build frontend
 RUN npm run build
 
 # Expose port
 EXPOSE 3000
 
-# Push DB schema and start
-CMD npx drizzle-kit push --force 2>/dev/null || true && node server.js
+# Push DB schema and start with tsx
+CMD npx drizzle-kit push --force 2>/dev/null || true && node --import tsx api/boot.ts
