@@ -95,8 +95,8 @@ function Barcode128({ code }: { code: string }) {
   values.push(106); // Stop
 
   // Render SVG bars
-  const moduleWidth = 0.28; // mm per module
-  const barHeight = 5; // mm
+  const moduleWidth = 0.38; // mm per module (thicker for scanner)
+  const barHeight = 7; // mm (taller barcode)
   let x = 10 * moduleWidth; // quiet zone (10 modules)
   const bars: JSX.Element[] = [];
 
@@ -120,7 +120,7 @@ function Barcode128({ code }: { code: string }) {
       className="label-barcode-svg"
       viewBox={`0 0 ${totalWidth} ${barHeight}`}
       preserveAspectRatio="xMidYMid meet"
-      style={{ width: "42mm", height: "4mm" }}
+      style={{ width: "46mm", height: "6mm" }}
     >
       {bars}
     </svg>
@@ -528,7 +528,7 @@ export default function LabelsPage() {
             <div key={idx} className="aolc-label">
               <div className="label-product-name">{item.nombre.toUpperCase()}</div>
               <div className="label-price-row">
-                <span className="label-price">{Number(item.precio)}</span>
+                <span className="label-price">{Math.round(Number(item.precio))}</span>
                 <span className="label-iva">IVA</span>
               </div>
               {item.codigoBarras && (
@@ -554,74 +554,70 @@ export default function LabelsPage() {
           .aolc-label {
             width: 50mm;
             height: 25mm;
-            padding: 1mm 1.5mm;
+            padding: 0.8mm 1mm;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: flex-start;
+            justify-content: center;
             text-align: center;
             page-break-inside: avoid;
             background: white;
             box-sizing: border-box;
             font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-            overflow: hidden;
             border: none;
           }
           .label-product-name {
-            font-size: 5.5pt;
+            font-size: 6pt;
             font-weight: bold;
             color: #000;
             text-transform: uppercase;
-            letter-spacing: 0.2px;
+            letter-spacing: 0.3px;
             line-height: 1.1;
-            max-height: 5mm;
+            margin-bottom: 0.5mm;
+            white-space: nowrap;
             overflow: hidden;
             width: 100%;
-            margin-bottom: 0.3mm;
           }
           .label-price-row {
             display: flex;
             align-items: baseline;
             justify-content: center;
-            gap: 1mm;
-            margin: 0.3mm 0;
+            gap: 1.5mm;
+            margin: 0.5mm 0;
           }
           .label-price {
-            font-size: 20pt;
+            font-size: 22pt;
             font-weight: bold;
             color: #000;
             letter-spacing: 0.5px;
             line-height: 1;
           }
           .label-iva {
-            font-size: 7pt;
+            font-size: 8pt;
             font-weight: bold;
             color: #000;
           }
           .label-barcode-svg {
             display: block;
-            margin: 0.3mm auto 0;
-            text-align: center;
+            margin: 0.8mm auto 0;
           }
           .label-barcode-number {
-            font-size: 6pt;
+            font-size: 7pt;
             color: #000;
-            letter-spacing: 1.5px;
+            letter-spacing: 2px;
             font-family: "Courier New", Courier, monospace;
-            margin-top: 0.2mm;
+            margin-top: 0.5mm;
             white-space: nowrap;
-            overflow: hidden;
-            width: 100%;
+            word-break: keep-all;
           }
           .label-footer {
-            font-size: 4.5pt;
+            font-size: 5pt;
             color: #000;
-            margin-top: 0.5mm;
-            letter-spacing: 0.1px;
+            margin-top: 1mm;
+            letter-spacing: 0.2px;
             font-family: "Arial Narrow", Arial, sans-serif;
             white-space: nowrap;
-            overflow: hidden;
-            width: 100%;
+            word-break: keep-all;
           }
         }
       `}</style>
