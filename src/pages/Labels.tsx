@@ -43,8 +43,8 @@ function BarcodeCanvas({ code }: { code: string; barcodeWidth?: string; barcodeH
   useEffect(() => {
     // Create offscreen canvas (not in DOM)
     const canvas = document.createElement("canvas");
-    canvas.width = 300;
-    canvas.height = 120;
+    canvas.width = 400;
+    canvas.height = 160;
 
     try {
       JsBarcode(canvas, code, {
@@ -65,15 +65,15 @@ function BarcodeCanvas({ code }: { code: string; barcodeWidth?: string; barcodeH
     }
   }, [code]);
 
-  if (!pngUrl) return <div style={{ height: "7mm" }} />;
+  if (!pngUrl) return <div style={{ height: "10mm" }} />;
 
   return (
     <img
       src={pngUrl}
       alt=""
       style={{
-        width: "35mm",
-        height: "7mm",
+        width: "42mm",
+        height: "10mm",
         display: "inline-block",
         objectFit: "contain",
       }}
