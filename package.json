@@ -8,7 +8,7 @@
     "build": "vite build && cp -r api/ db/ contracts/ dist/ 2>/dev/null || true",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "node scripts/prestart.js && NODE_ENV=production node server.js",
+    "start": "node --import tsx api/boot.ts",
     "check": "tsc -b",
     "format": "prettier --write .",
     "test": "vitest run",
