@@ -42,7 +42,7 @@ function BarcodeCanvas({ code, barcodeWidth, barcodeHeight }: {
   barcodeModuleWidth?: string;
   barcodeBarHeight?: string;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [dataUrl, setDataUrl] = useState<string>("");
 
   let digits = code.replace(/\D/g, "");
   if (digits.length === 0) return <div style={{ fontSize: "6pt" }}>{code}</div>;
@@ -50,30 +50,29 @@ function BarcodeCanvas({ code, barcodeWidth, barcodeHeight }: {
   if (digits.length > 8) digits = digits.slice(0, 8);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
+    const canvas = document.createElement("canvas");
     try {
-      const h = parseInt(barcodeHeight || "30", 10);
-
       JsBarcode(canvas, digits, {
         format: "ean8",
         width: 3,
-        height: h * 4,
+        height: 120,
         displayValue: false,
         margin: 10,
         background: "#ffffff",
         lineColor: "#000000",
       });
+      setDataUrl(canvas.toDataURL("image/png"));
     } catch (err) {
       console.error("Barcode error:", err);
     }
-  }, [digits, barcodeHeight]);
+  }, [digits]);
 
   const w = barcodeWidth || "35mm";
   const h = barcodeHeight || "7.5mm";
 
-  return <canvas ref={canvasRef} style={{ width: w, height: h, display: "inline-block" }} />;
+  if (!dataUrl) return <div style={{ width: w, height: h }} />;
+
+  return <img src={dataUrl} alt="" style={{ width: w, height: h, display: "inline-block" }} />;
 }
 
 // Custom Dropdown Component
