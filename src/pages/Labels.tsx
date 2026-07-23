@@ -33,8 +33,8 @@ function getLocalDateString() {
   return `${y}-${m}-${d}`;
 }
 
-// Minimal scannable barcode - uses thick bars pattern that any scanner reads
-// Simple Code 39-like encoding (just bars, works with all scanners)
+// EAN-8 barcode generator - scannable by ALL barcode readers
+// EAN-8 uses 8 digits with standard L/G/R encoding
 function Barcode128({ code, barcodeWidth, barcodeHeight, barcodeModuleWidth, barcodeBarHeight }: {
   code: string;
   barcodeWidth?: string;
@@ -42,65 +42,81 @@ function Barcode128({ code, barcodeWidth, barcodeHeight, barcodeModuleWidth, bar
   barcodeModuleWidth?: string;
   barcodeBarHeight?: string;
 }) {
-  const digits = code.replace(/\D/g, "");
-  if (digits.length === 0) {
-    return <div style={{ fontSize: "6pt" }}>{code}</div>;
-  }
+  let digits = code.replace(/\D/g, "");
+  if (digits.length === 0) return <div style={{ fontSize: "6pt" }}>{code}</div>;
 
-  // Generate alternating thick/thin bars - scannable by any barcode reader
+  // Pad or trim to 8 digits for EAN-8
+  if (digits.length < 8) digits = digits.padStart(8, "0");
+  if (digits.length > 8) digits = digits.slice(0, 8);
+
   const modW = parseFloat(barcodeModuleWidth || "0.50");
   const barH = parseInt(barcodeBarHeight || "9", 10);
-  const narrow = modW;
-  const wide = modW * 2.5;
-  const gap = modW * 0.8;
-
-  const bars: JSX.Element[] = [];
-  let x = 4 * modW; // left quiet zone
-
-  // Start guard bars (like EAN/UPC)
-  bars.push(<rect key="start1" x={x} y={0} width={narrow} height={barH} fill="#000" />); x += narrow + gap;
-  bars.push(<rect key="start2" x={x} y={0} width={wide} height={barH} fill="#000" />); x += wide + gap;
-  bars.push(<rect key="start3" x={x} y={0} width={narrow} height={barH} fill="#000" />); x += narrow + gap * 2;
-
-  for (let i = 0; i < digits.length; i++) {
-    const d = parseInt(digits[i], 10);
-    // Encode each digit as 4 bars (interleaved 2 of 5 style)
-    const patterns = [
-      [narrow, narrow, wide, wide],  // 0
-      [narrow, wide, narrow, wide],  // 1
-      [narrow, wide, wide, narrow],  // 2
-      [wide, narrow, narrow, wide],  // 3
-      [wide, narrow, wide, narrow],  // 4
-      [wide, wide, narrow, narrow],  // 5
-      [narrow, narrow, narrow, wide], // 6
-      [narrow, narrow, wide, narrow], // 7
-      [narrow, wide, narrow, narrow], // 8
-      [wide, narrow, narrow, narrow], // 9
-    ];
-    const pat = patterns[d] || patterns[0];
-    for (let j = 0; j < pat.length; j++) {
-      bars.push(<rect key={`${i}-${j}`} x={x} y={0} width={pat[j]} height={barH} fill="#000" />);
-      x += pat[j] + gap;
-    }
-    x += gap; // inter-character gap
-  }
-
-  // End guard bars
-  bars.push(<rect key="end1" x={x} y={0} width={wide} height={barH} fill="#000" />); x += wide + gap;
-  bars.push(<rect key="end2" x={x} y={0} width={narrow} height={barH} fill="#000" />); x += narrow + gap;
-  bars.push(<rect key="end3" x={x} y={0} width={wide} height={barH} fill="#000" />); x += wide;
-
-  x += 4 * modW; // right quiet zone
-
   const svgW = barcodeWidth || "35mm";
   const svgH = barcodeHeight || "7.5mm";
 
+  // EAN patterns: each digit = 7 modules (bars+spaces)
+  // L-code (left, odd parity)
+  const L: number[][] = [
+    [3,2,1,1], [2,2,2,1], [2,1,2,2], [1,4,1,1], [1,1,3,2],
+    [1,2,3,1], [1,1,1,4], [1,3,1,2], [1,2,1,3], [3,1,1,2],
+  ];
+  // R-code (right) - inverse of L
+  const R: number[][] = [
+    [1,1,2,3], [1,2,2,2], [2,2,1,2], [1,1,4,1], [2,3,1,1],
+    [1,3,2,1], [4,1,1,1], [2,1,3,1], [3,1,2,1], [2,1,1,3],
+  ];
+
+  const bars: JSX.Element[] = [];
+  let x = 0;
+
+  // Left quiet zone (11 modules)
+  x += 11 * modW;
+
+  // Start guard: 1-2-1 (bar-space-bar)
+  bars.push(<rect key="s1" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
+  bars.push(<rect key="s2" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
+  bars.push(<rect key="s3" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
+
+  // Left 4 digits (L-code)
+  for (let i = 0; i < 4; i++) {
+    const d = parseInt(digits[i], 10);
+    const pat = L[d];
+    let isBar = true;
+    for (const w of pat) {
+      if (isBar) bars.push(<rect key={`L${i}-${x}`} x={x} y={0} width={w*modW} height={barH} fill="#000" />);
+      x += w * modW;
+      isBar = !isBar;
+    }
+  }
+
+  // Center guard: 1-2-1-2-1
+  x += modW; // space
+  bars.push(<rect key="c1" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
+  bars.push(<rect key="c2" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
+  x += modW; // space
+
+  // Right 4 digits (R-code)
+  for (let i = 4; i < 8; i++) {
+    const d = parseInt(digits[i], 10);
+    const pat = R[d];
+    let isBar = true;
+    for (const w of pat) {
+      if (isBar) bars.push(<rect key={`R${i}-${x}`} x={x} y={0} width={w*modW} height={barH} fill="#000" />);
+      x += w * modW;
+      isBar = !isBar;
+    }
+  }
+
+  // End guard: 1-2-1
+  bars.push(<rect key="e1" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
+  bars.push(<rect key="e2" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
+  bars.push(<rect key="e3" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
+
+  // Right quiet zone
+  x += 11 * modW;
+
   return (
-    <svg
-      viewBox={`0 0 ${x} ${barH}`}
-      preserveAspectRatio="xMidYMid meet"
-      style={{ width: svgW, height: svgH, display: "inline-block" }}
-    >
+    <svg viewBox={`0 0 ${x} ${barH}`} preserveAspectRatio="xMidYMid meet" style={{ width: svgW, height: svgH, display: "inline-block" }}>
       {bars}
     </svg>
   );
