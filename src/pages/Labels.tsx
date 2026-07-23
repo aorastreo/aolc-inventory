@@ -33,93 +33,81 @@ function getLocalDateString() {
   return `${y}-${m}-${d}`;
 }
 
-// EAN-8 barcode generator - scannable by ALL barcode readers
-// EAN-8 uses 8 digits with standard L/G/R encoding
-function Barcode128({ code, barcodeWidth, barcodeHeight, barcodeModuleWidth, barcodeBarHeight }: {
+// EAN-8 barcode rendered as Canvas PNG for reliable printing
+function BarcodeCanvas({ code, barcodeWidth, barcodeHeight, barcodeModuleWidth, barcodeBarHeight }: {
   code: string;
   barcodeWidth?: string;
   barcodeHeight?: string;
   barcodeModuleWidth?: string;
   barcodeBarHeight?: string;
 }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
   let digits = code.replace(/\D/g, "");
   if (digits.length === 0) return <div style={{ fontSize: "6pt" }}>{code}</div>;
-
-  // Pad or trim to 8 digits for EAN-8
   if (digits.length < 8) digits = digits.padStart(8, "0");
   if (digits.length > 8) digits = digits.slice(0, 8);
 
-  const modW = parseFloat(barcodeModuleWidth || "0.50");
-  const barH = parseInt(barcodeBarHeight || "9", 10);
-  const svgW = barcodeWidth || "35mm";
-  const svgH = barcodeHeight || "7.5mm";
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-  // EAN patterns: each digit = 7 modules (bars+spaces)
-  // L-code (left, odd parity)
-  const L: number[][] = [
-    [3,2,1,1], [2,2,2,1], [2,1,2,2], [1,4,1,1], [1,1,3,2],
-    [1,2,3,1], [1,1,1,4], [1,3,1,2], [1,2,1,3], [3,1,1,2],
-  ];
-  // R-code (right) - inverse of L
-  const R: number[][] = [
-    [1,1,2,3], [1,2,2,2], [2,2,1,2], [1,1,4,1], [2,3,1,1],
-    [1,3,2,1], [4,1,1,1], [2,1,3,1], [3,1,2,1], [2,1,1,3],
-  ];
+    const mod = parseFloat(barcodeModuleWidth || "0.80") * 4; // scale up for crisp printing
+    const h = parseInt(barcodeBarHeight || "9", 10) * 4;
+    const quiet = 11 * mod;
 
-  const bars: JSX.Element[] = [];
-  let x = 0;
+    // EAN L-code and R-code patterns (7 modules each, alternating bar/space widths)
+    const L = [[3,2,1,1],[2,2,2,1],[2,1,2,2],[1,4,1,1],[1,1,3,2],[1,2,3,1],[1,1,1,4],[1,3,1,2],[1,2,1,3],[3,1,1,2]];
+    const R = [[1,1,2,3],[1,2,2,2],[2,2,1,2],[1,1,4,1],[2,3,1,1],[1,3,2,1],[4,1,1,1],[2,1,3,1],[3,1,2,1],[2,1,1,3]];
 
-  // Left quiet zone (11 modules)
-  x += 11 * modW;
+    let totalW = quiet * 2 + 3 * mod * 2; // start + end guards
+    totalW += 4 * 7 * mod; // 4 left digits
+    totalW += 5 * mod; // center guard
+    totalW += 4 * 7 * mod; // 4 right digits
 
-  // Start guard: 1-2-1 (bar-space-bar)
-  bars.push(<rect key="s1" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
-  bars.push(<rect key="s2" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
-  bars.push(<rect key="s3" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
+    canvas.width = Math.ceil(totalW);
+    canvas.height = h;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Left 4 digits (L-code)
-  for (let i = 0; i < 4; i++) {
-    const d = parseInt(digits[i], 10);
-    const pat = L[d];
-    let isBar = true;
-    for (const w of pat) {
-      if (isBar) bars.push(<rect key={`L${i}-${x}`} x={x} y={0} width={w*modW} height={barH} fill="#000" />);
-      x += w * modW;
-      isBar = !isBar;
-    }
-  }
+    let x = quiet;
+    ctx.fillStyle = "#000";
 
-  // Center guard: 1-2-1-2-1
-  x += modW; // space
-  bars.push(<rect key="c1" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
-  bars.push(<rect key="c2" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
-  x += modW; // space
+    // Helper: draw pattern
+    const drawPat = (pat: number[]) => {
+      let bar = true;
+      for (const w of pat) {
+        if (bar) ctx.fillRect(x, 0, w * mod, h);
+        x += w * mod;
+        bar = !bar;
+      }
+    };
 
-  // Right 4 digits (R-code)
-  for (let i = 4; i < 8; i++) {
-    const d = parseInt(digits[i], 10);
-    const pat = R[d];
-    let isBar = true;
-    for (const w of pat) {
-      if (isBar) bars.push(<rect key={`R${i}-${x}`} x={x} y={0} width={w*modW} height={barH} fill="#000" />);
-      x += w * modW;
-      isBar = !isBar;
-    }
-  }
+    // Start guard (101)
+    drawPat([1,1,1]);
+    x += mod; // trailing space
 
-  // End guard: 1-2-1
-  bars.push(<rect key="e1" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
-  bars.push(<rect key="e2" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
-  bars.push(<rect key="e3" x={x} y={0} width={modW} height={barH} fill="#000" />); x += 2*modW;
+    // Left 4 digits
+    for (let i = 0; i < 4; i++) drawPat(L[parseInt(digits[i], 10)]);
 
-  // Right quiet zone
-  x += 11 * modW;
+    // Center guard (01010)
+    x += mod;
+    drawPat([1,1,1,1,1]);
+    x += mod;
 
-  return (
-    <svg viewBox={`0 0 ${x} ${barH}`} preserveAspectRatio="xMidYMid meet" style={{ width: svgW, height: svgH, display: "inline-block" }}>
-      {bars}
-    </svg>
-  );
+    // Right 4 digits
+    for (let i = 4; i < 8; i++) drawPat(R[parseInt(digits[i], 10)]);
+
+    // End guard (101)
+    drawPat([1,1,1]);
+  }, [digits, barcodeModuleWidth, barcodeBarHeight]);
+
+  const w = barcodeWidth || "35mm";
+  const h = barcodeHeight || "7.5mm";
+
+  return <canvas ref={canvasRef} style={{ width: w, height: h, display: "inline-block" }} />;
 }
 
 // Custom Dropdown Component
@@ -577,7 +565,7 @@ export default function LabelsPage() {
                   left: "1mm", right: "1mm",
                   textAlign: (labelCfg?.barcodeAlign || "center") as any,
                 }}>
-                  <Barcode128
+                  <BarcodeCanvas
                     code={item.codigoBarras}
                     barcodeWidth={labelCfg?.barcodeWidth}
                     barcodeHeight={labelCfg?.barcodeHeight}
