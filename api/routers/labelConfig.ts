@@ -7,7 +7,7 @@ const D: Record<string, string | boolean> = {
   nameFontSize: "5pt", nameTop: "1mm", nameTextAlign: "center", nameFontWeight: "bold",
   priceFontSize: "20pt", ivaFontSize: "8pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold",
   barcodeWidth: "42mm", barcodeHeight: "7mm", barcodeFontSize: "28pt", barcodeTop: "12mm", barcodeAlign: "center",
-  barcodeNumberFontSize: "8pt", barcodeNumberLetterSpacing: "2px", barcodeNumberTop: "17mm", barcodeNumberAlign: "center",
+  barcodeNumberFontSize: "8pt", barcodeNumberLetterSpacing: "2px", barcodeNumberTop: "17mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold",
   footerFontSize: "5pt", footerTop: "20mm", footerTextAlign: "center",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
   footerText: "American Outlet Los Chiles",
@@ -47,6 +47,7 @@ async function ensureTable() {
         barcodeNumberLetterSpacing VARCHAR(10) NOT NULL DEFAULT '2px',
         barcodeNumberTop VARCHAR(10) NOT NULL DEFAULT '17mm',
         barcodeNumberAlign VARCHAR(10) NOT NULL DEFAULT 'center',
+        barcodeNumberFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold',
         footerFontSize VARCHAR(10) NOT NULL DEFAULT '5pt',
         footerTop VARCHAR(10) NOT NULL DEFAULT '20mm',
         footerTextAlign VARCHAR(10) NOT NULL DEFAULT 'center',
@@ -66,6 +67,7 @@ async function ensureTable() {
     try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN barcodeFontSize VARCHAR(10) NOT NULL DEFAULT '28pt'`); } catch { /* */ }
     try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN nameFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold'`); } catch { /* */ }
     try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN priceFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold'`); } catch { /* */ }
+    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN barcodeNumberFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold'`); } catch { /* */ }
     // Remove old columns from existing tables
     try { await conn.execute(`ALTER TABLE labelConfig DROP COLUMN barcodeModuleWidth`); } catch { /* */ }
     try { await conn.execute(`ALTER TABLE labelConfig DROP COLUMN barcodeBarHeight`); } catch { /* */ }

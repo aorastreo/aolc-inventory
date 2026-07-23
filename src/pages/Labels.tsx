@@ -79,12 +79,9 @@ function BarcodeCanvas({ code, barcodeWidth, barcodeHeight, barcodeFontSize }: {
         lineHeight: 1,
         whiteSpace: "nowrap",
         overflow: "hidden",
-        textAlign: "center",
         height: barcodeHeight || "7mm",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: barcodeWidth || "42mm",
+        display: "inline-block",
+        verticalAlign: "middle",
       }}
     >
       {encoded}
@@ -563,6 +560,7 @@ export default function LabelsPage() {
                   top: labelCfg?.barcodeNumberTop || "17mm",
                   left: "1mm", right: "1mm",
                   fontSize: labelCfg?.barcodeNumberFontSize || "8pt",
+                  fontWeight: labelCfg?.barcodeNumberFontWeight || "bold",
                   color: "#000",
                   letterSpacing: labelCfg?.barcodeNumberLetterSpacing || "2px",
                   fontFamily: "Courier New, Courier, monospace",

@@ -72,7 +72,7 @@ const defaultConfig: Record<string, any> = {
   nameFontSize: "5pt", nameTop: "1mm", nameTextAlign: "center", nameFontWeight: "bold",
   priceFontSize: "20pt", ivaFontSize: "8pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold",
   barcodeWidth: "42mm", barcodeHeight: "7mm", barcodeFontSize: "28pt", barcodeTop: "12mm", barcodeAlign: "center",
-  barcodeNumberFontSize: "8pt", barcodeNumberLetterSpacing: "2px", barcodeNumberTop: "17mm", barcodeNumberAlign: "center",
+  barcodeNumberFontSize: "8pt", barcodeNumberLetterSpacing: "2px", barcodeNumberTop: "17mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold",
   footerFontSize: "5pt", footerTop: "20mm", footerTextAlign: "center",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
   footerText: "American Outlet Los Chiles",
@@ -196,6 +196,17 @@ export default function LabelConfigPage() {
               <StepperInput label="Tamano" value={s("barcodeNumberFontSize")} onChange={v => update("barcodeNumberFontSize", v)} step={0.5} />
               <StepperInput label="Espaciado" value={s("barcodeNumberLetterSpacing")} onChange={v => update("barcodeNumberLetterSpacing", v)} step={0.5} />
               <StepperInput label="Posicion Y" value={s("barcodeNumberTop")} onChange={v => update("barcodeNumberTop", v)} step={0.5} />
+              <div>
+                <Label className="text-xs mb-1 block">Grosor</Label>
+                <select
+                  value={s("barcodeNumberFontWeight")}
+                  onChange={e => update("barcodeNumberFontWeight", e.target.value)}
+                  className="w-full h-8 border rounded px-2 text-sm"
+                >
+                  <option value="normal">Normal</option>
+                  <option value="bold">Negrita</option>
+                </select>
+              </div>
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("barcodeNumberAlign")} onChange={v => update("barcodeNumberAlign", v)} /></div>
             <div className="flex gap-6 mt-3">
@@ -273,7 +284,7 @@ export default function LabelConfigPage() {
               {s("showBarcodeNumber") && (
                 <div style={{
                   position: "absolute", top: s("barcodeNumberTop"), left: "1mm", right: "1mm",
-                  fontSize: s("barcodeNumberFontSize"), color: "#000",
+                  fontSize: s("barcodeNumberFontSize"), fontWeight: s("barcodeNumberFontWeight") || "bold", color: "#000",
                   letterSpacing: s("barcodeNumberLetterSpacing"), fontFamily: "Courier New, Courier, monospace",
                   textAlign: s("barcodeNumberAlign") as any, whiteSpace: "nowrap",
                 }}>{previewItem.codigoBarras}</div>
