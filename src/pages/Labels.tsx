@@ -509,7 +509,7 @@ export default function LabelsPage() {
                 position: "absolute",
                 top: labelCfg?.nameTop || "1mm",
                 left: "1mm", right: "1mm",
-                fontSize: labelCfg?.nameFontSize || "7pt",
+                fontSize: labelCfg?.nameFontSize || "10pt",
                 fontWeight: labelCfg?.nameFontWeight || "bold", color: "#000",
                 textTransform: "uppercase",
                 letterSpacing: "0.2px", lineHeight: 1.3,
@@ -527,11 +527,11 @@ export default function LabelsPage() {
                   justifyContent: (labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center",
                   gap: "1.5mm",
                 }}>
-                  <span style={{ fontSize: labelCfg?.priceFontSize || "28pt", fontWeight: labelCfg?.priceFontWeight || "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
+                  <span style={{ fontSize: labelCfg?.priceFontSize || "36pt", fontWeight: labelCfg?.priceFontWeight || "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
                     {Math.round(Number(item.precio))}
                   </span>
                   {(labelCfg?.showIva ?? true) && (
-                    <span style={{ fontSize: labelCfg?.ivaFontSize || "9pt", fontWeight: "bold", color: "#000" }}>IVA</span>
+                    <span style={{ fontSize: labelCfg?.ivaFontSize || "12pt", fontWeight: "bold", color: "#000" }}>IVA</span>
                   )}
                 </div>
               )}
@@ -559,7 +559,7 @@ export default function LabelsPage() {
                   position: "absolute",
                   top: labelCfg?.barcodeNumberTop || "17mm",
                   left: "1mm", right: "1mm",
-                  fontSize: labelCfg?.barcodeNumberFontSize || "11pt",
+                  fontSize: labelCfg?.barcodeNumberFontSize || "14pt",
                   fontWeight: labelCfg?.barcodeNumberFontWeight || "bold",
                   color: "#000",
                   letterSpacing: labelCfg?.barcodeNumberLetterSpacing || "2px",
@@ -575,7 +575,7 @@ export default function LabelsPage() {
                   position: "absolute",
                   top: labelCfg?.footerTop || "20mm",
                   left: "1mm", right: "1mm",
-                  fontSize: labelCfg?.footerFontSize || "6.5pt",
+                  fontSize: labelCfg?.footerFontSize || "8pt",
                   color: "#000",
                   letterSpacing: "0.2px",
                   fontFamily: "Arial Narrow, Arial, sans-serif",

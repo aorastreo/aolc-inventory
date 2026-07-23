@@ -4,11 +4,11 @@ import mysql from "mysql2/promise";
 
 const D: Record<string, string | boolean> = {
   labelWidth: "50mm", labelHeight: "25mm",
-  nameFontSize: "7pt", nameTop: "0.5mm", nameTextAlign: "center", nameFontWeight: "bold",
-  priceFontSize: "28pt", ivaFontSize: "9pt", priceTop: "5.5mm", priceTextAlign: "center", priceFontWeight: "bold",
+  nameFontSize: "10pt", nameTop: "0.5mm", nameTextAlign: "center", nameFontWeight: "bold",
+  priceFontSize: "36pt", ivaFontSize: "12pt", priceTop: "5mm", priceTextAlign: "center", priceFontWeight: "bold",
   barcodeWidth: "42mm", barcodeHeight: "7mm", barcodeFontSize: "28pt", barcodeTop: "12mm", barcodeAlign: "center",
-  barcodeNumberFontSize: "11pt", barcodeNumberLetterSpacing: "2.5px", barcodeNumberTop: "17mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold",
-  footerFontSize: "6.5pt", footerTop: "20mm", footerTextAlign: "center",
+  barcodeNumberFontSize: "14pt", barcodeNumberLetterSpacing: "3px", barcodeNumberTop: "17mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold",
+  footerFontSize: "8pt", footerTop: "20mm", footerTextAlign: "center",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
   footerText: "American Outlet Los Chiles",
 };
