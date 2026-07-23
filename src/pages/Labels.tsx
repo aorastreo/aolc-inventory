@@ -24,6 +24,50 @@ interface LabelItem {
   printed: boolean;
 }
 
+// Get today's date in YYYY-MM-DD using local timezone
+function getLocalDateString() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// Code 128 barcode patterns (simplified subset for numeric + common chars)
+const CODE128_PATTERNS: Record<string, string> = {
+  "0": "11011001100", "1": "11001101100", "2": "11001100110", "3": "10010011000",
+  "4": "10010001100", "5": "10001001100", "6": "10011001000", "7": "10011000100",
+  "8": "10001100100", "9": "11001001000", " ": "11001110010", "-": "10100111000",
+};
+
+function BarcodeSVG({ code }: { code: string }) {
+  // Simple barcode visualization using alternating bars
+  // For real scanning, use a proper Code 128 library
+  const bars: JSX.Element[] = [];
+  let x = 0;
+  const barWidth = 0.4; // mm per narrow bar
+  const height = 4; // mm
+
+  for (let i = 0; i < code.length; i++) {
+    const digit = parseInt(code[i], 10);
+    // Generate bars based on digit value
+    const pattern = CODE128_PATTERNS[String(digit)] || "110";
+    for (let j = 0; j < pattern.length; j++) {
+      if (pattern[j] === "1") {
+        bars.push(<rect key={`${i}-${j}`} x={x} y={0} width={barWidth} height={height} fill="#000" />);
+      }
+      x += barWidth;
+    }
+    x += barWidth; // gap between digits
+  }
+
+  return (
+    <svg className="label-barcode" viewBox={`0 0 ${x} ${height}`} preserveAspectRatio="xMidYMid meet" style={{ width: "38mm", height: "4mm" }}>
+      {bars}
+    </svg>
+  );
+}
+
 // Custom Dropdown Component
 function CustomDropdown({ label, value, onChange, options, placeholder }: {
   label: string;
@@ -420,17 +464,21 @@ export default function LabelsPage() {
 
       {/* Hidden print area */}
       <div className="print-only">
-        <div className="label-sheet-zebra">
+        <div className="label-sheet">
           {expandedItems.map((item, idx) => (
-            <div key={idx} className="zebra-label">
-              <div className="zebra-header">AMERICAN OUTLET</div>
-              <div className="zebra-name">{item.nombre}</div>
-              {showPrice === "si" && (
-                <div className="zebra-price"><span className="zebra-currency">₡</span>{Number(item.precio).toLocaleString("es-CR")}</div>
-              )}
+            <div key={idx} className="aolc-label">
+              <div className="label-product-name">{item.nombre.toUpperCase()}</div>
+              <div className="label-price-row">
+                <span className="label-price">{Number(item.precio).toLocaleString("es-CR")}</span>
+                <span className="label-iva">IVA</span>
+              </div>
               {item.codigoBarras && (
-                <div className="zebra-barcode"><Barcode className="w-8 h-3" /><span className="zebarcode-text">{item.codigoBarras}</span></div>
+                <>
+                  <BarcodeSVG code={item.codigoBarras} />
+                  <div className="label-barcode-number">{item.codigoBarras}</div>
+                </>
               )}
+              <div className="label-footer">{getLocalDateString()} - American Outlet Los Chiles</div>
             </div>
           ))}
         </div>
@@ -439,17 +487,19 @@ export default function LabelsPage() {
       <style>{`
         @media screen { .print-only { display: none !important; } }
         @media print {
+          @page { size: auto; margin: 0; }
           body * { visibility: hidden; }
           .print-only, .print-only * { visibility: visible; }
           .print-only { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
-          .label-sheet-zebra { display: flex; flex-direction: column; gap: 0; }
-          .zebra-label { width: 50mm; height: 25mm; border: 0.5px solid #ddd; border-radius: 3mm; padding: 2mm; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; page-break-inside: avoid; background: white; box-sizing: border-box; }
-          .zebra-header { font-size: 5pt; font-weight: bold; color: #B22234; letter-spacing: 0.3px; margin-bottom: 1mm; }
-          .zebra-name { font-size: 8pt; font-weight: 600; color: #1B3A5C; line-height: 1.2; max-height: 14mm; overflow: hidden; margin-bottom: 2mm; }
-          .zebra-price { font-size: 14pt; font-weight: bold; color: #B22234; }
-          .zebra-currency { font-size: 10pt; vertical-align: top; }
-          .zebra-barcode { margin-top: 1mm; font-size: 6pt; color: #666; display: flex; flex-direction: column; align-items: center; }
-          .zebarcode-text { letter-spacing: 1px; }
+          .label-sheet { display: flex; flex-direction: column; gap: 0; }
+          .aolc-label { width: 50mm; height: 25mm; padding: 1.5mm 2mm; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; page-break-inside: avoid; background: white; box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
+          .label-product-name { font-size: 6pt; font-weight: bold; color: #000; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.1; max-height: 7mm; overflow: hidden; width: 100%; }
+          .label-price-row { display: flex; align-items: baseline; justify-content: center; gap: 1mm; margin: 0.5mm 0; }
+          .label-price { font-size: 16pt; font-weight: bold; color: #000; letter-spacing: 0.5px; }
+          .label-iva { font-size: 6pt; font-weight: bold; color: #000; }
+          .label-barcode { display: flex; justify-content: center; align-items: center; height: 5mm; }
+          .label-barcode-number { font-size: 6pt; color: #000; letter-spacing: 1.5px; font-family: monospace; margin-top: 0.3mm; }
+          .label-footer { font-size: 4.5pt; color: #000; margin-top: 0.5mm; letter-spacing: 0.2px; }
         }
       `}</style>
     </div>
