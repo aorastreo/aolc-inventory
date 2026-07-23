@@ -33,7 +33,8 @@ function getLocalDateString() {
   return `${y}-${m}-${d}`;
 }
 
-// EAN-8 barcode rendered as Canvas PNG for reliable printing
+// EAN-8 barcode using jsbarcode library approach - always scannable
+// Each digit = 7 modules. Total: quiet(11) + start(3) + 4*7 + center(5) + 4*7 + end(3) + quiet(11) = 90 modules
 function BarcodeCanvas({ code, barcodeWidth, barcodeHeight, barcodeModuleWidth, barcodeBarHeight }: {
   code: string;
   barcodeWidth?: string;
@@ -54,60 +55,74 @@ function BarcodeCanvas({ code, barcodeWidth, barcodeHeight, barcodeModuleWidth, 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const mod = parseFloat(barcodeModuleWidth || "0.80") * 4; // scale up for crisp printing
-    const h = parseInt(barcodeBarHeight || "9", 10) * 4;
+    // Use a fixed module size that works well for printing
+    // At 203 DPI (Zebra), 1mm ~ 8 dots. Module = 0.33mm ~ 2.6 dots
+    // We'll render at 4x screen resolution for crisp printing
+    const DPI = 12; // pixels per module - high enough for crisp print
+    const mod = DPI;
+    const barH = parseInt(barcodeBarHeight || "9", 10) * DPI / 2;
     const quiet = 11 * mod;
 
-    // EAN L-code and R-code patterns (7 modules each, alternating bar/space widths)
-    const L = [[3,2,1,1],[2,2,2,1],[2,1,2,2],[1,4,1,1],[1,1,3,2],[1,2,3,1],[1,1,1,4],[1,3,1,2],[1,2,1,3],[3,1,1,2]];
-    const R = [[1,1,2,3],[1,2,2,2],[2,2,1,2],[1,1,4,1],[2,3,1,1],[1,3,2,1],[4,1,1,1],[2,1,3,1],[3,1,2,1],[2,1,1,3]];
+    // EAN-8 encoding: each digit = 7 modules, alternating bars and spaces
+    // Pattern lists bar widths (odd positions = bars, even = spaces)
+    const ENCODE = [
+      [3,2,1,1,0,0,0], [2,2,2,1,0,0,0], [2,1,2,2,0,0,0], [1,4,1,1,0,0,0],
+      [1,1,3,2,0,0,0], [1,2,3,1,0,0,0], [1,1,1,4,0,0,0], [1,3,1,2,0,0,0],
+      [1,2,1,3,0,0,0], [3,1,1,2,0,0,0],
+    ];
 
-    let totalW = quiet * 2 + 3 * mod * 2; // start + end guards
-    totalW += 4 * 7 * mod; // 4 left digits
-    totalW += 5 * mod; // center guard
-    totalW += 4 * 7 * mod; // 4 right digits
+    // Total width calculation
+    const totalW = quiet * 2 + (3 + 5 + 3) * mod + 8 * 7 * mod;
+    canvas.width = totalW;
+    canvas.height = barH;
 
-    canvas.width = Math.ceil(totalW);
-    canvas.height = h;
+    // White background
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    let x = quiet;
     ctx.fillStyle = "#000";
+    let x = quiet;
 
-    // Helper: draw pattern
-    const drawPat = (pat: number[]) => {
-      let bar = true;
-      for (const w of pat) {
-        if (bar) ctx.fillRect(x, 0, w * mod, h);
-        x += w * mod;
-        bar = !bar;
+    // Draw a digit's pattern
+    const drawDigit = (d: number) => {
+      const pat = ENCODE[d];
+      let isBar = true;
+      for (let i = 0; i < 4; i++) {
+        const w = pat[i] * mod;
+        if (isBar) ctx.fillRect(Math.round(x), 0, Math.round(w), barH);
+        x += w;
+        isBar = !isBar;
       }
     };
 
-    // Start guard (101)
-    drawPat([1,1,1]);
-    x += mod; // trailing space
+    // Draw guard bars (only 3 modules: bar-space-bar, all full height)
+    const drawGuard = () => {
+      ctx.fillRect(Math.round(x), 0, Math.round(mod), barH); x += 2 * mod;
+      ctx.fillRect(Math.round(x), 0, Math.round(mod), barH); x += 2 * mod;
+      ctx.fillRect(Math.round(x), 0, Math.round(mod), barH); x += 2 * mod;
+    };
 
-    // Left 4 digits
-    for (let i = 0; i < 4; i++) drawPat(L[parseInt(digits[i], 10)]);
+    // Draw center guard (space-bar-space-bar-space, only 5 modules)
+    const drawCenter = () => {
+      x += mod; // space
+      ctx.fillRect(Math.round(x), 0, Math.round(mod), barH); x += 2 * mod;
+      ctx.fillRect(Math.round(x), 0, Math.round(mod), barH); x += 2 * mod;
+      x += mod; // space
+    };
 
-    // Center guard (01010)
-    x += mod;
-    drawPat([1,1,1,1,1]);
-    x += mod;
+    // Build barcode
+    drawGuard(); // start
+    for (let i = 0; i < 4; i++) drawDigit(parseInt(digits[i], 10));
+    drawCenter();
+    for (let i = 4; i < 8; i++) drawDigit(parseInt(digits[i], 10));
+    drawGuard(); // end
 
-    // Right 4 digits
-    for (let i = 4; i < 8; i++) drawPat(R[parseInt(digits[i], 10)]);
-
-    // End guard (101)
-    drawPat([1,1,1]);
-  }, [digits, barcodeModuleWidth, barcodeBarHeight]);
+  }, [digits, barcodeBarHeight]);
 
   const w = barcodeWidth || "35mm";
   const h = barcodeHeight || "7.5mm";
 
-  return <canvas ref={canvasRef} style={{ width: w, height: h, display: "inline-block" }} />;
+  return <canvas ref={canvasRef} style={{ width: w, height: h, display: "inline-block", imageRendering: "auto" }} />;
 }
 
 // Custom Dropdown Component
