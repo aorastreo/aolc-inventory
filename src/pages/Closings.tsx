@@ -68,14 +68,23 @@ export default function ClosingsPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newClosing, setNewClosing] = useState({
-    fecha: new Date().toISOString().split("T")[0], dia: "",
+    fecha: "", dia: "",
     efectivo: "", tarjeta: "", sinpe: "", sinFactura: "",
   });
 
-  // Auto-fill the day when dialog opens (using today's date)
+  // Helper: get today's date in YYYY-MM-DD using local timezone
+  function getLocalDateString() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  // Auto-fill the day when dialog opens (using today's local date)
   useEffect(() => {
     if (dialogOpen) {
-      const hoy = new Date().toISOString().split("T")[0];
+      const hoy = getLocalDateString();
       handleDateChange(hoy);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
