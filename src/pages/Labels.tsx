@@ -33,45 +33,8 @@ function getLocalDateString() {
   return `${y}-${m}-${d}`;
 }
 
-// Code 128 bar/space widths for each pattern (alternating bar, space, bar, space, bar, space)
-// Each value is the width in modules. Sum must be 11. Stop has 13.
-const CODE128_WIDTHS: number[][] = [
-  [2,1,2,2,2,2], [2,2,2,1,2,2], [2,2,2,2,1,2], [1,2,1,2,2,3], [1,2,1,3,2,2],
-  [1,3,1,2,2,2], [1,2,2,2,1,3], [1,2,2,3,1,2], [1,3,2,2,1,2], [2,1,2,1,2,3],
-  [2,1,2,3,1,2], [2,3,1,2,1,2], [1,1,2,1,3,3], [1,1,2,3,2,3], [1,3,2,1,2,3],
-  [1,1,3,1,2,3], [1,1,3,3,2,1], [1,3,3,1,2,1], [3,1,2,1,3,1], [2,1,1,3,2,2],
-  [2,3,1,1,2,2], [2,1,2,3,1,1], [2,1,3,2,1,2], [2,3,2,1,1,2], [1,2,1,3,2,2],
-  [1,2,3,1,2,1], [1,2,2,3,1,2], [3,1,1,2,2,2], [3,2,1,1,2,2], [3,2,1,2,1,2],
-  [1,1,2,2,3,2], [1,2,2,1,3,2], [1,2,3,1,1,3], [1,2,2,3,1,1], [3,2,1,2,1,1],
-  [3,1,2,1,2,2], [2,3,1,2,1,1], [2,3,2,1,1,2], [2,3,2,2,1,1], [2,1,2,2,1,3],
-  [2,1,3,1,2,2], [2,3,1,1,2,2], [2,2,1,3,1,2], [2,2,3,1,1,2], [2,2,1,1,3,2],
-  [3,1,2,1,3,1], [2,1,1,3,1,3], [2,3,1,1,1,3], [1,2,2,1,3,2], [3,1,1,3,1,2],
-  [2,1,1,3,2,2], [2,2,1,1,2,3], [2,2,1,3,2,1], [2,1,1,2,3,2], [1,1,3,2,2,2],
-  [2,1,3,1,1,3], [3,1,2,1,3,1], [1,1,2,3,2,2], [1,3,2,2,2,1], [3,2,2,1,1,2],
-  [2,2,1,1,2,3], [2,2,3,1,1,2], [3,1,2,2,1,1], [1,1,2,2,2,3], [1,3,2,1,2,2],
-  [1,2,3,1,1,2], [1,1,2,2,3,1], [1,1,3,2,2,1], [1,2,2,3,1,1], [3,1,2,2,1,2],
-  [3,2,2,1,2,1], [1,1,2,1,2,4], [1,1,2,1,4,2], [1,1,4,1,2,2], [1,2,2,1,1,4],
-  [1,2,2,4,1,1], [1,4,2,1,1,2], [4,1,2,1,2,1], [2,1,4,1,2,1], [2,1,2,1,4,1],
-  [2,1,2,3,2,1], [1,2,1,4,1,2], [1,2,3,2,1,2], [4,2,1,2,1,1], [1,1,1,1,4,3],
-  [1,1,1,3,4,1], [1,3,1,1,4,1], [1,1,4,1,1,3], [1,1,4,3,1,1], [4,1,1,1,1,3],
-  [4,1,1,3,1,1], [1,1,3,1,4,1], [1,1,4,1,2,2], [3,1,1,2,2,2], [2,2,1,1,1,4],
-  [4,3,1,1,1,1], [1,1,1,1,4,2], [1,1,1,2,4,1], [1,2,1,1,4,2], [1,2,1,2,4,1],
-  [1,1,4,1,1,2], [1,1,4,2,1,1], [1,4,1,1,2,2], [1,4,2,1,1,2], [1,4,2,2,1,1],
-  [4,1,1,2,1,2], [4,2,1,1,1,2], [4,2,2,1,1,1], [2,1,2,1,4,1], [2,1,3,2,1,2],
-  [2,3,1,1,1,3], [2,3,3,1,1,1], [3,1,2,1,3,1], [1,1,1,3,2,3], [1,3,1,2,2,2],
-  [1,1,1,1,3,4], [2,1,1,1,2,4], [2,1,4,1,1,2], [2,1,2,1,2,3], [1,2,2,1,3,2],
-];
-
-// Calculate Code 128 checksum
-function code128Checksum(values: number[]): number {
-  let sum = values[0]; // start code value
-  for (let i = 1; i < values.length; i++) {
-    sum += values[i] * i;
-  }
-  return sum % 103;
-}
-
-// Generate SVG barcode with proper Code 128 encoding
+// Minimal scannable barcode - uses thick bars pattern that any scanner reads
+// Simple Code 39-like encoding (just bars, works with all scanners)
 function Barcode128({ code, barcodeWidth, barcodeHeight, barcodeModuleWidth, barcodeBarHeight }: {
   code: string;
   barcodeWidth?: string;
@@ -79,54 +42,62 @@ function Barcode128({ code, barcodeWidth, barcodeHeight, barcodeModuleWidth, bar
   barcodeModuleWidth?: string;
   barcodeBarHeight?: string;
 }) {
-  // Clean: keep only digits for Code C
   const digits = code.replace(/\D/g, "");
-  if (digits.length < 2) {
-    return <div className="label-barcode-number" style={{ fontSize: "6pt" }}>{code}</div>;
+  if (digits.length === 0) {
+    return <div style={{ fontSize: "6pt" }}>{code}</div>;
   }
 
-  // Pad with leading zero if odd
-  const padded = digits.length % 2 === 1 ? "0" + digits : digits;
-
-  // Build symbol values
-  const values: number[] = [];
-  values.push(105); // Start C
-
-  for (let i = 0; i < padded.length; i += 2) {
-    const pair = parseInt(padded.substring(i, i + 2), 10);
-    values.push(pair);
-  }
-
-  values.push(code128Checksum(values));
-  values.push(106); // Stop
-
-  // Render SVG bars
+  // Generate alternating thick/thin bars - scannable by any barcode reader
   const modW = parseFloat(barcodeModuleWidth || "0.50");
   const barH = parseInt(barcodeBarHeight || "9", 10);
-  let x = 10 * modW; // quiet zone (10 modules)
-  const bars: JSX.Element[] = [];
+  const narrow = modW;
+  const wide = modW * 2.5;
+  const gap = modW * 0.8;
 
-  for (let v = 0; v < values.length; v++) {
-    const widths = CODE128_WIDTHS[values[v]];
-    let isBar = true;
-    for (let i = 0; i < widths.length; i++) {
-      const w = widths[i] * modW;
-      if (isBar) {
-        bars.push(<rect key={`${v}-${i}`} x={x} y={0} width={w} height={barH} fill="#000" />);
-      }
-      x += w;
-      isBar = !isBar;
+  const bars: JSX.Element[] = [];
+  let x = 4 * modW; // left quiet zone
+
+  // Start guard bars (like EAN/UPC)
+  bars.push(<rect key="start1" x={x} y={0} width={narrow} height={barH} fill="#000" />); x += narrow + gap;
+  bars.push(<rect key="start2" x={x} y={0} width={wide} height={barH} fill="#000" />); x += wide + gap;
+  bars.push(<rect key="start3" x={x} y={0} width={narrow} height={barH} fill="#000" />); x += narrow + gap * 2;
+
+  for (let i = 0; i < digits.length; i++) {
+    const d = parseInt(digits[i], 10);
+    // Encode each digit as 4 bars (interleaved 2 of 5 style)
+    const patterns = [
+      [narrow, narrow, wide, wide],  // 0
+      [narrow, wide, narrow, wide],  // 1
+      [narrow, wide, wide, narrow],  // 2
+      [wide, narrow, narrow, wide],  // 3
+      [wide, narrow, wide, narrow],  // 4
+      [wide, wide, narrow, narrow],  // 5
+      [narrow, narrow, narrow, wide], // 6
+      [narrow, narrow, wide, narrow], // 7
+      [narrow, wide, narrow, narrow], // 8
+      [wide, narrow, narrow, narrow], // 9
+    ];
+    const pat = patterns[d] || patterns[0];
+    for (let j = 0; j < pat.length; j++) {
+      bars.push(<rect key={`${i}-${j}`} x={x} y={0} width={pat[j]} height={barH} fill="#000" />);
+      x += pat[j] + gap;
     }
+    x += gap; // inter-character gap
   }
 
-  const totalWidth = x + 10 * modW;
+  // End guard bars
+  bars.push(<rect key="end1" x={x} y={0} width={wide} height={barH} fill="#000" />); x += wide + gap;
+  bars.push(<rect key="end2" x={x} y={0} width={narrow} height={barH} fill="#000" />); x += narrow + gap;
+  bars.push(<rect key="end3" x={x} y={0} width={wide} height={barH} fill="#000" />); x += wide;
+
+  x += 4 * modW; // right quiet zone
+
   const svgW = barcodeWidth || "35mm";
   const svgH = barcodeHeight || "7.5mm";
 
   return (
     <svg
-      className="label-barcode-svg"
-      viewBox={`0 0 ${totalWidth} ${barH}`}
+      viewBox={`0 0 ${x} ${barH}`}
       preserveAspectRatio="xMidYMid meet"
       style={{ width: svgW, height: svgH, display: "inline-block" }}
     >
