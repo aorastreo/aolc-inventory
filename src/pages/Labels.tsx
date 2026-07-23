@@ -95,8 +95,8 @@ function Barcode128({ code }: { code: string }) {
   values.push(106); // Stop
 
   // Render SVG bars
-  const moduleWidth = 0.38; // mm per module (thicker for scanner)
-  const barHeight = 7; // mm (taller barcode)
+  const moduleWidth = 0.42; // mm per module (thicker for scanner)
+  const barHeight = 10; // mm (taller barcode)
   let x = 10 * moduleWidth; // quiet zone (10 modules)
   const bars: JSX.Element[] = [];
 
@@ -120,7 +120,7 @@ function Barcode128({ code }: { code: string }) {
       className="label-barcode-svg"
       viewBox={`0 0 ${totalWidth} ${barHeight}`}
       preserveAspectRatio="xMidYMid meet"
-      style={{ width: "46mm", height: "6mm" }}
+      style={{ width: "46mm", height: "8mm" }}
     >
       {bars}
     </svg>
@@ -554,17 +554,18 @@ export default function LabelsPage() {
           .aolc-label {
             width: 50mm;
             height: 25mm;
-            padding: 0.8mm 1mm;
+            padding: 0.3mm 1mm 0.5mm;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             text-align: center;
             page-break-inside: avoid;
             background: white;
             box-sizing: border-box;
             font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
             border: none;
+            overflow: hidden;
           }
           .label-product-name {
             font-size: 6pt;
@@ -573,7 +574,8 @@ export default function LabelsPage() {
             text-transform: uppercase;
             letter-spacing: 0.3px;
             line-height: 1.1;
-            margin-bottom: 0.5mm;
+            margin-top: 0.3mm;
+            margin-bottom: 0.3mm;
             white-space: nowrap;
             overflow: hidden;
             width: 100%;
@@ -583,7 +585,7 @@ export default function LabelsPage() {
             align-items: baseline;
             justify-content: center;
             gap: 1.5mm;
-            margin: 0.5mm 0;
+            margin: 0.2mm 0;
           }
           .label-price {
             font-size: 22pt;
@@ -599,21 +601,21 @@ export default function LabelsPage() {
           }
           .label-barcode-svg {
             display: block;
-            margin: 0.8mm auto 0;
+            margin: 0.5mm auto 0;
           }
           .label-barcode-number {
-            font-size: 7pt;
+            font-size: 10pt;
             color: #000;
             letter-spacing: 2px;
             font-family: "Courier New", Courier, monospace;
-            margin-top: 0.5mm;
+            margin-top: 0.3mm;
             white-space: nowrap;
             word-break: keep-all;
           }
           .label-footer {
             font-size: 5pt;
             color: #000;
-            margin-top: 1mm;
+            margin-top: 0.5mm;
             letter-spacing: 0.2px;
             font-family: "Arial Narrow", Arial, sans-serif;
             white-space: nowrap;
