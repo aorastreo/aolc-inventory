@@ -35,78 +35,50 @@ function getLocalDateString() {
 }
 
 // Barcode using jsbarcode - the library we used in the original system
-// Code 128 font-based barcode using Libre Barcode 128 font
-// This is the same approach that worked in the original system
+// Barcode using jsbarcode - generate offscreen canvas → PNG → img
+// This is the EXACT same approach that worked in the original system
 function BarcodeCanvas({ code }: { code: string; barcodeWidth?: string; barcodeHeight?: string; barcodeModuleWidth?: string; barcodeBarHeight?: string }) {
-  const digits = code.replace(/\D/g, "");
-  if (digits.length === 0) return <div style={{ fontSize: "6pt" }}>{code}</div>;
+  const [pngUrl, setPngUrl] = useState("");
 
-  // Encode digits as Code 128C for Libre Barcode 128 font
-  const encoded = encodeCode128C(digits);
+  useEffect(() => {
+    // Create offscreen canvas (not in DOM)
+    const canvas = document.createElement("canvas");
+    canvas.width = 300;
+    canvas.height = 120;
+
+    try {
+      JsBarcode(canvas, code, {
+        format: "CODE128",
+        width: 2,
+        height: 100,
+        displayValue: false,
+        margin: 10,
+        background: "#ffffff",
+        lineColor: "#000000",
+      });
+
+      // Convert to PNG data URL
+      const url = canvas.toDataURL("image/png");
+      setPngUrl(url);
+    } catch (e) {
+      console.error("Barcode generation error:", e);
+    }
+  }, [code]);
+
+  if (!pngUrl) return <div style={{ height: "7mm" }} />;
 
   return (
-    <div
+    <img
+      src={pngUrl}
+      alt=""
       style={{
-        fontFamily: '"Libre Barcode 128", "Libre Barcode 128 Text", cursive',
-        fontSize: "52pt",
-        lineHeight: 0.8,
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textAlign: "center",
+        width: "35mm",
         height: "7mm",
+        display: "inline-block",
+        objectFit: "contain",
       }}
-    >
-      {encoded}
-    </div>
+    />
   );
-}
-
-// Encode a string of digits as Code 128C for Libre Barcode 128 font
-function encodeCode128C(digits: string): string {
-  // Pad to even length
-  const padded = digits.length % 2 === 1 ? "0" + digits : digits;
-
-  // Map digit pairs (00-99) to Code 128C characters
-  // 00-94 -> ASCII 32-126
-  // 95-99 -> special chars
-  const mapPair = (pair: number): string => {
-    if (pair <= 94) return String.fromCharCode(pair + 32);
-    // 95-99
-    return String.fromCharCode(pair + 100);
-  };
-
-  let data = "";
-  const values: number[] = [];
-
-  // Start C = 105
-  values.push(105);
-  data += String.fromCharCode(210); // Start C special char for the font
-
-  // Encode digit pairs
-  for (let i = 0; i < padded.length; i += 2) {
-    const pair = parseInt(padded.substring(i, i + 2), 10);
-    values.push(pair);
-    data += mapPair(pair);
-  }
-
-  // Calculate checksum
-  let sum = values[0]; // start code
-  for (let i = 1; i < values.length; i++) {
-    sum += values[i] * i;
-  }
-  const checksum = sum % 103;
-
-  // Map checksum to character
-  if (checksum <= 94) {
-    data += String.fromCharCode(checksum + 32);
-  } else {
-    data += String.fromCharCode(checksum + 100);
-  }
-
-  // Stop character
-  data += String.fromCharCode(211);
-
-  return data;
 }
 
 // Custom Dropdown Component
