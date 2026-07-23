@@ -562,7 +562,7 @@ export default function LabelsPage() {
                   fontSize: labelCfg?.barcodeNumberFontSize || "10pt",
                   fontWeight: labelCfg?.barcodeNumberFontWeight || "bold",
                   color: "#000",
-                  letterSpacing: labelCfg?.barcodeNumberLetterSpacing || "2px",
+                  letterSpacing: labelCfg?.barcodeNumberLetterSpacing || "4px",
                   fontFamily: "Courier New, Courier, monospace",
                   textAlign: (labelCfg?.barcodeNumberAlign || "center") as any,
                   whiteSpace: "nowrap",
