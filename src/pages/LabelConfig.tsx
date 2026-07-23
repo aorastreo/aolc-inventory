@@ -69,11 +69,11 @@ function AlignButtons({ value, onChange }: { value: string; onChange: (v: string
 
 const defaultConfig: Record<string, any> = {
   labelWidth: "50mm", labelHeight: "25mm",
-  nameFontSize: "10pt", nameTop: "0.5mm", nameTextAlign: "center", nameFontWeight: "bold",
-  priceFontSize: "36pt", ivaFontSize: "12pt", priceTop: "5mm", priceTextAlign: "center", priceFontWeight: "bold",
-  barcodeWidth: "42mm", barcodeHeight: "7mm", barcodeFontSize: "28pt", barcodeTop: "12mm", barcodeAlign: "center",
-  barcodeNumberFontSize: "14pt", barcodeNumberLetterSpacing: "3px", barcodeNumberTop: "17mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold",
-  footerFontSize: "8pt", footerTop: "20mm", footerTextAlign: "center",
+  nameFontSize: "8pt", nameTop: "1mm", nameTextAlign: "center", nameFontWeight: "bold",
+  priceFontSize: "26pt", ivaFontSize: "9pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold",
+  barcodeWidth: "46mm", barcodeHeight: "8mm", barcodeFontSize: "34pt", barcodeTop: "11mm", barcodeAlign: "center",
+  barcodeNumberFontSize: "10pt", barcodeNumberLetterSpacing: "4px", barcodeNumberTop: "17.5mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold",
+  footerFontSize: "6pt", footerTop: "20.5mm", footerTextAlign: "center",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
   footerText: "American Outlet Los Chiles",
 };

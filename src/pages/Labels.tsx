@@ -509,7 +509,7 @@ export default function LabelsPage() {
                 position: "absolute",
                 top: labelCfg?.nameTop || "1mm",
                 left: "1mm", right: "1mm",
-                fontSize: labelCfg?.nameFontSize || "10pt",
+                fontSize: labelCfg?.nameFontSize || "8pt",
                 fontWeight: labelCfg?.nameFontWeight || "bold", color: "#000",
                 textTransform: "uppercase",
                 letterSpacing: "0.2px", lineHeight: 1.3,
@@ -527,11 +527,11 @@ export default function LabelsPage() {
                   justifyContent: (labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center",
                   gap: "1.5mm",
                 }}>
-                  <span style={{ fontSize: labelCfg?.priceFontSize || "36pt", fontWeight: labelCfg?.priceFontWeight || "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
+                  <span style={{ fontSize: labelCfg?.priceFontSize || "26pt", fontWeight: labelCfg?.priceFontWeight || "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
                     {Math.round(Number(item.precio))}
                   </span>
                   {(labelCfg?.showIva ?? true) && (
-                    <span style={{ fontSize: labelCfg?.ivaFontSize || "12pt", fontWeight: "bold", color: "#000" }}>IVA</span>
+                    <span style={{ fontSize: labelCfg?.ivaFontSize || "9pt", fontWeight: "bold", color: "#000" }}>IVA</span>
                   )}
                 </div>
               )}
@@ -540,7 +540,7 @@ export default function LabelsPage() {
               {(labelCfg?.showBarcode ?? true) && item.codigoBarras && (
                 <div style={{
                   position: "absolute",
-                  top: labelCfg?.barcodeTop || "12mm",
+                  top: labelCfg?.barcodeTop || "11mm",
                   left: "1mm", right: "1mm",
                   textAlign: (labelCfg?.barcodeAlign || "center") as any,
                 }}>
@@ -557,9 +557,9 @@ export default function LabelsPage() {
               {(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras && (
                 <div style={{
                   position: "absolute",
-                  top: labelCfg?.barcodeNumberTop || "17mm",
+                  top: labelCfg?.barcodeNumberTop || "17.5mm",
                   left: "1mm", right: "1mm",
-                  fontSize: labelCfg?.barcodeNumberFontSize || "14pt",
+                  fontSize: labelCfg?.barcodeNumberFontSize || "10pt",
                   fontWeight: labelCfg?.barcodeNumberFontWeight || "bold",
                   color: "#000",
                   letterSpacing: labelCfg?.barcodeNumberLetterSpacing || "2px",
@@ -573,9 +573,9 @@ export default function LabelsPage() {
               {(labelCfg?.showFooter ?? true) && (
                 <div style={{
                   position: "absolute",
-                  top: labelCfg?.footerTop || "20mm",
+                  top: labelCfg?.footerTop || "20.5mm",
                   left: "1mm", right: "1mm",
-                  fontSize: labelCfg?.footerFontSize || "8pt",
+                  fontSize: labelCfg?.footerFontSize || "6pt",
                   color: "#000",
                   letterSpacing: "0.2px",
                   fontFamily: "Arial Narrow, Arial, sans-serif",
