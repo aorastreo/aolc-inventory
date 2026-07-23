@@ -1,19 +1,17 @@
 FROM node:20
 WORKDIR /app
 
-# Copy prebuilt backend bundle + frontend + scripts
-COPY server.js ./
-COPY package*.json ./
-COPY scripts/ ./scripts/
-COPY dist/public/ ./dist/public/
-COPY drizzle.config.ts ./
-COPY db/ ./db/
+# Copy everything
+COPY . .
 
-# Install only drizzle-kit for DB schema push
+# Install all dependencies
 RUN npm install --include=dev
+
+# Build frontend (generates dist/public/)
+RUN npm run build
 
 # Expose port
 EXPOSE 3000
 
-# Push DB schema and start server
+# Push DB schema and start
 CMD npx drizzle-kit push --force 2>/dev/null || true && node server.js
