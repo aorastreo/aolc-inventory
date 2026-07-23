@@ -1,19 +1,19 @@
 FROM node:20
 WORKDIR /app
 
-# Install dependencies
+# Copy prebuilt backend bundle + frontend + scripts
+COPY server.js ./
 COPY package*.json ./
+COPY scripts/ ./scripts/
+COPY dist/public/ ./dist/public/
+COPY drizzle.config.ts ./
+COPY db/ ./db/
+
+# Install only drizzle-kit for DB schema push
 RUN npm install --include=dev
-
-# Install tsx globally as fallback
-RUN npm install -g tsx
-
-# Copy source and build
-COPY . .
-RUN npm run build
 
 # Expose port
 EXPOSE 3000
 
-# Start with robust startup script
-CMD ["sh", "./start.sh"]
+# Push DB schema and start server
+CMD npx drizzle-kit push --force 2>/dev/null || true && node server.js
