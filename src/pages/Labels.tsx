@@ -8,7 +8,8 @@ import {
   Search, CheckSquare, Square, List, Layers, WifiOff,
   AlertCircle, ArrowDownAZ, ArrowUpAZ, ChevronDown, Check,
 } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import JsBarcode from "jsbarcode";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
@@ -52,23 +53,22 @@ function BarcodeCanvas({ code, barcodeWidth, barcodeHeight }: {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    import("jsbarcode").then(({ default: JsBarcode }) => {
+    try {
       const h = parseInt(barcodeHeight || "30", 10);
-      const w = parseInt(barcodeWidth || "140", 10);
-      canvas.width = w * 4;
-      canvas.height = h * 4;
 
       JsBarcode(canvas, digits, {
         format: "ean8",
-        width: 4,
+        width: 3,
         height: h * 4,
         displayValue: false,
-        margin: 20,
+        margin: 10,
         background: "#ffffff",
         lineColor: "#000000",
       });
-    });
-  }, [digits, barcodeWidth, barcodeHeight]);
+    } catch (err) {
+      console.error("Barcode error:", err);
+    }
+  }, [digits, barcodeHeight]);
 
   const w = barcodeWidth || "35mm";
   const h = barcodeHeight || "7.5mm";
