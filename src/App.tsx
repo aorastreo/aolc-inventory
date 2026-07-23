@@ -30,11 +30,26 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useLocalAuth();
+function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
+  const { user, isLoading, role } = useLocalAuth();
   if (isLoading) return <div className="flex items-center justify-center h-screen">Cargando...</div>;
   if (!user) return <Navigate to="/login" replace />;
+
+  // If role restrictions are specified and user doesn't have permission, redirect
+  if (allowedRoles && role && !allowedRoles.includes(role)) {
+    return <Navigate to="/closings" replace />;
+  }
+
   return <AppLayout>{children}</AppLayout>;
+}
+
+// Redirect root based on role
+function RootRedirect() {
+  const { user, isLoading, isEmployee } = useLocalAuth();
+  if (isLoading) return <div className="flex items-center justify-center h-screen">Cargando...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (isEmployee) return <Navigate to="/closings" replace />;
+  return <DashboardPage />;
 }
 
 function App() {
@@ -42,15 +57,15 @@ function App() {
     <TRPCProvider>
       <Routes>
         <Route path="/login" element={<LoginLocalPage />} />
-        <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-        <Route path="/pallets" element={<ProtectedRoute><PalletsPage /></ProtectedRoute>} />
-        <Route path="/pallets/:palletId/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
-        <Route path="/adjustments" element={<ProtectedRoute><AdjustmentsPage /></ProtectedRoute>} />
-        <Route path="/closings" element={<ProtectedRoute><ClosingsPage /></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-        <Route path="/catalog" element={<ProtectedRoute><CatalogPage /></ProtectedRoute>} />
-        <Route path="/labels" element={<ProtectedRoute><LabelsPage /></ProtectedRoute>} />
-        <Route path="*" element={<NotFoundPage />} />
+        <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
+        <Route path="/pallets" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><PalletsPage /></ProtectedRoute>} />
+        <Route path="/pallets/:palletId/products" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><ProductsPage /></ProtectedRoute>} />
+        <Route path="/adjustments" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><AdjustmentsPage /></ProtectedRoute>} />
+        <Route path="/closings" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><ClosingsPage /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin"]}><SettingsPage /></ProtectedRoute>} />
+        <Route path="/catalog" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><CatalogPage /></ProtectedRoute>} />
+        <Route path="/labels" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><LabelsPage /></ProtectedRoute>} />
+        <Route path="*" element={<ProtectedRoute><NotFoundPage /></ProtectedRoute>} />
       </Routes>
     </TRPCProvider>
   );

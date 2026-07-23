@@ -25,5 +25,6 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
+    cssMinify: "esbuild",
   },
 });
