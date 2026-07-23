@@ -4,10 +4,49 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Save, RotateCcw, Tag, Printer, AlignLeft, AlignCenter, AlignRight } from "lucide-react";
+import { Save, RotateCcw, Tag, Printer, AlignLeft, AlignCenter, AlignRight, Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 const BRAND_RED = "#B22234";
+
+// Extract number and unit from a value like "5.5pt" -> { num: 5.5, unit: "pt" }
+function parseValue(val: string): { num: number; unit: string } {
+  const match = val.match(/^([0-9.]+)(.*)$/);
+  if (match) return { num: parseFloat(match[1]), unit: match[2] };
+  return { num: 0, unit: "" };
+}
+
+// Stepper input with + and - buttons
+function StepperInput({ value, onChange, label, step = 0.5, min = 0 }: { value: string; onChange: (v: string) => void; label: string; step?: number; min?: number }) {
+  const { num, unit } = parseValue(value);
+  const decrement = () => {
+    const newVal = Math.max(min, parseFloat((num - step).toFixed(2)));
+    onChange(newVal + unit);
+  };
+  const increment = () => {
+    const newVal = parseFloat((num + step).toFixed(2));
+    onChange(newVal + unit);
+  };
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    const n = parseFloat(v);
+    if (!isNaN(n) && n >= min) {
+      onChange(n + unit);
+    } else {
+      onChange(v);
+    }
+  };
+  return (
+    <div>
+      <Label className="text-xs mb-1 block">{label}</Label>
+      <div className="flex items-center gap-1">
+        <Button variant="outline" size="sm" className="h-8 w-8 p-0 flex-shrink-0" onClick={decrement}><Minus className="w-3 h-3" /></Button>
+        <Input value={value} onChange={handleInput} className="h-8 text-center text-sm px-1" />
+        <Button variant="outline" size="sm" className="h-8 w-8 p-0 flex-shrink-0" onClick={increment}><Plus className="w-3 h-3" /></Button>
+      </div>
+    </div>
+  );
+}
 
 const defaultConfig: Record<string, any> = {
   labelWidth: "50mm", labelHeight: "25mm",
@@ -104,8 +143,8 @@ export default function LabelConfigPage() {
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Dimensiones</h3>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Ancho</Label><Input value={s("labelWidth")} onChange={(e) => update("labelWidth", e.target.value)} /></div>
-              <div><Label>Alto</Label><Input value={s("labelHeight")} onChange={(e) => update("labelHeight", e.target.value)} /></div>
+              <StepperInput label="Ancho" value={s("labelWidth")} onChange={(v) => update("labelWidth", v)} step={1} />
+              <StepperInput label="Alto" value={s("labelHeight")} onChange={(v) => update("labelHeight", v)} step={1} />
             </div>
           </div>
 
@@ -113,9 +152,9 @@ export default function LabelConfigPage() {
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Nombre del Producto</h3>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label>Tamano</Label><Input value={s("nameFontSize")} onChange={(e) => update("nameFontSize", e.target.value)} /></div>
-              <div><Label>Margin arriba</Label><Input value={s("nameMarginTop")} onChange={(e) => update("nameMarginTop", e.target.value)} /></div>
-              <div><Label>Margin abajo</Label><Input value={s("nameMarginBottom")} onChange={(e) => update("nameMarginBottom", e.target.value)} /></div>
+              <StepperInput label="Tamano" value={s("nameFontSize")} onChange={(v) => update("nameFontSize", v)} step={0.5} />
+              <StepperInput label="Margin arriba" value={s("nameMarginTop")} onChange={(v) => update("nameMarginTop", v)} step={0.2} />
+              <StepperInput label="Margin abajo" value={s("nameMarginBottom")} onChange={(v) => update("nameMarginBottom", v)} step={0.2} />
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("nameTextAlign")} onChange={(v) => update("nameTextAlign", v)} /></div>
           </div>
@@ -124,10 +163,10 @@ export default function LabelConfigPage() {
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Precio</h3>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label>Tamano precio</Label><Input value={s("priceFontSize")} onChange={(e) => update("priceFontSize", e.target.value)} /></div>
-              <div><Label>Tamano IVA</Label><Input value={s("ivaFontSize")} onChange={(e) => update("ivaFontSize", e.target.value)} /></div>
-              <div><Label>Margin arriba</Label><Input value={s("priceMarginTop")} onChange={(e) => update("priceMarginTop", e.target.value)} /></div>
-              <div><Label>Margin abajo</Label><Input value={s("priceMarginBottom")} onChange={(e) => update("priceMarginBottom", e.target.value)} /></div>
+              <StepperInput label="Tamano precio" value={s("priceFontSize")} onChange={(v) => update("priceFontSize", v)} step={1} />
+              <StepperInput label="Tamano IVA" value={s("ivaFontSize")} onChange={(v) => update("ivaFontSize", v)} step={1} />
+              <StepperInput label="Margin arriba" value={s("priceMarginTop")} onChange={(v) => update("priceMarginTop", v)} step={0.1} />
+              <StepperInput label="Margin abajo" value={s("priceMarginBottom")} onChange={(v) => update("priceMarginBottom", v)} step={0.1} />
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("priceTextAlign")} onChange={(v) => update("priceTextAlign", v)} /></div>
             <div className="flex gap-6 mt-3">
@@ -140,11 +179,11 @@ export default function LabelConfigPage() {
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Codigo de Barras</h3>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label>Ancho SVG</Label><Input value={s("barcodeWidth")} onChange={(e) => update("barcodeWidth", e.target.value)} /></div>
-              <div><Label>Alto SVG</Label><Input value={s("barcodeHeight")} onChange={(e) => update("barcodeHeight", e.target.value)} /></div>
-              <div><Label>Ancho modulo</Label><Input value={s("barcodeModuleWidth")} onChange={(e) => update("barcodeModuleWidth", e.target.value)} /></div>
-              <div><Label>Alto barras</Label><Input value={s("barcodeBarHeight")} onChange={(e) => update("barcodeBarHeight", e.target.value)} /></div>
-              <div><Label>Margin arriba</Label><Input value={s("barcodeMarginTop")} onChange={(e) => update("barcodeMarginTop", e.target.value)} /></div>
+              <StepperInput label="Ancho SVG" value={s("barcodeWidth")} onChange={(v) => update("barcodeWidth", v)} step={1} />
+              <StepperInput label="Alto SVG" value={s("barcodeHeight")} onChange={(v) => update("barcodeHeight", v)} step={0.5} />
+              <StepperInput label="Ancho modulo" value={s("barcodeModuleWidth")} onChange={(v) => update("barcodeModuleWidth", v)} step={0.05} />
+              <StepperInput label="Alto barras" value={s("barcodeBarHeight")} onChange={(v) => update("barcodeBarHeight", v)} step={1} />
+              <StepperInput label="Margin arriba" value={s("barcodeMarginTop")} onChange={(v) => update("barcodeMarginTop", v)} step={0.1} />
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("barcodeAlign")} onChange={(v) => update("barcodeAlign", v)} /></div>
             <div className="flex gap-6 mt-3">
@@ -156,10 +195,10 @@ export default function LabelConfigPage() {
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Numero del Codigo</h3>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label>Tamano</Label><Input value={s("barcodeNumberFontSize")} onChange={(e) => update("barcodeNumberFontSize", e.target.value)} /></div>
-              <div><Label>Espaciado</Label><Input value={s("barcodeNumberLetterSpacing")} onChange={(e) => update("barcodeNumberLetterSpacing", e.target.value)} /></div>
-              <div><Label>Margin arriba</Label><Input value={s("barcodeNumberMarginTop")} onChange={(e) => update("barcodeNumberMarginTop", e.target.value)} /></div>
-              <div><Label>Margin abajo</Label><Input value={s("barcodeNumberMarginBottom")} onChange={(e) => update("barcodeNumberMarginBottom", e.target.value)} /></div>
+              <StepperInput label="Tamano" value={s("barcodeNumberFontSize")} onChange={(v) => update("barcodeNumberFontSize", v)} step={0.5} />
+              <StepperInput label="Espaciado" value={s("barcodeNumberLetterSpacing")} onChange={(v) => update("barcodeNumberLetterSpacing", v)} step={0.5} />
+              <StepperInput label="Margin arriba" value={s("barcodeNumberMarginTop")} onChange={(v) => update("barcodeNumberMarginTop", v)} step={0.1} />
+              <StepperInput label="Margin abajo" value={s("barcodeNumberMarginBottom")} onChange={(v) => update("barcodeNumberMarginBottom", v)} step={0.1} />
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("barcodeNumberAlign")} onChange={(v) => update("barcodeNumberAlign", v)} /></div>
             <div className="flex gap-6 mt-3">
@@ -171,9 +210,9 @@ export default function LabelConfigPage() {
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Pie de Etiqueta</h3>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label>Tamano</Label><Input value={s("footerFontSize")} onChange={(e) => update("footerFontSize", e.target.value)} /></div>
-              <div><Label>Margin arriba</Label><Input value={s("footerMarginTop")} onChange={(e) => update("footerMarginTop", e.target.value)} /></div>
-              <div><Label>Margin abajo</Label><Input value={s("footerMarginBottom")} onChange={(e) => update("footerMarginBottom", e.target.value)} /></div>
+              <StepperInput label="Tamano" value={s("footerFontSize")} onChange={(v) => update("footerFontSize", v)} step={0.5} />
+              <StepperInput label="Margin arriba" value={s("footerMarginTop")} onChange={(v) => update("footerMarginTop", v)} step={0.2} />
+              <StepperInput label="Margin abajo" value={s("footerMarginBottom")} onChange={(v) => update("footerMarginBottom", v)} step={0.1} />
               <div className="col-span-3"><Label>Texto</Label><Input value={s("footerText")} onChange={(e) => update("footerText", e.target.value)} /></div>
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("footerTextAlign")} onChange={(v) => update("footerTextAlign", v)} /></div>
