@@ -460,23 +460,17 @@ export default function LabelsPage() {
         </div>
       </div>
 
-      {/* Hidden print area - each label is a direct child of .print-only */}
-      <div className="print-only">
+      {/* Print area - hidden on screen, shown on print */}
+      <div id="label-print-area">
         {expandedItems.map((item, idx) => (
-          <div
-            key={idx}
-            style={{
-              width: labelCfg?.labelWidth || "50mm",
-              height: labelCfg?.labelHeight || "25mm",
-              padding: 0,
+          <div key={idx} className="label-page">
+            <div className="label-inner" style={{
               position: "relative",
-              pageBreakInside: "avoid",
-              background: "white",
-              boxSizing: "border-box",
-              fontFamily: "Arial Narrow, Arial, Helvetica, sans-serif",
-            }}
-          >
-              {/* Name - absolute position */}
+              width: "100%",
+              height: "100%",
+              fontFamily: labelCfg?.nameFontFamily ?? "Arial Narrow",
+            }}>
+              {/* Name */}
               <div style={{
                 position: "absolute",
                 top: labelCfg?.nameTop ?? "0.3mm",
@@ -491,68 +485,67 @@ export default function LabelsPage() {
                 whiteSpace: "nowrap", overflow: "hidden",
               }}>{item.nombre.toUpperCase()}</div>
 
-              {/* Price - absolute position */}
+              {/* Price */}
               {(labelCfg?.showPrice ?? true) && (
                 <div style={{
                   position: "absolute",
-                  top: labelCfg?.priceTop || "6mm",
+                  top: labelCfg?.priceTop ?? "6mm",
                   left: "1mm", right: "1mm",
                   display: "flex", alignItems: "baseline",
-                  justifyContent: (labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center",
+                  justifyContent: (labelCfg?.priceTextAlign ?? "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign ?? "center") === "right" ? "flex-end" : "center",
                   gap: "1.5mm",
                 }}>
-                  <span style={{ fontSize: labelCfg?.priceFontSize || "26pt", fontWeight: labelCfg?.priceFontWeight || "bold", fontFamily: labelCfg?.priceFontFamily || "Arial Narrow", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
+                  <span style={{ fontSize: labelCfg?.priceFontSize ?? "26pt", fontWeight: labelCfg?.priceFontWeight ?? "bold", fontFamily: labelCfg?.priceFontFamily ?? "Arial Narrow", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
                     {Math.round(Number(item.precio))}
                   </span>
                   {(labelCfg?.showIva ?? true) && (
-                    <span style={{ fontSize: labelCfg?.ivaFontSize || "9pt", fontWeight: "bold", color: "#000" }}>IVA</span>
+                    <span style={{ fontSize: labelCfg?.ivaFontSize ?? "9pt", fontWeight: "bold", color: "#000" }}>IVA</span>
                   )}
                 </div>
               )}
 
-              {/* Barcode - absolute position */}
+              {/* Barcode */}
               {(labelCfg?.showBarcode ?? true) && item.codigoBarras && (
                 <div style={{
                   position: "absolute",
-                  top: labelCfg?.barcodeTop || "11mm",
+                  top: labelCfg?.barcodeTop ?? "11mm",
                   left: "1mm", right: "1mm",
-                  textAlign: (labelCfg?.barcodeAlign || "center") as any,
+                  textAlign: (labelCfg?.barcodeAlign ?? "center") as any,
                 }}>
                   <BarcodeCanvas
                     code={item.codigoBarras}
-                    barcodeWidth={labelCfg?.barcodeWidth}
                     barcodeHeight={labelCfg?.barcodeHeight}
                   />
                 </div>
               )}
 
-              {/* Barcode Number - absolute position */}
+              {/* Barcode Number */}
               {(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras && (
                 <div style={{
                   position: "absolute",
-                  top: labelCfg?.barcodeNumberTop || "17.5mm",
+                  top: labelCfg?.barcodeNumberTop ?? "17.5mm",
                   left: "1mm", right: "1mm",
-                  fontSize: labelCfg?.barcodeNumberFontSize || "10pt",
-                  fontWeight: labelCfg?.barcodeNumberFontWeight || "bold",
+                  fontSize: labelCfg?.barcodeNumberFontSize ?? "10pt",
+                  fontWeight: labelCfg?.barcodeNumberFontWeight ?? "bold",
+                  fontFamily: labelCfg?.barcodeNumberFontFamily ?? "Courier New",
                   color: "#000",
-                  letterSpacing: labelCfg?.barcodeNumberLetterSpacing || "4px",
-                  fontFamily: labelCfg?.barcodeNumberFontFamily || "Courier New",
-                  textAlign: (labelCfg?.barcodeNumberAlign || "center") as any,
+                  letterSpacing: labelCfg?.barcodeNumberLetterSpacing ?? "4px",
+                  textAlign: (labelCfg?.barcodeNumberAlign ?? "center") as any,
                   whiteSpace: "nowrap",
                 }}>{item.codigoBarras}</div>
               )}
 
-              {/* Footer - absolute position */}
+              {/* Footer */}
               {(labelCfg?.showFooter ?? true) && (
                 <div style={{
                   position: "absolute",
-                  top: labelCfg?.footerTop || "20.5mm",
+                  top: labelCfg?.footerTop ?? "20.5mm",
                   left: "1mm", right: "1mm",
-                  fontSize: labelCfg?.footerFontSize || "6pt",
+                  fontSize: labelCfg?.footerFontSize ?? "6pt",
+                  fontFamily: labelCfg?.footerFontFamily ?? "Arial Narrow",
                   color: "#000",
                   letterSpacing: "0.2px",
-                  fontFamily: labelCfg?.footerFontFamily || "Arial Narrow",
-                  textAlign: (labelCfg?.footerTextAlign || "center") as any,
+                  textAlign: (labelCfg?.footerTextAlign ?? "center") as any,
                   whiteSpace: "nowrap",
                 }}>
                   {(labelCfg?.showDate ?? true) ? `${getLocalDateString()} - ` : ""}
@@ -560,33 +553,26 @@ export default function LabelsPage() {
                 </div>
               )}
             </div>
-          ))}
+          </div>
+        ))}
       </div>
 
       <style>{`
         @font-face {
           font-family: 'Libre Barcode 128 Text';
           src: url('/fonts/LibreBarcode128Text.ttf') format('truetype');
-          font-weight: normal;
-          font-style: normal;
         }
-        @media screen { .print-only { display: none !important; } }
+        #label-print-area { display: none; }
         @media print {
-          @page { size: 50mm 25mm; margin: 0; }
-          @font-face {
-            font-family: 'Libre Barcode 128 Text';
-            src: url('/fonts/LibreBarcode128Text.ttf') format('truetype');
-            font-weight: normal;
-            font-style: normal;
-          }
-          html, body { margin: 0; padding: 0; background: white; }
-          .print-only {
+          @page { margin: 0; }
+          #root, header, nav, .sidebar, aside { display: none !important; }
+          #label-print-area {
             display: block !important;
             width: 50mm !important;
             margin: 0 !important;
             padding: 0 !important;
           }
-          .print-only > div {
+          .label-page {
             width: 50mm !important;
             height: 25mm !important;
             page-break-after: always !important;
@@ -598,9 +584,7 @@ export default function LabelsPage() {
             padding: 0 !important;
             box-sizing: border-box !important;
           }
-          .print-only > div:last-child {
-            page-break-after: auto !important;
-          }
+          .label-page:last-child { page-break-after: auto !important; }
         }
       `}</style>
     </div>
