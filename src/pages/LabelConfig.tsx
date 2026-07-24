@@ -74,7 +74,7 @@ const defaultConfig: Record<string, any> = {
   nameFontSize: "8pt", nameTop: "0.3mm", nameTextAlign: "center", nameFontWeight: "bold", nameFontFamily: "Arial Narrow",
   priceFontSize: "26pt", ivaFontSize: "9pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold", priceFontFamily: "Arial Narrow",
   barcodeWidth: "46mm", barcodeHeight: "8mm", barcodeTop: "11mm", barcodeAlign: "center",
-  barcodeNumberFontSize: "10pt", barcodeNumberLetterSpacing: "4px", barcodeNumberTop: "17.5mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold", barcodeNumberFontFamily: "Courier New",
+  barcodeNumberFontSize: "10pt", barcodeNumberLetterSpacing: "0.5px", barcodeNumberTop: "17.5mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold", barcodeNumberFontFamily: "Courier New",
   footerFontSize: "6pt", footerTop: "20.5mm", footerTextAlign: "center", footerFontFamily: "Arial Narrow",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
   footerText: "American Outlet Los Chiles",
