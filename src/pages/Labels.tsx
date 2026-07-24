@@ -489,17 +489,16 @@ export default function LabelsPage() {
                 background: "white",
                 boxSizing: "border-box",
                 fontFamily: "Arial Narrow, Arial, Helvetica, sans-serif",
-                overflow: "hidden",
               }}
             >
               {/* Name - absolute position */}
               <div style={{
                 position: "absolute",
-                top: labelCfg?.nameTop || "1mm",
+                top: labelCfg?.nameTop ?? "0.3mm",
                 left: "1mm", right: "1mm",
-                fontSize: labelCfg?.nameFontSize || "8pt",
-                fontWeight: labelCfg?.nameFontWeight || "bold",
-                fontFamily: labelCfg?.nameFontFamily || "Arial Narrow",
+                fontSize: labelCfg?.nameFontSize ?? "8pt",
+                fontWeight: labelCfg?.nameFontWeight ?? "bold",
+                fontFamily: labelCfg?.nameFontFamily ?? "Arial Narrow",
                 color: "#000",
                 textTransform: "uppercase",
                 letterSpacing: "0.2px", lineHeight: 1.3,
@@ -583,10 +582,11 @@ export default function LabelsPage() {
       <style>{`
         @media screen { .print-only { display: none !important; } }
         @media print {
-          @page { size: auto; margin: 0; }
+          @page { size: auto; margin: 0mm; padding: 0mm; }
+          html, body { margin: 0 !important; padding: 0 !important; }
           body * { visibility: hidden; }
           .print-only, .print-only * { visibility: visible; }
-          .print-only { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
+          .print-only { display: block !important; position: absolute; left: 0; top: 0; width: 100%; margin: 0 !important; padding: 0 !important; }
         }
       `}</style>
     </div>

@@ -4,7 +4,7 @@ import mysql from "mysql2/promise";
 
 const D: Record<string, string | boolean> = {
   labelWidth: "50mm", labelHeight: "25mm",
-  nameFontSize: "8pt", nameTop: "1mm", nameTextAlign: "center", nameFontWeight: "bold", nameFontFamily: "Arial Narrow",
+  nameFontSize: "8pt", nameTop: "0.3mm", nameTextAlign: "center", nameFontWeight: "bold", nameFontFamily: "Arial Narrow",
   priceFontSize: "26pt", ivaFontSize: "9pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold", priceFontFamily: "Arial Narrow",
   barcodeWidth: "46mm", barcodeHeight: "8mm", barcodeTop: "11mm", barcodeAlign: "center",
   barcodeNumberFontSize: "10pt", barcodeNumberLetterSpacing: "4px", barcodeNumberTop: "17.5mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold", barcodeNumberFontFamily: "Courier New",
@@ -30,7 +30,7 @@ async function ensureTable() {
         labelWidth VARCHAR(20) NOT NULL DEFAULT '50mm',
         labelHeight VARCHAR(20) NOT NULL DEFAULT '25mm',
         nameFontSize VARCHAR(10) NOT NULL DEFAULT '8pt',
-        nameTop VARCHAR(10) NOT NULL DEFAULT '1mm',
+        nameTop VARCHAR(10) NOT NULL DEFAULT '0.3mm',
         nameTextAlign VARCHAR(10) NOT NULL DEFAULT 'center',
         nameFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold',
         nameFontFamily VARCHAR(30) NOT NULL DEFAULT 'Arial Narrow',

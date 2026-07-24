@@ -71,7 +71,7 @@ const FONT_OPTIONS = [
 
 const defaultConfig: Record<string, any> = {
   labelWidth: "50mm", labelHeight: "25mm",
-  nameFontSize: "8pt", nameTop: "1mm", nameTextAlign: "center", nameFontWeight: "bold", nameFontFamily: "Arial Narrow",
+  nameFontSize: "8pt", nameTop: "0.3mm", nameTextAlign: "center", nameFontWeight: "bold", nameFontFamily: "Arial Narrow",
   priceFontSize: "26pt", ivaFontSize: "9pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold", priceFontFamily: "Arial Narrow",
   barcodeWidth: "46mm", barcodeHeight: "8mm", barcodeTop: "11mm", barcodeAlign: "center",
   barcodeNumberFontSize: "10pt", barcodeNumberLetterSpacing: "4px", barcodeNumberTop: "17.5mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold", barcodeNumberFontFamily: "Courier New",
@@ -235,8 +235,8 @@ export default function LabelConfigPage() {
             >
               {/* Name */}
               <div style={{
-                position: "absolute", top: s("nameTop"), left: "1mm", right: "1mm",
-                fontSize: s("nameFontSize"), fontWeight: s("nameFontWeight") || "bold",
+                position: "absolute", top: s("nameTop") || "0.3mm", left: "1mm", right: "1mm",
+                fontSize: s("nameFontSize") || "8pt", fontWeight: s("nameFontWeight") || "bold",
                 fontFamily: s("nameFontFamily") || "Arial Narrow",
                 color: "#000",
                 textTransform: "uppercase", letterSpacing: "0.2px", lineHeight: 1.3,
