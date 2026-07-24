@@ -174,10 +174,9 @@ export default function LabelConfigPage() {
 
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Codigo de Barras</h3>
-            <div className="grid grid-cols-3 gap-3">
-              <StepperInput label="Ancho" value={s("barcodeWidth")} onChange={v => update("barcodeWidth", v)} step={1} />
-              <StepperInput label="Alto" value={s("barcodeHeight")} onChange={v => update("barcodeHeight", v)} step={0.5} />
-              <StepperInput label="Tamano fuente" value={s("barcodeFontSize")} onChange={v => update("barcodeFontSize", v)} step={1} />
+            <div className="grid grid-cols-2 gap-3">
+              <StepperInput label="Ancho SVG" value={s("barcodeWidth")} onChange={v => update("barcodeWidth", v)} step={1} />
+              <StepperInput label="Alto SVG" value={s("barcodeHeight")} onChange={v => update("barcodeHeight", v)} step={0.5} />
               <StepperInput label="Posicion Y" value={s("barcodeTop")} onChange={v => update("barcodeTop", v)} step={0.5} />
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("barcodeAlign")} onChange={v => update("barcodeAlign", v)} /></div>
