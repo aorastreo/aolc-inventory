@@ -71,11 +71,11 @@ const FONT_OPTIONS = [
 
 const defaultConfig: Record<string, any> = {
   labelWidth: "50mm", labelHeight: "25mm",
-  nameFontSize: "8pt", nameTop: "0.3mm", nameTextAlign: "center", nameFontWeight: "bold", nameFontFamily: "Arial Narrow",
-  priceFontSize: "26pt", ivaFontSize: "9pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold", priceFontFamily: "Arial Narrow",
-  barcodeWidth: "46mm", barcodeHeight: "8mm", barcodeTop: "11mm", barcodeAlign: "center",
-  barcodeNumberFontSize: "10pt", barcodeNumberLetterSpacing: "0.5px", barcodeNumberTop: "17.5mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold", barcodeNumberFontFamily: "Courier New",
-  footerFontSize: "6pt", footerTop: "20.5mm", footerTextAlign: "center", footerFontFamily: "Arial Narrow",
+  nameFontSize: "7pt", nameTop: "0mm", nameTextAlign: "center", nameFontWeight: "normal", nameFontFamily: "Arial Narrow",
+  priceFontSize: "26pt", ivaFontSize: "12pt", priceTop: "2mm", priceTextAlign: "center", priceFontWeight: "bold", priceFontFamily: "Arial",
+  barcodeWidth: "46mm", barcodeHeight: "8mm", barcodeTop: "10.5mm", barcodeAlign: "right",
+  barcodeNumberFontSize: "8.5pt", barcodeNumberLetterSpacing: "0.5px", barcodeNumberTop: "18mm", barcodeNumberAlign: "right", barcodeNumberFontWeight: "bold", barcodeNumberFontFamily: "Courier New",
+  footerFontSize: "6pt", footerTop: "21.5mm", footerTextAlign: "right", footerFontFamily: "Verdana",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
   footerText: "American Outlet Los Chiles",
 };
