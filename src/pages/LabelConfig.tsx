@@ -9,31 +9,6 @@ import { toast } from "sonner";
 
 const BRAND_RED = "#B22234";
 
-// Same encoder as Labels.tsx for preview
-function encodeCode128Preview(text: string): string {
-  const digits = text.replace(/\D/g, "");
-  if (digits.length < 2) return text;
-  const padded = digits.length % 2 === 1 ? "0" + digits : digits;
-  let encoded = "";
-  for (let i = 0; i < padded.length; i += 2) {
-    const pair = parseInt(padded.substring(i, i + 2), 10);
-    const charCode = pair > 94 ? pair + 100 : pair + 32;
-    encoded += String.fromCharCode(charCode);
-  }
-  const start = String.fromCharCode(205);
-  const stop = String.fromCharCode(206);
-  let sum = 105;
-  for (let i = 0; i < encoded.length; i++) {
-    const code = encoded.charCodeAt(i);
-    const value = code > 199 ? code - 100 : code - 32;
-    sum += (i + 1) * value;
-  }
-  let checksum = (sum % 103) + 32;
-  if (checksum > 126) checksum += 68;
-  const check = String.fromCharCode(checksum);
-  return start + encoded + check + stop;
-}
-
 function parseValue(val: string): { num: number; unit: string } {
   const match = val.match(/^([0-9.]+)(.*)$/);
   if (match) return { num: parseFloat(match[1]), unit: match[2] };
@@ -56,6 +31,24 @@ function StepperInput({ value, onChange, label, step = 0.5, min = 0 }: { value: 
   );
 }
 
+function FontSelector({ value, onChange, label }: { value: string; onChange: (v: string) => void; label?: string }) {
+  return (
+    <div>
+      {label && <Label className="text-xs mb-1 block">{label}</Label>}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full h-8 border rounded px-2 text-sm bg-white"
+        style={{ fontFamily: value }}
+      >
+        {FONT_OPTIONS.map((f) => (
+          <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function AlignButtons({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const opts = [{ v: "left", Icon: AlignLeft }, { v: "center", Icon: AlignCenter }, { v: "right", Icon: AlignRight }];
   return (
@@ -67,13 +60,22 @@ function AlignButtons({ value, onChange }: { value: string; onChange: (v: string
   );
 }
 
+const FONT_OPTIONS = [
+  "Arial", "Arial Narrow", "Arial Black",
+  "Courier New", "Georgia",
+  "Helvetica", "Impact",
+  "Tahoma", "Times New Roman",
+  "Trebuchet MS", "Verdana",
+  "Comic Sans MS", "Lucida Console",
+];
+
 const defaultConfig: Record<string, any> = {
   labelWidth: "50mm", labelHeight: "25mm",
-  nameFontSize: "8pt", nameTop: "1mm", nameTextAlign: "center", nameFontWeight: "bold",
-  priceFontSize: "26pt", ivaFontSize: "9pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold",
-  barcodeWidth: "46mm", barcodeHeight: "8mm", barcodeFontSize: "34pt", barcodeTop: "11mm", barcodeAlign: "center",
-  barcodeNumberFontSize: "10pt", barcodeNumberLetterSpacing: "4px", barcodeNumberTop: "17.5mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold",
-  footerFontSize: "6pt", footerTop: "20.5mm", footerTextAlign: "center",
+  nameFontSize: "8pt", nameTop: "1mm", nameTextAlign: "center", nameFontWeight: "bold", nameFontFamily: "Arial Narrow",
+  priceFontSize: "26pt", ivaFontSize: "9pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold", priceFontFamily: "Arial Narrow",
+  barcodeWidth: "46mm", barcodeHeight: "8mm", barcodeTop: "11mm", barcodeAlign: "center",
+  barcodeNumberFontSize: "10pt", barcodeNumberLetterSpacing: "4px", barcodeNumberTop: "17.5mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold", barcodeNumberFontFamily: "Courier New",
+  footerFontSize: "6pt", footerTop: "20.5mm", footerTextAlign: "center", footerFontFamily: "Arial Narrow",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
   footerText: "American Outlet Los Chiles",
 };
@@ -133,41 +135,35 @@ export default function LabelConfigPage() {
 
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Nombre del Producto</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <StepperInput label="Tamano fuente" value={s("nameFontSize")} onChange={v => update("nameFontSize", v)} step={0.5} />
-              <StepperInput label="Posicion Y (arriba)" value={s("nameTop")} onChange={v => update("nameTop", v)} step={0.5} />
+              <StepperInput label="Posicion Y" value={s("nameTop")} onChange={v => update("nameTop", v)} step={0.5} />
               <div>
                 <Label className="text-xs mb-1 block">Grosor</Label>
-                <select
-                  value={s("nameFontWeight")}
-                  onChange={e => update("nameFontWeight", e.target.value)}
-                  className="w-full h-8 border rounded px-2 text-sm"
-                >
+                <select value={s("nameFontWeight")} onChange={e => update("nameFontWeight", e.target.value)} className="w-full h-8 border rounded px-2 text-sm">
                   <option value="normal">Normal</option>
                   <option value="bold">Negrita</option>
                 </select>
               </div>
+              <FontSelector label="Tipo de letra" value={s("nameFontFamily")} onChange={v => update("nameFontFamily", v)} />
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("nameTextAlign")} onChange={v => update("nameTextAlign", v)} /></div>
           </div>
 
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Precio</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <StepperInput label="Tamano precio" value={s("priceFontSize")} onChange={v => update("priceFontSize", v)} step={1} />
               <StepperInput label="Tamano IVA" value={s("ivaFontSize")} onChange={v => update("ivaFontSize", v)} step={1} />
               <StepperInput label="Posicion Y" value={s("priceTop")} onChange={v => update("priceTop", v)} step={0.5} />
               <div>
-                <Label className="text-xs mb-1 block">Grosor precio</Label>
-                <select
-                  value={s("priceFontWeight")}
-                  onChange={e => update("priceFontWeight", e.target.value)}
-                  className="w-full h-8 border rounded px-2 text-sm"
-                >
+                <Label className="text-xs mb-1 block">Grosor</Label>
+                <select value={s("priceFontWeight")} onChange={e => update("priceFontWeight", e.target.value)} className="w-full h-8 border rounded px-2 text-sm">
                   <option value="normal">Normal</option>
                   <option value="bold">Negrita</option>
                 </select>
               </div>
+              <FontSelector label="Tipo de letra" value={s("priceFontFamily")} onChange={v => update("priceFontFamily", v)} />
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("priceTextAlign")} onChange={v => update("priceTextAlign", v)} /></div>
             <div className="flex gap-6 mt-3">
@@ -192,21 +188,17 @@ export default function LabelConfigPage() {
 
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Numero del Codigo</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <StepperInput label="Tamano" value={s("barcodeNumberFontSize")} onChange={v => update("barcodeNumberFontSize", v)} step={0.5} />
-              <StepperInput label="Espaciado" value={s("barcodeNumberLetterSpacing")} onChange={v => update("barcodeNumberLetterSpacing", v)} step={0.5} />
               <StepperInput label="Posicion Y" value={s("barcodeNumberTop")} onChange={v => update("barcodeNumberTop", v)} step={0.5} />
               <div>
                 <Label className="text-xs mb-1 block">Grosor</Label>
-                <select
-                  value={s("barcodeNumberFontWeight")}
-                  onChange={e => update("barcodeNumberFontWeight", e.target.value)}
-                  className="w-full h-8 border rounded px-2 text-sm"
-                >
+                <select value={s("barcodeNumberFontWeight")} onChange={e => update("barcodeNumberFontWeight", e.target.value)} className="w-full h-8 border rounded px-2 text-sm">
                   <option value="normal">Normal</option>
                   <option value="bold">Negrita</option>
                 </select>
               </div>
+              <FontSelector label="Tipo de letra" value={s("barcodeNumberFontFamily")} onChange={v => update("barcodeNumberFontFamily", v)} />
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("barcodeNumberAlign")} onChange={v => update("barcodeNumberAlign", v)} /></div>
             <div className="flex gap-6 mt-3">
@@ -216,10 +208,11 @@ export default function LabelConfigPage() {
 
           <div className="bg-white rounded-lg border p-4">
             <h3 className="font-semibold mb-3" style={{ color: "#1B3A5C" }}>Pie de Etiqueta</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <StepperInput label="Tamano" value={s("footerFontSize")} onChange={v => update("footerFontSize", v)} step={0.5} />
               <StepperInput label="Posicion Y" value={s("footerTop")} onChange={v => update("footerTop", v)} step={0.5} />
               <div className="col-span-2"><Label>Texto</Label><Input value={s("footerText")} onChange={e => update("footerText", e.target.value)} /></div>
+              <FontSelector label="Tipo de letra" value={s("footerFontFamily")} onChange={v => update("footerFontFamily", v)} />
             </div>
             <div className="mt-2"><Label>Alineacion</Label><AlignButtons value={s("footerTextAlign")} onChange={v => update("footerTextAlign", v)} /></div>
             <div className="flex gap-6 mt-3">
@@ -244,7 +237,9 @@ export default function LabelConfigPage() {
               {/* Name */}
               <div style={{
                 position: "absolute", top: s("nameTop"), left: "1mm", right: "1mm",
-                fontSize: s("nameFontSize"), fontWeight: s("nameFontWeight") || "bold", color: "#000",
+                fontSize: s("nameFontSize"), fontWeight: s("nameFontWeight") || "bold",
+                fontFamily: s("nameFontFamily") || "Arial Narrow",
+                color: "#000",
                 textTransform: "uppercase", letterSpacing: "0.2px", lineHeight: 1.3,
                 textAlign: s("nameTextAlign") as any, whiteSpace: "nowrap", overflow: "hidden",
               }}>{previewItem.nombre}</div>
@@ -255,7 +250,7 @@ export default function LabelConfigPage() {
                   position: "absolute", top: s("priceTop"), left: "1mm", right: "1mm",
                   display: "flex", alignItems: "baseline", justifyContent: alignStyle(s("priceTextAlign")), gap: "1.5mm",
                 }}>
-                  <span style={{ fontSize: s("priceFontSize"), fontWeight: s("priceFontWeight") || "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>{previewItem.precio}</span>
+                  <span style={{ fontSize: s("priceFontSize"), fontWeight: s("priceFontWeight") || "bold", fontFamily: s("priceFontFamily") || "Arial Narrow", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>{previewItem.precio}</span>
                   {s("showIva") && <span style={{ fontSize: s("ivaFontSize"), fontWeight: s("priceFontWeight") || "bold", color: "#000" }}>IVA</span>}
                 </div>
               )}
@@ -265,18 +260,24 @@ export default function LabelConfigPage() {
                 <div style={{
                   position: "absolute", top: s("barcodeTop"), left: "1mm", right: "1mm",
                   textAlign: s("barcodeAlign") as any,
-                  fontFamily: '"Libre Barcode 128", "Libre Barcode 128 Text", monospace',
-                  fontSize: s("barcodeFontSize"),
-                  lineHeight: 1,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
                   height: s("barcodeHeight"),
                   display: "flex",
                   alignItems: "center",
                   justifyContent: s("barcodeAlign") === "left" ? "flex-start" : s("barcodeAlign") === "right" ? "flex-end" : "center",
-                  color: "#000",
                 }}>
-                  {encodeCode128Preview("77001116")}
+                  <svg viewBox="0 0 100 20" preserveAspectRatio="xMidYMid meet" style={{ width: s("barcodeWidth"), height: s("barcodeHeight"), display: "inline-block" }}>
+                    <rect x="5" y="0" width="2" height="20" fill="#000" /><rect x="8" y="0" width="1" height="20" fill="#000" />
+                    <rect x="11" y="0" width="3" height="20" fill="#000" /><rect x="16" y="0" width="1" height="20" fill="#000" />
+                    <rect x="19" y="0" width="2" height="20" fill="#000" /><rect x="23" y="0" width="4" height="20" fill="#000" />
+                    <rect x="29" y="0" width="1" height="20" fill="#000" /><rect x="32" y="0" width="2" height="20" fill="#000" />
+                    <rect x="36" y="0" width="3" height="20" fill="#000" /><rect x="41" y="0" width="1" height="20" fill="#000" />
+                    <rect x="44" y="0" width="4" height="20" fill="#000" /><rect x="50" y="0" width="2" height="20" fill="#000" />
+                    <rect x="54" y="0" width="1" height="20" fill="#000" /><rect x="57" y="0" width="3" height="20" fill="#000" />
+                    <rect x="62" y="0" width="2" height="20" fill="#000" /><rect x="66" y="0" width="4" height="20" fill="#000" />
+                    <rect x="72" y="0" width="1" height="20" fill="#000" /><rect x="75" y="0" width="2" height="20" fill="#000" />
+                    <rect x="79" y="0" width="3" height="20" fill="#000" /><rect x="84" y="0" width="1" height="20" fill="#000" />
+                    <rect x="87" y="0" width="2" height="20" fill="#000" /><rect x="91" y="0" width="4" height="20" fill="#000" />
+                  </svg>
                 </div>
               )}
 
@@ -285,7 +286,7 @@ export default function LabelConfigPage() {
                 <div style={{
                   position: "absolute", top: s("barcodeNumberTop"), left: "1mm", right: "1mm",
                   fontSize: s("barcodeNumberFontSize"), fontWeight: s("barcodeNumberFontWeight") || "bold", color: "#000",
-                  letterSpacing: s("barcodeNumberLetterSpacing"), fontFamily: "Courier New, Courier, monospace",
+                  letterSpacing: s("barcodeNumberLetterSpacing"), fontFamily: s("barcodeNumberFontFamily") || "Courier New",
                   textAlign: s("barcodeNumberAlign") as any, whiteSpace: "nowrap",
                 }}>{previewItem.codigoBarras}</div>
               )}
@@ -295,7 +296,7 @@ export default function LabelConfigPage() {
                 <div style={{
                   position: "absolute", top: s("footerTop"), left: "1mm", right: "1mm",
                   fontSize: s("footerFontSize"), color: "#000",
-                  letterSpacing: "0.2px", fontFamily: "Arial Narrow, Arial, sans-serif",
+                  letterSpacing: "0.2px", fontFamily: s("footerFontFamily") || "Arial Narrow",
                   textAlign: s("footerTextAlign") as any, whiteSpace: "nowrap",
                 }}>
                   {s("showDate") ? "2026-07-23 - " : ""}{s("footerText")}

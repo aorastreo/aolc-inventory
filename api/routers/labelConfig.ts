@@ -4,11 +4,11 @@ import mysql from "mysql2/promise";
 
 const D: Record<string, string | boolean> = {
   labelWidth: "50mm", labelHeight: "25mm",
-  nameFontSize: "8pt", nameTop: "1mm", nameTextAlign: "center", nameFontWeight: "bold",
-  priceFontSize: "26pt", ivaFontSize: "9pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold",
-  barcodeWidth: "46mm", barcodeHeight: "8mm", barcodeFontSize: "34pt", barcodeTop: "11mm", barcodeAlign: "center",
-  barcodeNumberFontSize: "10pt", barcodeNumberLetterSpacing: "4px", barcodeNumberTop: "17.5mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold",
-  footerFontSize: "6pt", footerTop: "20.5mm", footerTextAlign: "center",
+  nameFontSize: "8pt", nameTop: "1mm", nameTextAlign: "center", nameFontWeight: "bold", nameFontFamily: "Arial Narrow",
+  priceFontSize: "26pt", ivaFontSize: "9pt", priceTop: "6mm", priceTextAlign: "center", priceFontWeight: "bold", priceFontFamily: "Arial Narrow",
+  barcodeWidth: "46mm", barcodeHeight: "8mm", barcodeTop: "11mm", barcodeAlign: "center",
+  barcodeNumberFontSize: "10pt", barcodeNumberLetterSpacing: "4px", barcodeNumberTop: "17.5mm", barcodeNumberAlign: "center", barcodeNumberFontWeight: "bold", barcodeNumberFontFamily: "Courier New",
+  footerFontSize: "6pt", footerTop: "20.5mm", footerTextAlign: "center", footerFontFamily: "Arial Narrow",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
   footerText: "American Outlet Los Chiles",
 };
@@ -33,14 +33,15 @@ async function ensureTable() {
         nameTop VARCHAR(10) NOT NULL DEFAULT '1mm',
         nameTextAlign VARCHAR(10) NOT NULL DEFAULT 'center',
         nameFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold',
+        nameFontFamily VARCHAR(30) NOT NULL DEFAULT 'Arial Narrow',
         priceFontSize VARCHAR(10) NOT NULL DEFAULT '26pt',
         ivaFontSize VARCHAR(10) NOT NULL DEFAULT '9pt',
         priceTop VARCHAR(10) NOT NULL DEFAULT '6mm',
         priceTextAlign VARCHAR(10) NOT NULL DEFAULT 'center',
         priceFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold',
+        priceFontFamily VARCHAR(30) NOT NULL DEFAULT 'Arial Narrow',
         barcodeWidth VARCHAR(10) NOT NULL DEFAULT '46mm',
         barcodeHeight VARCHAR(10) NOT NULL DEFAULT '8mm',
-        barcodeFontSize VARCHAR(10) NOT NULL DEFAULT '34pt',
         barcodeTop VARCHAR(10) NOT NULL DEFAULT '11mm',
         barcodeAlign VARCHAR(10) NOT NULL DEFAULT 'center',
         barcodeNumberFontSize VARCHAR(10) NOT NULL DEFAULT '10pt',
@@ -48,9 +49,11 @@ async function ensureTable() {
         barcodeNumberTop VARCHAR(10) NOT NULL DEFAULT '17.5mm',
         barcodeNumberAlign VARCHAR(10) NOT NULL DEFAULT 'center',
         barcodeNumberFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold',
+        barcodeNumberFontFamily VARCHAR(30) NOT NULL DEFAULT 'Courier New',
         footerFontSize VARCHAR(10) NOT NULL DEFAULT '6pt',
         footerTop VARCHAR(10) NOT NULL DEFAULT '20.5mm',
         footerTextAlign VARCHAR(10) NOT NULL DEFAULT 'center',
+        footerFontFamily VARCHAR(30) NOT NULL DEFAULT 'Arial Narrow',
         showPrice BOOLEAN NOT NULL DEFAULT TRUE,
         showIva BOOLEAN NOT NULL DEFAULT TRUE,
         showBarcode BOOLEAN NOT NULL DEFAULT TRUE,
@@ -63,12 +66,13 @@ async function ensureTable() {
         UNIQUE KEY uk_store (storeId)
       )
     `);
-    // Add new column for existing tables
-    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN barcodeFontSize VARCHAR(10) NOT NULL DEFAULT '28pt'`); } catch { /* */ }
-    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN nameFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold'`); } catch { /* */ }
-    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN priceFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold'`); } catch { /* */ }
-    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN barcodeNumberFontWeight VARCHAR(10) NOT NULL DEFAULT 'bold'`); } catch { /* */ }
-    // Remove old columns from existing tables
+    // Add font family columns for existing tables
+    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN nameFontFamily VARCHAR(30) NOT NULL DEFAULT 'Arial Narrow'`); } catch { /* */ }
+    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN priceFontFamily VARCHAR(30) NOT NULL DEFAULT 'Arial Narrow'`); } catch { /* */ }
+    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN barcodeNumberFontFamily VARCHAR(30) NOT NULL DEFAULT 'Courier New'`); } catch { /* */ }
+    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN footerFontFamily VARCHAR(30) NOT NULL DEFAULT 'Arial Narrow'`); } catch { /* */ }
+    // Remove old unused columns
+    try { await conn.execute(`ALTER TABLE labelConfig DROP COLUMN barcodeFontSize`); } catch { /* */ }
     try { await conn.execute(`ALTER TABLE labelConfig DROP COLUMN barcodeModuleWidth`); } catch { /* */ }
     try { await conn.execute(`ALTER TABLE labelConfig DROP COLUMN barcodeBarHeight`); } catch { /* */ }
   } finally { await conn.end(); }

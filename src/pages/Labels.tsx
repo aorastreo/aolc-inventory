@@ -34,10 +34,8 @@ function getLocalDateString() {
   return `${y}-${m}-${d}`;
 }
 
-// Barcode using Libre Barcode 128 Text font
-// This font renders each character as barcode bars directly
-// For numeric data we use Code 128 Set C (high density)
-function BarcodeCanvas({ code, barcodeWidth, barcodeHeight, barcodeFontSize }: {
+// Barcode using JsBarcode - generates REAL scannable SVG
+function BarcodeCanvas({ code, barcodeWidth, barcodeHeight }: {
   code: string;
   barcodeWidth?: string;
   barcodeHeight?: string;
@@ -45,67 +43,36 @@ function BarcodeCanvas({ code, barcodeWidth, barcodeHeight, barcodeFontSize }: {
   barcodeModuleWidth?: string;
   barcodeBarHeight?: string;
 }) {
-  // Libre Barcode 128 Text uses special start/stop characters
-  // Start C = Ì (U+00CC), Stop = Î (U+00CE)
-  const START_C = "\u00CC";  // Code 128 Start C
-  const STOP = "\u00CE";     // Code 128 Stop
+  const svgRef = useRef<SVGSVGElement>(null);
 
-  // For numeric data, encode as pairs (00-99)
-  const digits = code.replace(/\D/g, "");
-  let encoded = "";
-
-  if (digits.length >= 2) {
-    // Pad to even length
-    const padded = digits.length % 2 === 1 ? "0" + digits : digits;
-    // Encode pairs using Code C character mapping
-    for (let i = 0; i < padded.length; i += 2) {
-      const pair = parseInt(padded.substring(i, i + 2), 10);
-      // Code C values 0-99 map to specific Unicode points for the font
-      if (pair <= 94) {
-        encoded += String.fromCharCode(pair + 32); // 0-94 -> space to ~
-      } else {
-        encoded += String.fromCharCode(pair + 100); // 95-99 -> special chars
+  useEffect(() => {
+    if (svgRef.current && code) {
+      try {
+        JsBarcode(svgRef.current, code, {
+          format: "CODE128",
+          width: 2,
+          height: 60,
+          displayValue: false,
+          margin: 0,
+        });
+      } catch {
+        // fallback
       }
     }
-  } else {
-    encoded = digits;
-  }
+  }, [code]);
 
-  // Calculate checksum for Code C
-  // checksum = (Start C value + sum(position * value)) mod 103
-  let sum = 105; // Start C value = 105
-  for (let i = 0; i < encoded.length; i++) {
-    const charCode = encoded.charCodeAt(i);
-    const value = charCode > 126 ? charCode - 100 : charCode - 32;
-    sum += (i + 1) * value;
-  }
-  const checksumVal = sum % 103;
-  let checksumChar;
-  if (checksumVal <= 94) {
-    checksumChar = String.fromCharCode(checksumVal + 32);
-  } else {
-    checksumChar = String.fromCharCode(checksumVal + 100);
-  }
-
-  const barcodeText = START_C + encoded + checksumChar + STOP;
+  const w = barcodeWidth || "46mm";
+  const h = barcodeHeight || "8mm";
 
   return (
-    <div
+    <svg
+      ref={svgRef}
       style={{
-        fontFamily: '"Libre Barcode 128 Text", "Libre Barcode 128", monospace',
-        fontSize: barcodeFontSize || "28pt",
-        lineHeight: 0.9,
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        height: barcodeHeight || "7mm",
+        width: w,
+        height: h,
         display: "inline-block",
-        verticalAlign: "middle",
-        textAlign: "center",
-        width: barcodeWidth || "auto",
       }}
-    >
-      {barcodeText}
-    </div>
+    />
   );
 }
 
@@ -530,7 +497,9 @@ export default function LabelsPage() {
                 top: labelCfg?.nameTop || "1mm",
                 left: "1mm", right: "1mm",
                 fontSize: labelCfg?.nameFontSize || "8pt",
-                fontWeight: labelCfg?.nameFontWeight || "bold", color: "#000",
+                fontWeight: labelCfg?.nameFontWeight || "bold",
+                fontFamily: labelCfg?.nameFontFamily || "Arial Narrow",
+                color: "#000",
                 textTransform: "uppercase",
                 letterSpacing: "0.2px", lineHeight: 1.3,
                 textAlign: (labelCfg?.nameTextAlign || "center") as any,
@@ -547,7 +516,7 @@ export default function LabelsPage() {
                   justifyContent: (labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center",
                   gap: "1.5mm",
                 }}>
-                  <span style={{ fontSize: labelCfg?.priceFontSize || "26pt", fontWeight: labelCfg?.priceFontWeight || "bold", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
+                  <span style={{ fontSize: labelCfg?.priceFontSize || "26pt", fontWeight: labelCfg?.priceFontWeight || "bold", fontFamily: labelCfg?.priceFontFamily || "Arial Narrow", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
                     {Math.round(Number(item.precio))}
                   </span>
                   {(labelCfg?.showIva ?? true) && (
@@ -583,7 +552,7 @@ export default function LabelsPage() {
                   fontWeight: labelCfg?.barcodeNumberFontWeight || "bold",
                   color: "#000",
                   letterSpacing: labelCfg?.barcodeNumberLetterSpacing || "4px",
-                  fontFamily: "Courier New, Courier, monospace",
+                  fontFamily: labelCfg?.barcodeNumberFontFamily || "Courier New",
                   textAlign: (labelCfg?.barcodeNumberAlign || "center") as any,
                   whiteSpace: "nowrap",
                 }}>{item.codigoBarras}</div>
@@ -598,7 +567,7 @@ export default function LabelsPage() {
                   fontSize: labelCfg?.footerFontSize || "6pt",
                   color: "#000",
                   letterSpacing: "0.2px",
-                  fontFamily: "Arial Narrow, Arial, sans-serif",
+                  fontFamily: labelCfg?.footerFontFamily || "Arial Narrow",
                   textAlign: (labelCfg?.footerTextAlign || "center") as any,
                   whiteSpace: "nowrap",
                 }}>
