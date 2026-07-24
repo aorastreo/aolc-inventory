@@ -82,7 +82,7 @@ const defaultConfig: Record<string, any> = {
 
 export default function LabelConfigPage() {
   const utils = trpc.useUtils();
-  const { data: savedConfig } = trpc.labelConfig.get.useQuery({ storeId: 1 });
+  const { data: savedConfig, error: queryError } = trpc.labelConfig.get.useQuery({ storeId: 1 });
   const upsertConfig = trpc.labelConfig.upsert.useMutation({
     onSuccess: () => { utils.labelConfig.get.invalidate(); toast.success("Configuracion guardada"); },
     onError: (err) => { toast.error("Error: " + err.message); console.error(err); },
@@ -102,6 +102,16 @@ export default function LabelConfigPage() {
   const previewItem = { nombre: "CAJA ORGANIZADORA", precio: "1990", codigoBarras: "77001116" };
 
   const alignStyle = (align: string) => align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center";
+
+  if (queryError) {
+    return (
+      <div className="max-w-6xl mx-auto p-8 text-center">
+        <h1 className="text-xl font-bold text-red-600 mb-4">Error al cargar configuracion</h1>
+        <p className="text-gray-600 mb-4">{queryError.message}</p>
+        <Button onClick={() => window.location.reload()} variant="outline">Reintentar</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto">
