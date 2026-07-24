@@ -34,34 +34,9 @@ function getLocalDateString() {
   return `${y}-${m}-${d}`;
 }
 
-// Barcode using jsbarcode - the library we used in the original system
-// Code 128 encoder for Libre Barcode 128 font
-// This is the EXACT same approach that worked in the original system
-function encodeCode128(text: string): string {
-  const digits = text.replace(/\D/g, "");
-  if (digits.length < 2) return text;
-  const padded = digits.length % 2 === 1 ? "0" + digits : digits;
-  let encoded = "";
-  for (let i = 0; i < padded.length; i += 2) {
-    const pair = parseInt(padded.substring(i, i + 2), 10);
-    const charCode = pair > 94 ? pair + 100 : pair + 32;
-    encoded += String.fromCharCode(charCode);
-  }
-  const start = String.fromCharCode(205);
-  const stop = String.fromCharCode(206);
-  let sum = 105;
-  for (let i = 0; i < encoded.length; i++) {
-    const code = encoded.charCodeAt(i);
-    const value = code > 199 ? code - 100 : code - 32;
-    sum += (i + 1) * value;
-  }
-  let checksum = (sum % 103) + 32;
-  if (checksum > 126) checksum += 68;
-  const check = String.fromCharCode(checksum);
-  return start + encoded + check + stop;
-}
-
-// Barcode component using Libre Barcode 128 font - THE ORIGINAL WORKING CODE
+// Barcode using Libre Barcode 128 Text font
+// This font renders each character as barcode bars directly
+// For numeric data we use Code 128 Set C (high density)
 function BarcodeCanvas({ code, barcodeWidth, barcodeHeight, barcodeFontSize }: {
   code: string;
   barcodeWidth?: string;
@@ -70,21 +45,66 @@ function BarcodeCanvas({ code, barcodeWidth, barcodeHeight, barcodeFontSize }: {
   barcodeModuleWidth?: string;
   barcodeBarHeight?: string;
 }) {
-  const encoded = encodeCode128(code);
+  // Libre Barcode 128 Text uses special start/stop characters
+  // Start C = Ì (U+00CC), Stop = Î (U+00CE)
+  const START_C = "\u00CC";  // Code 128 Start C
+  const STOP = "\u00CE";     // Code 128 Stop
+
+  // For numeric data, encode as pairs (00-99)
+  const digits = code.replace(/\D/g, "");
+  let encoded = "";
+
+  if (digits.length >= 2) {
+    // Pad to even length
+    const padded = digits.length % 2 === 1 ? "0" + digits : digits;
+    // Encode pairs using Code C character mapping
+    for (let i = 0; i < padded.length; i += 2) {
+      const pair = parseInt(padded.substring(i, i + 2), 10);
+      // Code C values 0-99 map to specific Unicode points for the font
+      if (pair <= 94) {
+        encoded += String.fromCharCode(pair + 32); // 0-94 -> space to ~
+      } else {
+        encoded += String.fromCharCode(pair + 100); // 95-99 -> special chars
+      }
+    }
+  } else {
+    encoded = digits;
+  }
+
+  // Calculate checksum for Code C
+  // checksum = (Start C value + sum(position * value)) mod 103
+  let sum = 105; // Start C value = 105
+  for (let i = 0; i < encoded.length; i++) {
+    const charCode = encoded.charCodeAt(i);
+    const value = charCode > 126 ? charCode - 100 : charCode - 32;
+    sum += (i + 1) * value;
+  }
+  const checksumVal = sum % 103;
+  let checksumChar;
+  if (checksumVal <= 94) {
+    checksumChar = String.fromCharCode(checksumVal + 32);
+  } else {
+    checksumChar = String.fromCharCode(checksumVal + 100);
+  }
+
+  const barcodeText = START_C + encoded + checksumChar + STOP;
+
   return (
     <div
       style={{
-        fontFamily: '"Libre Barcode 128", "Libre Barcode 128 Text", monospace',
+        fontFamily: '"Libre Barcode 128 Text", "Libre Barcode 128", monospace',
         fontSize: barcodeFontSize || "28pt",
-        lineHeight: 1,
+        lineHeight: 0.9,
         whiteSpace: "nowrap",
         overflow: "hidden",
         height: barcodeHeight || "7mm",
         display: "inline-block",
         verticalAlign: "middle",
+        textAlign: "center",
+        width: barcodeWidth || "auto",
       }}
     >
-      {encoded}
+      {barcodeText}
     </div>
   );
 }
