@@ -50,10 +50,11 @@ function BarcodeCanvas({ code, barcodeWidth, barcodeHeight }: {
       try {
         JsBarcode(svgRef.current, code, {
           format: "CODE128",
-          width: 2,
-          height: 60,
+          width: 3,
+          height: 80,
           displayValue: false,
-          margin: 0,
+          margin: 4,
+          lineColor: "#000000",
         });
       } catch {
         // fallback
@@ -537,7 +538,6 @@ export default function LabelsPage() {
                     code={item.codigoBarras}
                     barcodeWidth={labelCfg?.barcodeWidth}
                     barcodeHeight={labelCfg?.barcodeHeight}
-                    barcodeFontSize={labelCfg?.barcodeFontSize}
                   />
                 </div>
               )}
