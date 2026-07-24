@@ -35,7 +35,7 @@ function getLocalDateString() {
 }
 
 // Barcode using JsBarcode - generates REAL scannable SVG
-function BarcodeCanvas({ code, barcodeWidth, barcodeHeight }: {
+function BarcodeCanvas({ code, barcodeHeight }: {
   code: string;
   barcodeWidth?: string;
   barcodeHeight?: string;
@@ -43,37 +43,23 @@ function BarcodeCanvas({ code, barcodeWidth, barcodeHeight }: {
   barcodeModuleWidth?: string;
   barcodeBarHeight?: string;
 }) {
-  const svgRef = useRef<SVGSVGElement>(null);
-
-  useEffect(() => {
-    if (svgRef.current && code) {
-      try {
-        JsBarcode(svgRef.current, code, {
-          format: "CODE128",
-          width: 3,
-          height: 80,
-          displayValue: false,
-          margin: 4,
-          lineColor: "#000000",
-        });
-      } catch {
-        // fallback
-      }
-    }
-  }, [code]);
-
-  const w = barcodeWidth || "46mm";
   const h = barcodeHeight || "8mm";
 
   return (
-    <svg
-      ref={svgRef}
+    <span
       style={{
-        width: w,
-        height: h,
+        fontFamily: '"Libre Barcode 128 Text", "Libre Barcode 128", cursive',
+        fontSize: "34pt",
+        lineHeight: 0.85,
+        whiteSpace: "nowrap",
         display: "inline-block",
+        overflow: "hidden",
+        height: h,
+        verticalAlign: "middle",
       }}
-    />
+    >
+      {"\u00CC" + code + "\u00CE"}
+    </span>
   );
 }
 
@@ -580,9 +566,21 @@ export default function LabelsPage() {
       </div>
 
       <style>{`
+        @font-face {
+          font-family: 'Libre Barcode 128 Text';
+          src: url('/fonts/LibreBarcode128Text.ttf') format('truetype');
+          font-weight: normal;
+          font-style: normal;
+        }
         @media screen { .print-only { display: none !important; } }
         @media print {
           @page { size: 50mm 25mm; margin: 0; }
+          @font-face {
+            font-family: 'Libre Barcode 128 Text';
+            src: url('/fonts/LibreBarcode128Text.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+          }
           html, body { margin: 0; padding: 0; background: white; }
           .print-only {
             display: block !important;
