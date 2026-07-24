@@ -582,11 +582,39 @@ export default function LabelsPage() {
       <style>{`
         @media screen { .print-only { display: none !important; } }
         @media print {
-          @page { size: auto; margin: 0mm; padding: 0mm; }
-          html, body { margin: 0 !important; padding: 0 !important; }
+          @page { size: 50mm 25mm; margin: 0mm; }
+          * { margin: 0 !important; padding: 0 !important; box-sizing: border-box; }
+          html, body { width: 50mm !important; height: 25mm !important; overflow: hidden !important; background: white !important; }
           body * { visibility: hidden; }
           .print-only, .print-only * { visibility: visible; }
-          .print-only { display: block !important; position: absolute; left: 0; top: 0; width: 100%; margin: 0 !important; padding: 0 !important; }
+          .print-only {
+            display: block !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 50mm !important;
+            height: 25mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background: white !important;
+          }
+          .print-only > div {
+            width: 50mm !important;
+            height: 25mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .print-only > div > div {
+            width: 50mm !important;
+            height: 25mm !important;
+            position: relative !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background: white !important;
+            font-family: Arial Narrow, Arial, Helvetica, sans-serif !important;
+          }
         }
       `}</style>
     </div>
