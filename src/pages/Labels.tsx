@@ -35,33 +35,7 @@ function getLocalDateString() {
 }
 
 // Barcode using JsBarcode - generates REAL scannable SVG
-function BarcodeCanvas({ code, barcodeHeight }: {
-  code: string;
-  barcodeWidth?: string;
-  barcodeHeight?: string;
-  barcodeFontSize?: string;
-  barcodeModuleWidth?: string;
-  barcodeBarHeight?: string;
-}) {
-  const h = barcodeHeight || "8mm";
 
-  return (
-    <span
-      style={{
-        fontFamily: '"Libre Barcode 128 Text", "Libre Barcode 128", cursive',
-        fontSize: "34pt",
-        lineHeight: 0.85,
-        whiteSpace: "nowrap",
-        display: "inline-block",
-        overflow: "hidden",
-        height: h,
-        verticalAlign: "middle",
-      }}
-    >
-      {"\u00CC" + code + "\u00CE"}
-    </span>
-  );
-}
 
 // Custom Dropdown Component
 function CustomDropdown({ label, value, onChange, options, placeholder }: {
@@ -210,12 +184,74 @@ export default function LabelsPage() {
     });
   };
 
+  // Generate barcode SVG using JsBarcode
+  const generateBarcodeSVG = (code: string): string => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("style", "width:100%;height:100%;");
+    try {
+      JsBarcode(svg, code, {
+        format: "CODE128",
+        width: 2,
+        height: 50,
+        displayValue: false,
+        margin: 2,
+      });
+      return svg.outerHTML;
+    } catch {
+      return `<div style="font-size:8pt;text-align:center">${code}</div>`;
+    }
+  };
+
   const handlePrint = () => {
     if (selectedProducts.size === 0) return;
     const targetId = adjustmentIdNum || palletIdNum;
     if (!targetId) return;
     markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
-    window.print();
+
+    // Build label HTML for popup
+    const labelsHtml = expandedItems.map((item) => {
+      const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
+      return `
+        <div class="label-page" style="width:50mm;height:25mm;position:relative;overflow:hidden;background:white;page-break-after:always;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
+          <div style="position:absolute;top:${labelCfg?.nameTop || "0.3mm"};left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "8pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
+          ${(labelCfg?.showPrice ?? true) ? `
+          <div style="position:absolute;top:${labelCfg?.priceTop || "6mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
+            <span style="font-size:${labelCfg?.priceFontSize || "26pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
+            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "9pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
+          </div>` : ""}
+          ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
+          <div style="position:absolute;top:${labelCfg?.barcodeTop || "11mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "8mm"};">${barcodeSvg}</div>` : ""}
+          ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
+          <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "17.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "10pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
+          ${(labelCfg?.showFooter ?? true) ? `
+          <div style="position:absolute;top:${labelCfg?.footerTop || "20.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
+        </div>
+      `;
+    }).join("");
+
+    const popup = window.open("", "_blank", "width=300,height=400");
+    if (!popup) return;
+    popup.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Etiquetas</title>
+        <style>
+          @page { size: 50mm 25mm; margin: 0; }
+          body { margin: 0; padding: 0; background: white; }
+          .label-page { page-break-after: always; }
+          .label-page:last-child { page-break-after: auto; }
+        </style>
+      </head>
+      <body>
+        ${labelsHtml}
+        <script>
+          setTimeout(function() { window.print(); setTimeout(function() { window.close(); }, 500); }, 300);
+        </script>
+      </body>
+      </html>
+    `);
+    popup.document.close();
   };
 
   const filtered = products?.filter(p =>
@@ -460,133 +496,6 @@ export default function LabelsPage() {
         </div>
       </div>
 
-      {/* Print area - hidden on screen, shown on print */}
-      <div id="label-print-area">
-        {expandedItems.map((item, idx) => (
-          <div key={idx} className="label-page">
-            <div className="label-inner" style={{
-              position: "relative",
-              width: "100%",
-              height: "100%",
-              fontFamily: labelCfg?.nameFontFamily ?? "Arial Narrow",
-            }}>
-              {/* Name */}
-              <div style={{
-                position: "absolute",
-                top: labelCfg?.nameTop ?? "0.3mm",
-                left: "1mm", right: "1mm",
-                fontSize: labelCfg?.nameFontSize ?? "8pt",
-                fontWeight: labelCfg?.nameFontWeight ?? "bold",
-                fontFamily: labelCfg?.nameFontFamily ?? "Arial Narrow",
-                color: "#000",
-                textTransform: "uppercase",
-                letterSpacing: "0.2px", lineHeight: 1.3,
-                textAlign: (labelCfg?.nameTextAlign || "center") as any,
-                whiteSpace: "nowrap", overflow: "hidden",
-              }}>{item.nombre.toUpperCase()}</div>
-
-              {/* Price */}
-              {(labelCfg?.showPrice ?? true) && (
-                <div style={{
-                  position: "absolute",
-                  top: labelCfg?.priceTop ?? "6mm",
-                  left: "1mm", right: "1mm",
-                  display: "flex", alignItems: "baseline",
-                  justifyContent: (labelCfg?.priceTextAlign ?? "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign ?? "center") === "right" ? "flex-end" : "center",
-                  gap: "1.5mm",
-                }}>
-                  <span style={{ fontSize: labelCfg?.priceFontSize ?? "26pt", fontWeight: labelCfg?.priceFontWeight ?? "bold", fontFamily: labelCfg?.priceFontFamily ?? "Arial Narrow", color: "#000", letterSpacing: "0.5px", lineHeight: 1 }}>
-                    {Math.round(Number(item.precio))}
-                  </span>
-                  {(labelCfg?.showIva ?? true) && (
-                    <span style={{ fontSize: labelCfg?.ivaFontSize ?? "9pt", fontWeight: "bold", color: "#000" }}>IVA</span>
-                  )}
-                </div>
-              )}
-
-              {/* Barcode */}
-              {(labelCfg?.showBarcode ?? true) && item.codigoBarras && (
-                <div style={{
-                  position: "absolute",
-                  top: labelCfg?.barcodeTop ?? "11mm",
-                  left: "1mm", right: "1mm",
-                  textAlign: (labelCfg?.barcodeAlign ?? "center") as any,
-                }}>
-                  <BarcodeCanvas
-                    code={item.codigoBarras}
-                    barcodeHeight={labelCfg?.barcodeHeight}
-                  />
-                </div>
-              )}
-
-              {/* Barcode Number */}
-              {(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras && (
-                <div style={{
-                  position: "absolute",
-                  top: labelCfg?.barcodeNumberTop ?? "17.5mm",
-                  left: "1mm", right: "1mm",
-                  fontSize: labelCfg?.barcodeNumberFontSize ?? "10pt",
-                  fontWeight: labelCfg?.barcodeNumberFontWeight ?? "bold",
-                  fontFamily: labelCfg?.barcodeNumberFontFamily ?? "Courier New",
-                  color: "#000",
-                  letterSpacing: labelCfg?.barcodeNumberLetterSpacing ?? "0.5px",
-                  textAlign: (labelCfg?.barcodeNumberAlign ?? "center") as any,
-                  whiteSpace: "nowrap",
-                }}>{item.codigoBarras}</div>
-              )}
-
-              {/* Footer */}
-              {(labelCfg?.showFooter ?? true) && (
-                <div style={{
-                  position: "absolute",
-                  top: labelCfg?.footerTop ?? "20.5mm",
-                  left: "1mm", right: "1mm",
-                  fontSize: labelCfg?.footerFontSize ?? "6pt",
-                  fontFamily: labelCfg?.footerFontFamily ?? "Arial Narrow",
-                  color: "#000",
-                  letterSpacing: "0.2px",
-                  textAlign: (labelCfg?.footerTextAlign ?? "center") as any,
-                  whiteSpace: "nowrap",
-                }}>
-                  {(labelCfg?.showDate ?? true) ? `${getLocalDateString()} - ` : ""}
-                  {labelCfg?.footerText || "American Outlet Los Chiles"}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <style>{`
-        @font-face {
-          font-family: 'Libre Barcode 128 Text';
-          src: url('/fonts/LibreBarcode128Text.ttf') format('truetype');
-        }
-        #label-print-area { display: none; }
-        @media print {
-          @page { size: 50mm 25mm; margin: 0; }
-          html, body, #root, #root * { visibility: hidden !important; }
-          #label-print-area,
-          #label-print-area * { visibility: visible !important; }
-          #label-print-area {
-            display: block !important;
-            width: 50mm !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          .label-page {
-            width: 50mm !important;
-            height: 25mm !important;
-            page-break-after: always !important;
-            position: relative !important;
-            overflow: hidden !important;
-            background: white !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          .label-page:last-child { page-break-after: auto !important; }
-        }
-      `}</style>
     </div>
   );
 }
