@@ -565,10 +565,18 @@ export default function LabelsPage() {
         #label-print-area { display: none; }
         @media print {
           @page { margin: 0; }
-          #root, header, nav, .sidebar, aside { display: none !important; }
+          * { visibility: hidden !important; }
+          #label-print-area,
+          #label-print-area * {
+            visibility: visible !important;
+          }
           #label-print-area {
             display: block !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
             width: 50mm !important;
+            z-index: 99999 !important;
             margin: 0 !important;
             padding: 0 !important;
           }
