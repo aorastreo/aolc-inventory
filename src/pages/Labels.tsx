@@ -460,23 +460,22 @@ export default function LabelsPage() {
         </div>
       </div>
 
-      {/* Hidden print area - uses absolute positioning, each element independent */}
+      {/* Hidden print area - each label is a direct child of .print-only */}
       <div className="print-only">
-        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-          {expandedItems.map((item, idx) => (
-            <div
-              key={idx}
-              style={{
-                width: labelCfg?.labelWidth || "50mm",
-                height: labelCfg?.labelHeight || "25mm",
-                padding: 0,
-                position: "relative",
-                pageBreakInside: "avoid",
-                background: "white",
-                boxSizing: "border-box",
-                fontFamily: "Arial Narrow, Arial, Helvetica, sans-serif",
-              }}
-            >
+        {expandedItems.map((item, idx) => (
+          <div
+            key={idx}
+            style={{
+              width: labelCfg?.labelWidth || "50mm",
+              height: labelCfg?.labelHeight || "25mm",
+              padding: 0,
+              position: "relative",
+              pageBreakInside: "avoid",
+              background: "white",
+              boxSizing: "border-box",
+              fontFamily: "Arial Narrow, Arial, Helvetica, sans-serif",
+            }}
+          >
               {/* Name - absolute position */}
               <div style={{
                 position: "absolute",
@@ -562,7 +561,6 @@ export default function LabelsPage() {
               )}
             </div>
           ))}
-        </div>
       </div>
 
       <style>{`
