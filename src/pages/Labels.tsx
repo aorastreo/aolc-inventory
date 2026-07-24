@@ -583,16 +583,12 @@ export default function LabelsPage() {
         @media screen { .print-only { display: none !important; } }
         @media print {
           @page { size: 50mm 25mm; margin: 0; }
-          * { margin: 0 !important; padding: 0 !important; box-sizing: border-box; }
-          html, body { width: 50mm !important; margin: 0 !important; padding: 0 !important; background: white !important; }
-          body * { visibility: hidden; }
-          .print-only, .print-only * { visibility: visible; }
+          html, body { margin: 0; padding: 0; background: white; }
           .print-only {
             display: block !important;
             width: 50mm !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: white !important;
           }
           .print-only > div {
             width: 50mm !important;
@@ -604,22 +600,10 @@ export default function LabelsPage() {
             background: white !important;
             margin: 0 !important;
             padding: 0 !important;
+            box-sizing: border-box !important;
           }
           .print-only > div:last-child {
             page-break-after: auto !important;
-          }
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          .print-only > div > div {
-            width: 50mm !important;
-            height: 25mm !important;
-            position: relative !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-            background: white !important;
-            font-family: Arial Narrow, Arial, Helvetica, sans-serif !important;
           }
         }
       `}</style>
