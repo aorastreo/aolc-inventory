@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Receipt, Plus, Trash2, Banknote, CreditCard, Smartphone, FileX, Calculator,
-  TrendingUp, Calendar, BarChart3, Printer, FileSpreadsheet, ArrowDownToLine,
+  TrendingUp, Calendar, BarChart3, Printer, FileSpreadsheet, ArrowDownToLine, Pencil,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell } from "recharts";
@@ -70,6 +70,18 @@ export default function ClosingsPage() {
   const [newClosing, setNewClosing] = useState({
     fecha: "", dia: "",
     efectivo: "", tarjeta: "", sinpe: "", sinFactura: "",
+  });
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editClosing, setEditClosing] = useState({ id: 0, fecha: "", dia: "", efectivo: "", tarjeta: "", sinpe: "", sinFactura: "" });
+
+  const updateClosing = trpc.inventory.updateClosing.useMutation({
+    onSuccess: () => {
+      utils.inventory.closings.invalidate();
+      utils.inventory.closingStats.invalidate();
+      utils.inventory.closingTrend.invalidate();
+      utils.inventory.closingByPaymentMethod.invalidate();
+      utils.inventory.closingWeeklyBreakdown.invalidate();
+    },
   });
 
   // Helper: get today's date in YYYY-MM-DD using local timezone
@@ -193,6 +205,48 @@ export default function ClosingsPage() {
               </div>
               <Button onClick={handleCreate} className="w-full h-11 font-medium" style={{ background: BRAND_RED }}>
                 Guardar Cierre
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-semibold" style={{ color: "#1B3A5C" }}>Editar Cierre</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs font-medium mb-1.5 block" style={{ color: "hsl(207 20% 55%)" }}>Fecha</Label>
+                  <Input type="date" value={editClosing.fecha} onChange={(e) => setEditClosing({ ...editClosing, fecha: e.target.value })} className="h-10" />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium mb-1.5 block" style={{ color: "hsl(207 20% 55%)" }}>Dia</Label>
+                  <Input value={editClosing.dia} onChange={(e) => setEditClosing({ ...editClosing, dia: e.target.value })} placeholder="Ej: Lunes" className="h-10" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs font-medium mb-1.5 block" style={{ color: "hsl(207 20% 55%)" }}>Efectivo</Label>
+                  <Input type="number" value={editClosing.efectivo} onChange={(e) => setEditClosing({ ...editClosing, efectivo: e.target.value })} placeholder="0" className="h-10" min={0} />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium mb-1.5 block" style={{ color: "hsl(207 20% 55%)" }}>Tarjeta</Label>
+                  <Input type="number" value={editClosing.tarjeta} onChange={(e) => setEditClosing({ ...editClosing, tarjeta: e.target.value })} placeholder="0" className="h-10" min={0} />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium mb-1.5 block" style={{ color: "hsl(207 20% 55%)" }}>SINPE</Label>
+                  <Input type="number" value={editClosing.sinpe} onChange={(e) => setEditClosing({ ...editClosing, sinpe: e.target.value })} placeholder="0" className="h-10" min={0} />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium mb-1.5 block" style={{ color: "hsl(207 20% 55%)" }}>Sin Factura</Label>
+                  <Input type="number" value={editClosing.sinFactura} onChange={(e) => setEditClosing({ ...editClosing, sinFactura: e.target.value })} placeholder="0" className="h-10" min={0} />
+                </div>
+              </div>
+              <Button onClick={() => { updateClosing.mutate({ id: editClosing.id, fecha: editClosing.fecha, dia: editClosing.dia, efectivo: Number(editClosing.efectivo) || 0, tarjeta: Number(editClosing.tarjeta) || 0, sinpe: Number(editClosing.sinpe) || 0, sinFactura: Number(editClosing.sinFactura) || 0 }); setEditDialogOpen(false); }} className="w-full h-11 font-medium" style={{ background: BRAND_RED }}>
+                Guardar Cambios
               </Button>
             </div>
           </DialogContent>
@@ -437,6 +491,9 @@ export default function ClosingsPage() {
                       <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: "#16A34A" }}>Total Ventas</p>
                       <p className="text-lg font-bold" style={{ color: "#16A34A" }}>{formatMoneyCurrency(totalVentas)}</p>
                     </div>
+                    <Button variant="ghost" size="sm" onClick={() => { setEditClosing({ id: closing.id, fecha: closing.fecha, dia: closing.dia || "", efectivo: String(closing.efectivo || ""), tarjeta: String(closing.tarjeta || ""), sinpe: String(closing.sinpe || ""), sinFactura: String(closing.sinFactura || "") }); setEditDialogOpen(true); }} className="hover:bg-blue-50">
+                      <Pencil className="w-4 h-4" style={{ color: "#1B3A5C" }} />
+                    </Button>
                     {!isEmployee && (
                       <Button variant="ghost" size="sm" onClick={() => deleteClosing.mutate({ id: closing.id })} className="hover:bg-red-50">
                         <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
