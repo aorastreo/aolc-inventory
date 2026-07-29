@@ -30,7 +30,7 @@ const paymentConfig = [
 ];
 
 export default function ClosingsPage() {
-  const { isEmployee } = useLocalAuth();
+  const { isEmployee, isAdmin } = useLocalAuth();
   const utils = trpc.useUtils();
   const { data: closings } = trpc.inventory.closings.useQuery({ storeId: 1 });
   const { data: stats } = trpc.inventory.closingStats.useQuery({ storeId: 1 });
@@ -491,13 +491,15 @@ export default function ClosingsPage() {
                       <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: "#16A34A" }}>Total Ventas</p>
                       <p className="text-lg font-bold" style={{ color: "#16A34A" }}>{formatMoneyCurrency(totalVentas)}</p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => { setEditClosing({ id: closing.id, fecha: closing.fecha, dia: closing.dia || "", efectivo: String(closing.efectivo || ""), tarjeta: String(closing.tarjeta || ""), sinpe: String(closing.sinpe || ""), sinFactura: String(closing.sinFactura || "") }); setEditDialogOpen(true); }} className="hover:bg-blue-50">
-                      <Pencil className="w-4 h-4" style={{ color: "#1B3A5C" }} />
-                    </Button>
-                    {!isEmployee && (
-                      <Button variant="ghost" size="sm" onClick={() => deleteClosing.mutate({ id: closing.id })} className="hover:bg-red-50">
-                        <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
-                      </Button>
+                    {isAdmin && (
+                      <>
+                        <Button variant="ghost" size="sm" onClick={() => { setEditClosing({ id: closing.id, fecha: closing.fecha, dia: closing.dia || "", efectivo: String(closing.efectivo || ""), tarjeta: String(closing.tarjeta || ""), sinpe: String(closing.sinpe || ""), sinFactura: String(closing.sinFactura || "") }); setEditDialogOpen(true); }} className="hover:bg-blue-50">
+                          <Pencil className="w-4 h-4" style={{ color: "#1B3A5C" }} />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => deleteClosing.mutate({ id: closing.id })} className="hover:bg-red-50">
+                          <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>

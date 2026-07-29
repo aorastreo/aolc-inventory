@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, publicQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   stores, pallets, products, productDatabase,
@@ -377,7 +377,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId) };
     }),
 
-  updateClosing: publicQuery
+  updateClosing: adminQuery
     .input(z.object({ id: z.number(), fecha: z.string().optional(), dia: z.string().optional(), efectivo: z.string().optional(), sinpe: z.string().optional(), tarjeta: z.string().optional(), sinFactura: z.string().optional(), total: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -386,7 +386,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  deleteClosing: publicQuery
+  deleteClosing: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
