@@ -385,6 +385,15 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
+  updateAdjustmentItem: publicQuery
+    .input(z.object({ id: z.number(), nombre: z.string().optional(), precio: z.string().optional(), cantidad: z.number().optional(), codigoBarras: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const { id, ...data } = input;
+      await db.update(adjustmentItems).set(data).where(eq(adjustmentItems.id, id));
+      return { success: true };
+    }),
+
   completeAdjustment: publicQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {

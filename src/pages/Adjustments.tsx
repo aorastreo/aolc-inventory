@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
-  ClipboardList, CheckCircle, Clock, XCircle, Plus, Eye, Trash2, ArrowLeft, Package, X, Barcode,
+  ClipboardList, CheckCircle, Clock, XCircle, Plus, Eye, Trash2, ArrowLeft, Package, X, Barcode, Pencil, Check,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
@@ -34,11 +34,16 @@ export default function AdjustmentsPage() {
   const cancelAdj = trpc.inventory.cancelAdjustment.useMutation({ onSuccess: () => utils.inventory.adjustments.invalidate() });
   const addItem = trpc.inventory.addAdjustmentItem.useMutation({ onSuccess: () => { utils.inventory.adjustmentItems.invalidate(); utils.inventory.adjustments.invalidate(); } });
   const removeItem = trpc.inventory.removeAdjustmentItem.useMutation({ onSuccess: () => utils.inventory.adjustmentItems.invalidate() });
+  const updateItem = trpc.inventory.updateAdjustmentItem.useMutation({ onSuccess: () => { utils.inventory.adjustmentItems.invalidate(); setEditingItemId(null); } });
 
   const [viewingAdj, setViewingAdj] = useState<number | null>(null);
   const [newAdj, setNewAdj] = useState({ adjustmentId: "", description: "", palletId: palletFilter || "" });
   const [newItem, setNewItem] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Inline edit state
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editItemForm, setEditItemForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
 
   // Pre-fill palletId when coming from a filtered view
   useEffect(() => {
@@ -178,22 +183,51 @@ export default function AdjustmentsPage() {
               </tr>
             </thead>
             <tbody>
-              {adjItems?.map((item, idx) => (
-                <tr key={item.id} className="border-b hover:bg-gray-50/50 transition-colors" style={{ borderColor: "hsl(210 20% 94%)" }}>
-                  <td className="px-4 py-3 text-sm" style={{ color: "hsl(207 20% 55%)" }}>{idx + 1}</td>
-                  <td className="px-4 py-3 text-sm font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{item.nombre}</td>
-                  <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(String(item.precio))}</td>
-                  <td className="px-4 py-3 text-sm text-right">{item.cantidad}</td>
-                  <td className="px-4 py-3 text-sm font-mono text-xs" style={{ color: "hsl(207 20% 55%)" }}>{item.codigoBarras || "-"}</td>
-                  {adjDetail.estado === "activo" && (
-                    <td className="px-4 py-3">
-                      <Button variant="ghost" size="sm" onClick={() => removeItem.mutate({ id: item.id })} className="hover:bg-red-50">
-                        <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
-                      </Button>
-                    </td>
-                  )}
-                </tr>
-              ))}
+              {adjItems?.map((item, idx) => {
+                const isEditing = editingItemId === item.id;
+                return (
+                  <tr key={item.id} className="border-b hover:bg-gray-50/50 transition-colors" style={{ borderColor: "hsl(210 20% 94%)" }}>
+                    <td className="px-4 py-3 text-sm" style={{ color: "hsl(207 20% 55%)" }}>{idx + 1}</td>
+                    {isEditing ? (
+                      <>
+                        <td className="px-4 py-2"><Input size="sm" value={editItemForm.nombre} onChange={(e) => setEditItemForm({ ...editItemForm, nombre: e.target.value })} className="h-8 text-sm" /></td>
+                        <td className="px-4 py-2"><Input type="number" size="sm" value={editItemForm.precio} onChange={(e) => setEditItemForm({ ...editItemForm, precio: e.target.value })} className="h-8 text-sm text-right" /></td>
+                        <td className="px-4 py-2"><Input type="number" size="sm" value={editItemForm.cantidad} onChange={(e) => setEditItemForm({ ...editItemForm, cantidad: Number(e.target.value) })} className="h-8 text-sm text-right" min={1} /></td>
+                        <td className="px-4 py-2"><Input size="sm" value={editItemForm.codigoBarras} onChange={(e) => setEditItemForm({ ...editItemForm, codigoBarras: e.target.value })} className="h-8 text-sm font-mono" /></td>
+                        <td className="px-4 py-2">
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => { updateItem.mutate({ id: item.id, ...editItemForm }); }} className="hover:bg-green-50 h-8 w-8 p-0">
+                              <Check className="w-4 h-4" style={{ color: "#16A34A" }} />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setEditingItemId(null)} className="hover:bg-gray-100 h-8 w-8 p-0">
+                              <X className="w-4 h-4" style={{ color: "hsl(207 20% 55%)" }} />
+                            </Button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-3 text-sm font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{item.nombre}</td>
+                        <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(String(item.precio))}</td>
+                        <td className="px-4 py-3 text-sm text-right">{item.cantidad}</td>
+                        <td className="px-4 py-3 text-sm font-mono text-xs" style={{ color: "hsl(207 20% 55%)" }}>{item.codigoBarras || "-"}</td>
+                        {adjDetail.estado === "activo" && (
+                          <td className="px-4 py-3">
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => { setEditingItemId(item.id); setEditItemForm({ nombre: item.nombre, precio: String(item.precio), cantidad: item.cantidad, codigoBarras: item.codigoBarras || "" }); }} className="hover:bg-blue-50 h-8 w-8 p-0">
+                                <Pencil className="w-4 h-4" style={{ color: "#1B3A5C" }} />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => removeItem.mutate({ id: item.id })} className="hover:bg-red-50 h-8 w-8 p-0">
+                                <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
+                              </Button>
+                            </div>
+                          </td>
+                        )}
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
