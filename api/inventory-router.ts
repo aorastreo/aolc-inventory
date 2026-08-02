@@ -194,20 +194,14 @@ export const inventoryRouter = createRouter({
 
       // Auto-generate barcode if not provided or empty
       if (!codigoBarras || codigoBarras.trim() === "") {
-        const conn = await getRawDb();
-        try {
-          // Find the highest numeric barcode starting with 7700
-          const [rows]: any = await conn.execute(
-            `SELECT codigoBarras FROM products WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
-          );
-          if (rows.length > 0 && rows[0].codigoBarras) {
-            const lastCode = parseInt(rows[0].codigoBarras, 10);
-            codigoBarras = String(lastCode + 1);
-          } else {
-            codigoBarras = "770001";
-          }
-        } finally {
-          await conn.end();
+        const rows: any = await db.execute(
+          sql`SELECT codigoBarras FROM products WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
+        );
+        if (rows.length > 0 && rows[0].codigoBarras) {
+          const lastCode = parseInt(rows[0].codigoBarras, 10);
+          codigoBarras = String(lastCode + 1);
+        } else {
+          codigoBarras = "770001";
         }
       }
 
@@ -358,22 +352,17 @@ export const inventoryRouter = createRouter({
 
       // Auto-generate barcode if not provided or empty
       if (!codigoBarras || codigoBarras.trim() === "") {
-        const conn = await getRawDb();
-        try {
-          // Find the highest numeric barcode across all tables (products + adjustmentItems)
-          const [productRows]: any = await conn.execute(
-            `SELECT codigoBarras FROM products WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
-          );
-          const [adjRows]: any = await conn.execute(
-            `SELECT codigoBarras FROM adjustmentItems WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
-          );
-          const lastProduct = productRows.length > 0 ? parseInt(productRows[0].codigoBarras, 10) : 0;
-          const lastAdj = adjRows.length > 0 ? parseInt(adjRows[0].codigoBarras, 10) : 0;
-          const lastCode = Math.max(lastProduct, lastAdj);
-          codigoBarras = lastCode > 0 ? String(lastCode + 1) : "770001";
-        } finally {
-          await conn.end();
-        }
+        // Find the highest numeric barcode across all tables (products + adjustmentItems)
+        const productRows: any = await db.execute(
+          sql`SELECT codigoBarras FROM products WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
+        );
+        const adjRows: any = await db.execute(
+          sql`SELECT codigoBarras FROM adjustmentItems WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
+        );
+        const lastProduct = productRows.length > 0 ? parseInt(productRows[0].codigoBarras, 10) : 0;
+        const lastAdj = adjRows.length > 0 ? parseInt(adjRows[0].codigoBarras, 10) : 0;
+        const lastCode = Math.max(lastProduct, lastAdj);
+        codigoBarras = lastCode > 0 ? String(lastCode + 1) : "770001";
       }
 
       const result = await db.insert(adjustmentItems).values({ ...input, codigoBarras });
