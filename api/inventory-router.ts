@@ -190,8 +190,29 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number(), palletId: z.number(), nombre: z.string(), precio: z.string(), cantidad: z.number().default(1), codigoBarras: z.string().optional(), codigo: z.string().optional(), esNuevo: z.boolean().default(false) }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const result = await db.insert(products).values(input);
-      return { id: Number(result[0].insertId) };
+      let codigoBarras = input.codigoBarras;
+
+      // Auto-generate barcode if not provided or empty
+      if (!codigoBarras || codigoBarras.trim() === "") {
+        const conn = await getRawDb();
+        try {
+          // Find the highest numeric barcode starting with 7700
+          const [rows]: any = await conn.execute(
+            `SELECT codigoBarras FROM products WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
+          );
+          if (rows.length > 0 && rows[0].codigoBarras) {
+            const lastCode = parseInt(rows[0].codigoBarras, 10);
+            codigoBarras = String(lastCode + 1);
+          } else {
+            codigoBarras = "770001";
+          }
+        } finally {
+          await conn.end();
+        }
+      }
+
+      const result = await db.insert(products).values({ ...input, codigoBarras });
+      return { id: Number(result[0].insertId), codigoBarras };
     }),
 
   updateProduct: publicQuery
