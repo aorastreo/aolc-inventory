@@ -217,7 +217,7 @@ export default function AdjustmentsPage() {
                 <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>Precio</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>Cant</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>Cod. Barras</th>
-                {adjDetail.estado === "activo" && <th className="w-12"></th>}
+                {adjDetail.estado !== "cancelado" && <th className="w-12"></th>}
               </tr>
             </thead>
             <tbody>
@@ -255,15 +255,17 @@ export default function AdjustmentsPage() {
                         <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(String(item.precio))}</td>
                         <td className="px-4 py-3 text-sm text-right">{item.cantidad}</td>
                         <td className="px-4 py-3 text-sm font-mono text-xs" style={{ color: "hsl(207 20% 55%)" }}>{item.codigoBarras || "-"}</td>
-                        {adjDetail.estado === "activo" && (
+                        {adjDetail.estado !== "cancelado" && (
                           <td className="px-4 py-3">
                             <div className="flex gap-1">
                               <Button variant="ghost" size="sm" onClick={() => { setEditingItemId(item.id); setEditItemForm({ nombre: item.nombre, precio: String(item.precio), cantidad: item.cantidad, codigoBarras: item.codigoBarras || "" }); }} className="hover:bg-blue-50 h-8 w-8 p-0">
                                 <Pencil className="w-4 h-4" style={{ color: "#1B3A5C" }} />
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={() => removeItem.mutate({ id: item.id })} className="hover:bg-red-50 h-8 w-8 p-0">
-                                <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
-                              </Button>
+                              {adjDetail.estado === "activo" && (
+                                <Button variant="ghost" size="sm" onClick={() => removeItem.mutate({ id: item.id })} className="hover:bg-red-50 h-8 w-8 p-0">
+                                  <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
+                                </Button>
+                              )}
                             </div>
                           </td>
                         )}
