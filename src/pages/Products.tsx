@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Search, Plus, Trash2, Package, Barcode } from "lucide-react";
+import { ArrowLeft, Search, Plus, Trash2, Package, Barcode, Pencil, Check, X } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
@@ -29,12 +29,19 @@ export default function ProductsPage() {
   const deleteProduct = trpc.inventory.deleteProduct.useMutation({
     onSuccess: () => utils.inventory.products.invalidate(),
   });
+  const updateProduct = trpc.inventory.updateProduct.useMutation({
+    onSuccess: () => { utils.inventory.products.invalidate(); setEditingProductId(null); },
+  });
 
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // New product form state
   const [form, setForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
+
+  // Inline edit state
+  const [editingProductId, setEditingProductId] = useState<number | null>(null);
+  const [editProductForm, setEditProductForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-full">
@@ -167,26 +174,56 @@ export default function ProductsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filtered?.map((product) => (
-                <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors border-b" style={{ borderColor: "hsl(210 20% 94%)" }}>
-                  <TableCell className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>{product.codigo || "-"}</TableCell>
-                  <TableCell className="text-sm font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{product.nombre}</TableCell>
-                  <TableCell className="text-right text-sm font-semibold" style={{ color: "hsl(207 55% 15%)" }}>
-                    {Number(product.precio).toLocaleString("es-CR", { style: "currency", currency: "CRC" })}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className="inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: "rgba(27,58,92,0.1)", color: BRAND_BLUE }}>
-                      {product.cantidad}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-sm font-mono text-xs" style={{ color: "hsl(207 20% 55%)" }}>{product.codigoBarras || "-"}</TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="sm" onClick={() => deleteProduct.mutate({ id: product.id })} className="hover:bg-red-50">
-                      <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+              filtered?.map((product) => {
+                const isEditing = editingProductId === product.id;
+                return (
+                  <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors border-b" style={{ borderColor: "hsl(210 20% 94%)" }}>
+                    {isEditing ? (
+                      <>
+                        <TableCell className="py-2"><Input size="sm" value={product.codigo || ""} disabled className="h-8 text-sm bg-gray-50" /></TableCell>
+                        <TableCell className="py-2"><Input size="sm" value={editProductForm.nombre} onChange={(e) => setEditProductForm({ ...editProductForm, nombre: e.target.value })} className="h-8 text-sm" /></TableCell>
+                        <TableCell className="py-2"><Input type="number" size="sm" value={editProductForm.precio} onChange={(e) => setEditProductForm({ ...editProductForm, precio: e.target.value })} className="h-8 text-sm text-right" /></TableCell>
+                        <TableCell className="py-2"><Input type="number" size="sm" value={editProductForm.cantidad} onChange={(e) => setEditProductForm({ ...editProductForm, cantidad: Number(e.target.value) })} className="h-8 text-sm text-right" min={1} /></TableCell>
+                        <TableCell className="py-2"><Input size="sm" value={editProductForm.codigoBarras} onChange={(e) => setEditProductForm({ ...editProductForm, codigoBarras: e.target.value })} className="h-8 text-sm font-mono" /></TableCell>
+                        <TableCell className="py-2">
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => { updateProduct.mutate({ id: product.id, ...editProductForm }); }} className="hover:bg-green-50 h-8 w-8 p-0">
+                              <Check className="w-4 h-4" style={{ color: "#16A34A" }} />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setEditingProductId(null)} className="hover:bg-gray-100 h-8 w-8 p-0">
+                              <X className="w-4 h-4" style={{ color: "hsl(207 20% 55%)" }} />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>{product.codigo || "-"}</TableCell>
+                        <TableCell className="text-sm font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{product.nombre}</TableCell>
+                        <TableCell className="text-right text-sm font-semibold" style={{ color: "hsl(207 55% 15%)" }}>
+                          {Number(product.precio).toLocaleString("es-CR", { style: "currency", currency: "CRC" })}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className="inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: "rgba(27,58,92,0.1)", color: BRAND_BLUE }}>
+                            {product.cantidad}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-sm font-mono text-xs" style={{ color: "hsl(207 20% 55%)" }}>{product.codigoBarras || "-"}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => { setEditingProductId(product.id); setEditProductForm({ nombre: product.nombre, precio: String(product.precio), cantidad: product.cantidad, codigoBarras: product.codigoBarras || "" }); }} className="hover:bg-blue-50 h-8 w-8 p-0">
+                              <Pencil className="w-4 h-4" style={{ color: "#1B3A5C" }} />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => deleteProduct.mutate({ id: product.id })} className="hover:bg-red-50 h-8 w-8 p-0">
+                              <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </>
+                    )}
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
