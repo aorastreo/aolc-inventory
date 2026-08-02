@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
-  ClipboardList, CheckCircle, Clock, XCircle, Plus, Eye, Trash2, ArrowLeft, Package, X, Barcode, Pencil, Check,
+  ClipboardList, CheckCircle, Clock, XCircle, Plus, Eye, Trash2, ArrowLeft, Package, X, Barcode, Pencil, Check, Search,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
@@ -44,6 +44,9 @@ export default function AdjustmentsPage() {
   // Inline edit state
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editItemForm, setEditItemForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
+
+  // Item search/filter
+  const [itemSearch, setItemSearch] = useState("");
 
   // Pre-fill palletId when coming from a filtered view
   useEffect(() => {
@@ -190,6 +193,19 @@ export default function AdjustmentsPage() {
           </Card>
         )}
 
+        {/* Items search */}
+        {adjItems && adjItems.length > 0 && (
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "hsl(207 20% 55%)" }} />
+            <Input
+              placeholder="Buscar por nombre, codigo o precio..."
+              value={itemSearch}
+              onChange={(e) => setItemSearch(e.target.value)}
+              className="pl-9 h-10"
+            />
+          </div>
+        )}
+
         {/* Items table */}
         <div className="bg-white rounded-xl border shadow-sm overflow-hidden mb-6">
           <table className="w-full">
@@ -204,7 +220,13 @@ export default function AdjustmentsPage() {
               </tr>
             </thead>
             <tbody>
-              {[...(adjItems || [])].reverse().map((item, idx) => {
+              {[...(adjItems || [])].reverse().filter(item => {
+                if (!itemSearch.trim()) return true;
+                const q = itemSearch.toLowerCase();
+                return item.nombre.toLowerCase().includes(q) ||
+                  (item.codigoBarras && item.codigoBarras.includes(q)) ||
+                  String(item.precio).includes(q);
+              }).map((item, idx) => {
                 const isEditing = editingItemId === item.id;
                 return (
                   <tr key={item.id} className="border-b hover:bg-gray-50/50 transition-colors" style={{ borderColor: "hsl(210 20% 94%)" }}>
