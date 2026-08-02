@@ -32,6 +32,7 @@ export default function AdjustmentsPage() {
   const createAdj = trpc.inventory.createAdjustment.useMutation({ onSuccess: () => utils.inventory.adjustments.invalidate() });
   const completeAdj = trpc.inventory.completeAdjustment.useMutation({ onSuccess: () => { utils.inventory.adjustments.invalidate(); utils.inventory.products.invalidate(); } });
   const cancelAdj = trpc.inventory.cancelAdjustment.useMutation({ onSuccess: () => utils.inventory.adjustments.invalidate() });
+  const applyToContainer = trpc.inventory.applyAdjustmentToContainer.useMutation({ onSuccess: () => { utils.inventory.adjustments.invalidate(); utils.inventory.products.invalidate(); } });
   const addItem = trpc.inventory.addAdjustmentItem.useMutation({ onSuccess: () => { utils.inventory.adjustmentItems.invalidate(); utils.inventory.adjustments.invalidate(); } });
   const removeItem = trpc.inventory.removeAdjustmentItem.useMutation({ onSuccess: () => utils.inventory.adjustmentItems.invalidate() });
   const updateItem = trpc.inventory.updateAdjustmentItem.useMutation({ onSuccess: () => { utils.inventory.adjustmentItems.invalidate(); setEditingItemId(null); } });
@@ -293,6 +294,20 @@ export default function AdjustmentsPage() {
             >
               <XCircle className="w-4 h-4 mr-2" />
               Cancelar Ajuste
+            </Button>
+          </div>
+        )}
+
+        {/* Apply completed adjustment to container */}
+        {adjDetail.estado === "completado" && (
+          <div className="flex gap-3">
+            <Button
+              onClick={() => { applyToContainer.mutate({ id: viewingAdj }); }}
+              className="font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90"
+              style={{ background: "#16A34A" }}
+            >
+              <Package className="w-4 h-4 mr-2" />
+              Aplicar al Contenedor
             </Button>
           </div>
         )}

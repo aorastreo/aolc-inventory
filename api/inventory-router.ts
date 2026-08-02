@@ -424,6 +424,37 @@ export const inventoryRouter = createRouter({
       return { success: true, productsAdded: items.length };
     }),
 
+  applyAdjustmentToContainer: publicQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+
+      // Get the adjustment to find the pallet/store
+      const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id));
+      if (!adj) throw new Error("Ajuste no encontrado");
+
+      // Get all items from this adjustment
+      const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.id));
+      if (items.length === 0) throw new Error("El ajuste no tiene articulos");
+
+      // Insert each item as a product into the container (pallet)
+      let productsAdded = 0;
+      for (const item of items) {
+        await db.insert(products).values({
+          storeId: adj.storeId,
+          palletId: adj.palletId,
+          nombre: item.nombre,
+          precio: String(item.precio),
+          cantidad: item.cantidad,
+          codigoBarras: item.codigoBarras,
+          esNuevo: false,
+        });
+        productsAdded++;
+      }
+
+      return { success: true, productsAdded };
+    }),
+
   cancelAdjustment: publicQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
