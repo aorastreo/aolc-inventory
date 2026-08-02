@@ -455,6 +455,33 @@ export const inventoryRouter = createRouter({
       return { success: true, productsAdded };
     }),
 
+  forceApplyAdjustment: publicQuery
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id));
+      if (!adj) return { error: "Ajuste no encontrado" };
+
+      const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.id));
+      if (items.length === 0) return { error: "Sin articulos" };
+
+      let productsAdded = 0;
+      for (const item of items) {
+        await db.insert(products).values({
+          storeId: adj.storeId,
+          palletId: adj.palletId,
+          nombre: item.nombre,
+          precio: String(item.precio),
+          cantidad: item.cantidad,
+          codigoBarras: item.codigoBarras,
+          esNuevo: false,
+        });
+        productsAdded++;
+      }
+
+      return { success: true, productsAdded, palletId: adj.palletId };
+    }),
+
   cancelAdjustment: publicQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {

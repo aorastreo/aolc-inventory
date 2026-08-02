@@ -221,4 +221,38 @@ export function initRoute(app: Hono) {
       await conn.end();
     }
   });
+
+  // Force apply a completed adjustment to its container (pallet)
+  app.get("/api/force-apply-adjustment", async (c) => {
+    const id = c.req.query("id");
+    if (!id) return c.json({ error: "Missing ?id= parameter" }, 400);
+
+    const conn = await getRawDb();
+    try {
+      // Get adjustment
+      const [adjRows]: any = await conn.execute("SELECT * FROM adjustments WHERE id = ?", [id]);
+      if (adjRows.length === 0) return c.json({ error: "Adjustment not found" }, 404);
+      const adj = adjRows[0];
+
+      // Get items
+      const [itemRows]: any = await conn.execute("SELECT * FROM adjustmentItems WHERE adjustmentId = ?", [id]);
+      if (itemRows.length === 0) return c.json({ error: "No items in adjustment" }, 400);
+
+      // Insert items as products
+      let productsAdded = 0;
+      for (const item of itemRows) {
+        await conn.execute(
+          "INSERT INTO products (storeId, palletId, nombre, precio, cantidad, codigoBarras, esNuevo) VALUES (?, ?, ?, ?, ?, ?, false)",
+          [adj.storeId, adj.palletId, item.nombre, String(item.precio), item.cantidad, item.codigoBarras]
+        );
+        productsAdded++;
+      }
+
+      return c.json({ success: true, productsAdded, adjustmentId: adj.id, palletId: adj.palletId });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
 }
