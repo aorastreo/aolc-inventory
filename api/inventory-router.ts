@@ -354,8 +354,30 @@ export const inventoryRouter = createRouter({
     .input(z.object({ adjustmentId: z.number(), nombre: z.string(), precio: z.string(), cantidad: z.number().default(1), codigoBarras: z.string().optional(), orden: z.number().default(1) }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const result = await db.insert(adjustmentItems).values(input);
-      return { id: Number(result[0].insertId) };
+      let { codigoBarras } = input;
+
+      // Auto-generate barcode if not provided or empty
+      if (!codigoBarras || codigoBarras.trim() === "") {
+        const conn = await getRawDb();
+        try {
+          // Find the highest numeric barcode across all tables (products + adjustmentItems)
+          const [productRows]: any = await conn.execute(
+            `SELECT codigoBarras FROM products WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
+          );
+          const [adjRows]: any = await conn.execute(
+            `SELECT codigoBarras FROM adjustmentItems WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
+          );
+          const lastProduct = productRows.length > 0 ? parseInt(productRows[0].codigoBarras, 10) : 0;
+          const lastAdj = adjRows.length > 0 ? parseInt(adjRows[0].codigoBarras, 10) : 0;
+          const lastCode = Math.max(lastProduct, lastAdj);
+          codigoBarras = lastCode > 0 ? String(lastCode + 1) : "770001";
+        } finally {
+          await conn.end();
+        }
+      }
+
+      const result = await db.insert(adjustmentItems).values({ ...input, codigoBarras });
+      return { id: Number(result[0].insertId), codigoBarras };
     }),
 
   removeAdjustmentItem: publicQuery
