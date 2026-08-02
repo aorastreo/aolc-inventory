@@ -54,6 +54,11 @@ export default function AdjustmentsPage() {
 
   const { data: adjDetail } = trpc.inventory.adjustmentById.useQuery({ id: viewingAdj! }, { enabled: !!viewingAdj });
   const { data: adjItems } = trpc.inventory.adjustmentItems.useQuery({ adjustmentId: viewingAdj! }, { enabled: !!viewingAdj });
+  // Products from the container (pallet) associated with this adjustment
+  const { data: palletProducts } = trpc.inventory.products.useQuery(
+    { storeId: 1, palletId: adjDetail?.palletId || 0 },
+    { enabled: !!adjDetail?.palletId }
+  );
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-full">
@@ -121,6 +126,22 @@ export default function AdjustmentsPage() {
           </div>
         </div>
 
+        {/* Stats bar */}
+        {adjItems && adjItems.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 mb-5">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: "rgba(178,34,52,0.12)", color: BRAND_RED }}>
+              <ClipboardList className="w-4 h-4" />
+              <span>Ajuste: {adjItems.length} productos | {adjItems.reduce((s, i) => s + (i.cantidad || 0), 0)} unidades | {adjItems.reduce((s, i) => s + (Number(i.precio) || 0) * (i.cantidad || 0), 0).toLocaleString("es-CR")}</span>
+            </div>
+            {palletProducts && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: "rgba(22,163,74,0.12)", color: "#16A34A" }}>
+                <Package className="w-4 h-4" />
+                <span>Contenedor: {palletProducts.length} articulos | {palletProducts.reduce((s, p) => s + (p.cantidad || 0), 0)} unidades | {palletProducts.reduce((s, p) => s + (Number(p.precio) || 0) * (p.cantidad || 0), 0).toLocaleString("es-CR")}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Add item form */}
         {adjDetail.estado === "activo" && (
           <Card className="mb-6 border shadow-sm">
@@ -183,7 +204,7 @@ export default function AdjustmentsPage() {
               </tr>
             </thead>
             <tbody>
-              {adjItems?.map((item, idx) => {
+              {[...(adjItems || [])].reverse().map((item, idx) => {
                 const isEditing = editingItemId === item.id;
                 return (
                   <tr key={item.id} className="border-b hover:bg-gray-50/50 transition-colors" style={{ borderColor: "hsl(210 20% 94%)" }}>
