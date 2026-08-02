@@ -398,8 +398,30 @@ export const inventoryRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
+
+      // Get the adjustment to find the pallet/store
+      const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id));
+      if (!adj) throw new Error("Ajuste no encontrado");
+
+      // Get all items from this adjustment
+      const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.id));
+
+      // Insert each item as a product into the container (pallet)
+      for (const item of items) {
+        await db.insert(products).values({
+          storeId: adj.storeId,
+          palletId: adj.palletId,
+          nombre: item.nombre,
+          precio: String(item.precio),
+          cantidad: item.cantidad,
+          codigoBarras: item.codigoBarras,
+          esNuevo: false,
+        });
+      }
+
+      // Mark adjustment as completed
       await db.update(adjustments).set({ estado: "completado", completedAt: new Date() }).where(eq(adjustments.id, input.id));
-      return { success: true };
+      return { success: true, productsAdded: items.length };
     }),
 
   cancelAdjustment: publicQuery
