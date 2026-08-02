@@ -194,11 +194,14 @@ export const inventoryRouter = createRouter({
 
       // Auto-generate barcode if not provided or empty
       if (!codigoBarras || codigoBarras.trim() === "") {
-        const rows: any = await db.execute(
+        const result: any = await db.execute(
           sql`SELECT codigoBarras FROM products WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
         );
-        if (rows.length > 0 && rows[0].codigoBarras) {
-          const lastCode = parseInt(rows[0].codigoBarras, 10);
+        // mysql2 returns [rows, fields] tuple
+        const rows = Array.isArray(result) ? result[0] : (result.rows || result);
+        const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+        if (row && row.codigoBarras) {
+          const lastCode = parseInt(row.codigoBarras, 10);
           codigoBarras = String(lastCode + 1);
         } else {
           codigoBarras = "770001";
@@ -353,14 +356,19 @@ export const inventoryRouter = createRouter({
       // Auto-generate barcode if not provided or empty
       if (!codigoBarras || codigoBarras.trim() === "") {
         // Find the highest numeric barcode across all tables (products + adjustmentItems)
-        const productRows: any = await db.execute(
+        const productResult: any = await db.execute(
           sql`SELECT codigoBarras FROM products WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
         );
-        const adjRows: any = await db.execute(
+        const adjResult: any = await db.execute(
           sql`SELECT codigoBarras FROM adjustmentItems WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
         );
-        const lastProduct = productRows.length > 0 ? parseInt(productRows[0].codigoBarras, 10) : 0;
-        const lastAdj = adjRows.length > 0 ? parseInt(adjRows[0].codigoBarras, 10) : 0;
+        // mysql2 returns [rows, fields] tuple
+        const pRows = Array.isArray(productResult) ? productResult[0] : (productResult.rows || productResult);
+        const aRows = Array.isArray(adjResult) ? adjResult[0] : (adjResult.rows || adjResult);
+        const pRow = Array.isArray(pRows) && pRows.length > 0 ? pRows[0] : null;
+        const aRow = Array.isArray(aRows) && aRows.length > 0 ? aRows[0] : null;
+        const lastProduct = pRow && pRow.codigoBarras ? parseInt(pRow.codigoBarras, 10) : 0;
+        const lastAdj = aRow && aRow.codigoBarras ? parseInt(aRow.codigoBarras, 10) : 0;
         const lastCode = Math.max(lastProduct, lastAdj);
         codigoBarras = lastCode > 0 ? String(lastCode + 1) : "770001";
       }
