@@ -35,6 +35,7 @@ export default function TransfersPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newTransfer, setNewTransfer] = useState({ fromStoreId: "", toStoreId: "", fecha: new Date().toISOString().split("T")[0] });
+  const [transferError, setTransferError] = useState("");
 
   // Viewing a single transfer
   const [viewingTransfer, setViewingTransfer] = useState<number | null>(null);
@@ -87,14 +88,17 @@ export default function TransfersPage() {
   };
 
   const handleCreateTransfer = () => {
-    if (!newTransfer.fromStoreId || !newTransfer.toStoreId) return;
-    if (newTransfer.fromStoreId === newTransfer.toStoreId) return;
+    setTransferError("");
+    if (!newTransfer.fromStoreId) { setTransferError("Seleccione tienda origen"); return; }
+    if (!newTransfer.toStoreId) { setTransferError("Seleccione tienda destino"); return; }
+    if (newTransfer.fromStoreId === newTransfer.toStoreId) { setTransferError("Tienda origen y destino deben ser diferentes"); return; }
     createTransfer.mutate({
       fromStoreId: Number(newTransfer.fromStoreId),
       toStoreId: Number(newTransfer.toStoreId),
       fecha: newTransfer.fecha,
     });
     setNewTransfer({ fromStoreId: "", toStoreId: "", fecha: new Date().toISOString().split("T")[0] });
+    setTransferError("");
   };
 
   // Export to CSV
@@ -335,14 +339,14 @@ export default function TransfersPage() {
             <div className="space-y-4 mt-2">
               <div>
                 <Label>Tienda Origen</Label>
-                <select className="w-full h-10 border rounded-md px-3 text-sm" style={{ borderColor: "hsl(210 20% 88%)" }} value={newTransfer.fromStoreId} onChange={(e) => setNewTransfer({ ...newTransfer, fromStoreId: e.target.value })}>
+                <select className="w-full h-10 border rounded-md px-3 text-sm" style={{ borderColor: "hsl(210 20% 88%)" }} value={newTransfer.fromStoreId} onChange={(e) => { setTransferError(""); setNewTransfer({ ...newTransfer, fromStoreId: e.target.value }); }}>
                   <option value="">Seleccionar tienda origen</option>
                   {stores?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div>
                 <Label>Tienda Destino</Label>
-                <select className="w-full h-10 border rounded-md px-3 text-sm" style={{ borderColor: "hsl(210 20% 88%)" }} value={newTransfer.toStoreId} onChange={(e) => setNewTransfer({ ...newTransfer, toStoreId: e.target.value })}>
+                <select className="w-full h-10 border rounded-md px-3 text-sm" style={{ borderColor: "hsl(210 20% 88%)" }} value={newTransfer.toStoreId} onChange={(e) => { setTransferError(""); setNewTransfer({ ...newTransfer, toStoreId: e.target.value }); }}>
                   <option value="">Seleccionar tienda destino</option>
                   {stores?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
@@ -351,6 +355,9 @@ export default function TransfersPage() {
                 <Label>Fecha</Label>
                 <Input type="date" value={newTransfer.fecha} onChange={(e) => setNewTransfer({ ...newTransfer, fecha: e.target.value })} />
               </div>
+              {transferError && (
+                <p className="text-sm font-medium px-3 py-2 rounded-lg bg-red-50" style={{ color: "#DC2626" }}>{transferError}</p>
+              )}
               <Button onClick={handleCreateTransfer} className="w-full font-medium" style={{ background: BRAND_RED }}>
                 Crear Transferencia
               </Button>
