@@ -103,24 +103,16 @@ export default function AdjustmentsPage() {
 
   const exportToCSV = () => {
     if (!adjItems || adjItems.length === 0 || !adjDetail) return;
-    let csv = "Codigo Barras,Nombre,Precio Unitario,Cantidad,Subtotal\n";
-    let total = 0;
-    let totalQty = 0;
+    let csv = "CODIGO,ARTICULO,DESCRIPCION,CATEGORIA,SUBCATEGORIA,ESTADO,CANTIDAD,PRECIO\n";
     adjItems.forEach(item => {
-      const subtotal = Number(item.precio) * item.cantidad;
-      total += subtotal;
-      totalQty += item.cantidad;
-      csv += `${item.codigoBarras || ""},"${item.nombre}",${item.precio},${item.cantidad},${subtotal}\n`;
+      csv += `${item.codigoBarras || ""},${item.nombre},${item.nombre},2,FNCQ,Nuevo,${item.cantidad},${item.precio}\n`;
     });
-    csv += `,,TOTAL:,${totalQty},${total}\n`;
-    csv += `,,Ajuste ID:,${adjDetail.adjustmentId},\n`;
-    csv += `,,Fecha:,${adjDetail.fecha},\n`;
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `ajuste-${adjDetail.adjustmentId}-${adjDetail.fecha}.csv`;
+    link.download = `qupos-ajuste-${adjDetail.adjustmentId}-${adjDetail.fecha}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
