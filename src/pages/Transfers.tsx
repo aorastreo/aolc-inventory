@@ -14,7 +14,7 @@ const BRAND_BLUE = "#1B3A5C";
 
 export default function TransfersPage() {
   const utils = trpc.useUtils();
-  const { data: stores } = trpc.inventory.stores.useQuery();
+  const { data: stores } = trpc.inventory.allStores.useQuery();
   const { data: transfersList, isLoading } = trpc.inventory.getTransfers.useQuery({ storeId: 1 });
 
   const createTransfer = trpc.inventory.createTransfer.useMutation({

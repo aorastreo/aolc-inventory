@@ -255,4 +255,24 @@ export function initRoute(app: Hono) {
       await conn.end();
     }
   });
+
+  // Quick add store
+  app.get("/api/add-store", async (c) => {
+    const name = c.req.query("name");
+    const slug = c.req.query("slug");
+    if (!name || !slug) return c.json({ error: "Missing ?name= and ?slug= parameters" }, 400);
+
+    const conn = await getRawDb();
+    try {
+      const [result]: any = await conn.execute(
+        "INSERT INTO stores (name, slug, description, isActive) VALUES (?, ?, ?, true)",
+        [name, slug, name]
+      );
+      return c.json({ success: true, id: result.insertId, name, slug });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
 }

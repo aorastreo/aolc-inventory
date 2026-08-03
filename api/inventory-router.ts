@@ -16,6 +16,19 @@ export const inventoryRouter = createRouter({
     return db.select().from(stores).where(eq(stores.isActive, true));
   }),
 
+  allStores: publicQuery.query(async () => {
+    const db = getDb();
+    return db.select().from(stores).orderBy(stores.id);
+  }),
+
+  createStore: publicQuery
+    .input(z.object({ name: z.string(), slug: z.string(), description: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const result = await db.insert(stores).values({ name: input.name, slug: input.slug, description: input.description || "" });
+      return { id: Number(result[0].insertId) };
+    }),
+
   // ========== PALLETS ==========
   pallets: publicQuery
     .input(z.object({ storeId: z.number() }))
