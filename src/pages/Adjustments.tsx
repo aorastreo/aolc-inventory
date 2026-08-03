@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
-  ClipboardList, CheckCircle, Clock, XCircle, Plus, Eye, Trash2, ArrowLeft, Package, X, Barcode, Pencil, Check, Search,
+  ClipboardList, CheckCircle, Clock, XCircle, Plus, Eye, Trash2, ArrowLeft, Package, X, Barcode, Pencil, Check, Search, Download,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
@@ -101,6 +101,30 @@ export default function AdjustmentsPage() {
 
   const formatCurrency = (value: string) => Number(value || 0).toLocaleString("es-CR", { style: "currency", currency: "CRC" });
 
+  const exportToCSV = () => {
+    if (!adjItems || adjItems.length === 0 || !adjDetail) return;
+    let csv = "Codigo Barras,Nombre,Precio Unitario,Cantidad,Subtotal\n";
+    let total = 0;
+    let totalQty = 0;
+    adjItems.forEach(item => {
+      const subtotal = Number(item.precio) * item.cantidad;
+      total += subtotal;
+      totalQty += item.cantidad;
+      csv += `${item.codigoBarras || ""},"${item.nombre}",${item.precio},${item.cantidad},${subtotal}\n`;
+    });
+    csv += `,,TOTAL:,${totalQty},${total}\n`;
+    csv += `,,Ajuste ID:,${adjDetail.adjustmentId},\n`;
+    csv += `,,Fecha:,${adjDetail.fecha},\n`;
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ajuste-${adjDetail.adjustmentId}-${adjDetail.fecha}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Detail view
   if (viewingAdj && adjDetail) {
     const status = getStatusConfig(adjDetail.estado);
@@ -137,6 +161,10 @@ export default function AdjustmentsPage() {
               <ClipboardList className="w-4 h-4" />
               <span>Ajuste: {adjItems.length} productos | {adjItems.reduce((s, i) => s + (i.cantidad || 0), 0)} unidades | {adjItems.reduce((s, i) => s + (Number(i.precio) || 0) * (i.cantidad || 0), 0).toLocaleString("es-CR")}</span>
             </div>
+            <Button variant="outline" size="sm" onClick={exportToCSV} className="font-medium" style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}>
+              <Download className="w-4 h-4 mr-2" />
+              Descargar Excel
+            </Button>
             {palletProducts && (
               <div className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: "rgba(22,163,74,0.12)", color: "#16A34A" }}>
                 <Package className="w-4 h-4" />
