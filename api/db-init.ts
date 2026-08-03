@@ -127,6 +127,26 @@ const TABLES = [
     estado ENUM('pendiente','en_progreso','completado') DEFAULT 'pendiente',
     createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
   )`,
+
+  `CREATE TABLE IF NOT EXISTS transfers (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    fromStoreId BIGINT UNSIGNED NOT NULL,
+    toStoreId BIGINT UNSIGNED NOT NULL,
+    fecha VARCHAR(20) NOT NULL,
+    estado ENUM('activo','completado','cancelado') DEFAULT 'activo' NOT NULL,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS transferItems (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    transferId BIGINT UNSIGNED NOT NULL,
+    codigoBarras VARCHAR(50),
+    nombre VARCHAR(255) NOT NULL,
+    precio DECIMAL(12,2) NOT NULL,
+    cantidad INT DEFAULT 1 NOT NULL,
+    orden INT DEFAULT 1,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+  )`,
 ];
 
 async function getRawDb() {

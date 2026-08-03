@@ -16,12 +16,14 @@ import {
   Database,
   Tag,
   Printer,
+  ArrowLeftRight,
 } from "lucide-react";
 
 const menuItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "manager"] },
   { path: "/pallets", label: "Contenedores", icon: Package, roles: ["admin", "manager"] },
   { path: "/adjustments", label: "Ajustes", icon: ClipboardList, roles: ["admin", "manager"] },
+  { path: "/transfers", label: "Transferencias", icon: ArrowLeftRight, roles: ["admin", "manager"] },
   { path: "/closings", label: "Cierres", icon: Receipt, roles: ["admin", "manager", "employee"] },
   { path: "/catalog", label: "Catalogo", icon: Database, roles: ["admin", "manager"] },
   { path: "/labels", label: "Etiquetas", icon: Tag, roles: ["admin", "manager", "employee"] },

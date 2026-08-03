@@ -284,3 +284,31 @@ export const labelConfig = mysqlTable("labelConfig", {
 });
 
 export type LabelConfig = typeof labelConfig.$inferSelect;
+
+// ============================================
+// TRANSFERS (Transferencias entre tiendas)
+// ============================================
+export const transfers = mysqlTable("transfers", {
+  id: serial("id").primaryKey(),
+  fromStoreId: bigint("fromStoreId", { mode: "number", unsigned: true }).notNull(),
+  toStoreId: bigint("toStoreId", { mode: "number", unsigned: true }).notNull(),
+  fecha: varchar("fecha", { length: 20 }).notNull(),
+  estado: varchar("estado", { length: 20 }).notNull().default("activo"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Transfer = typeof transfers.$inferSelect;
+export type InsertTransfer = typeof transfers.$inferInsert;
+
+export const transferItems = mysqlTable("transferItems", {
+  id: serial("id").primaryKey(),
+  transferId: bigint("transferId", { mode: "number", unsigned: true }).notNull(),
+  codigoBarras: varchar("codigoBarras", { length: 50 }),
+  nombre: varchar("nombre", { length: 255 }).notNull(),
+  precio: decimal("precio", { precision: 12, scale: 2 }).notNull(),
+  cantidad: int("cantidad").default(1).notNull(),
+  orden: int("orden").default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TransferItem = typeof transferItems.$inferInsert;

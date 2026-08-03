@@ -7,6 +7,7 @@ import DashboardPage from "@/pages/Dashboard";
 import PalletsPage from "@/pages/Pallets";
 import ProductsPage from "@/pages/Products";
 import AdjustmentsPage from "@/pages/Adjustments";
+import TransfersPage from "@/pages/Transfers";
 import ClosingsPage from "@/pages/Closings";
 import SettingsPage from "@/pages/Settings";
 import CatalogPage from "@/pages/Catalog";
@@ -62,6 +63,7 @@ function App() {
         <Route path="/pallets" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><PalletsPage /></ProtectedRoute>} />
         <Route path="/pallets/:palletId/products" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><ProductsPage /></ProtectedRoute>} />
         <Route path="/adjustments" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><AdjustmentsPage /></ProtectedRoute>} />
+        <Route path="/transfers" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><TransfersPage /></ProtectedRoute>} />
         <Route path="/closings" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><ClosingsPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin"]}><SettingsPage /></ProtectedRoute>} />
         <Route path="/label-config" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><LabelConfigPage /></ProtectedRoute>} />

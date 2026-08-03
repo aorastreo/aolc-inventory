@@ -3,9 +3,10 @@ import { createRouter, publicQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   stores, pallets, products, productDatabase,
-  adjustments, adjustmentItems, closings, assemblers, assemblyAssignments, employees, printedLabels
+  adjustments, adjustmentItems, closings, assemblers, assemblyAssignments, employees, printedLabels,
+  transfers, transferItems,
 } from "@db/schema";
-import { eq, and, desc, like, sql, count } from "drizzle-orm";
+import { eq, and, desc, like, sql, count, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export const inventoryRouter = createRouter({
@@ -920,6 +921,78 @@ export const inventoryRouter = createRouter({
     .mutation(async ({ input }) => {
       const db = getDb();
       await db.update(employees).set({ isActive: false }).where(eq(employees.id, input.id));
+      return { success: true };
+    }),
+
+  // ========== SEARCH PRODUCT BY BARCODE ==========
+  searchProductByBarcode: publicQuery
+    .input(z.object({ storeId: z.number(), barcode: z.string() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const rows = await db.select()
+        .from(products)
+        .where(and(eq(products.storeId, input.storeId), eq(products.codigoBarras, input.barcode), eq(products.isActive, true)))
+        .limit(1);
+      return rows[0] || null;
+    }),
+
+  // ========== TRANSFERS ==========
+  createTransfer: publicQuery
+    .input(z.object({ fromStoreId: z.number(), toStoreId: z.number(), fecha: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const result = await db.insert(transfers).values(input);
+      return { id: Number(result[0].insertId) };
+    }),
+
+  getTransfers: publicQuery
+    .input(z.object({ storeId: z.number().optional() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      if (input.storeId) {
+        return db.select().from(transfers)
+          .where(or(eq(transfers.fromStoreId, input.storeId), eq(transfers.toStoreId, input.storeId)))
+          .orderBy(desc(transfers.createdAt));
+      }
+      return db.select().from(transfers).orderBy(desc(transfers.createdAt));
+    }),
+
+  getTransferItems: publicQuery
+    .input(z.object({ transferId: z.number() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      return db.select().from(transferItems).where(eq(transferItems.transferId, input.transferId)).orderBy(transferItems.orden);
+    }),
+
+  addTransferItem: publicQuery
+    .input(z.object({ transferId: z.number(), codigoBarras: z.string().optional(), nombre: z.string(), precio: z.string(), cantidad: z.number().default(1), orden: z.number().default(1) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const result = await db.insert(transferItems).values(input);
+      return { id: Number(result[0].insertId) };
+    }),
+
+  removeTransferItem: publicQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.delete(transferItems).where(eq(transferItems.id, input.id));
+      return { success: true };
+    }),
+
+  completeTransfer: publicQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.update(transfers).set({ estado: "completado" }).where(eq(transfers.id, input.id));
+      return { success: true };
+    }),
+
+  cancelTransfer: publicQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.update(transfers).set({ estado: "cancelado" }).where(eq(transfers.id, input.id));
       return { success: true };
     }),
 });
