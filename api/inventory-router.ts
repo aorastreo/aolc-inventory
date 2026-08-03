@@ -937,16 +937,40 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  // ========== SEARCH PRODUCT BY BARCODE ==========
+  // ========== SEARCH PRODUCT BY BARCODE (anywhere) ==========
   searchProductByBarcode: publicQuery
     .input(z.object({ storeId: z.number(), barcode: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
-      const rows = await db.select()
+
+      // 1. Search in products (containers)
+      const prodRows = await db.select()
         .from(products)
         .where(and(eq(products.storeId, input.storeId), eq(products.codigoBarras, input.barcode), eq(products.isActive, true)))
         .limit(1);
-      return rows[0] || null;
+      if (prodRows.length > 0) return prodRows[0];
+
+      // 2. Search in productDatabase (catalog)
+      const dbRows = await db.select()
+        .from(productDatabase)
+        .where(and(eq(productDatabase.storeId, input.storeId), eq(productDatabase.codigoBarras, input.barcode)))
+        .limit(1);
+      if (dbRows.length > 0) {
+        const row = dbRows[0];
+        return { id: row.id, nombre: row.nombre, precio: row.precio, cantidad: 999, codigoBarras: row.codigoBarras };
+      }
+
+      // 3. Search in adjustmentItems (recent adjustments)
+      const adjRows: any = await db.execute(
+        sql`SELECT ai.* FROM adjustmentItems ai JOIN adjustments a ON ai.adjustmentId = a.id WHERE ai.codigoBarras = ${input.barcode} AND a.storeId = ${input.storeId} ORDER BY ai.id DESC LIMIT 1`
+      );
+      const adjItems = Array.isArray(adjRows) ? adjRows[0] : (adjRows.rows || adjRows);
+      if (Array.isArray(adjItems) && adjItems.length > 0) {
+        const row = adjItems[0];
+        return { id: row.id, nombre: row.nombre, precio: row.precio, cantidad: 999, codigoBarras: row.codigoBarras };
+      }
+
+      return null;
     }),
 
   // ========== TRANSFERS ==========
