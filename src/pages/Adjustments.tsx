@@ -103,9 +103,9 @@ export default function AdjustmentsPage() {
 
   const exportToCSV = () => {
     if (!adjItems || adjItems.length === 0 || !adjDetail) return;
-    let csv = "CODIGO,ARTICULO,DESCRIPCION,CATEGORIA,SUBCATEGORIA,ESTADO,CANTIDAD,PRECIO\n";
+    let csv = "CODIGO ARTICULO,DESCRIPCION,CATEGORIA,SUBCATEGORIA,ESTADO,CANTIDAD,PRECIO\n";
     adjItems.forEach(item => {
-      csv += `${item.codigoBarras || ""},${item.nombre},${item.nombre},2,FNCQ,Nuevo,${item.cantidad},${item.precio}\n`;
+      csv += `${item.codigoBarras || ""},${item.nombre},2,FNCQ,Nuevo,${item.cantidad},${item.precio}\n`;
     });
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
