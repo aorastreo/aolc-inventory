@@ -3,9 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
-  ArrowLeftRight, Plus, Trash2, Search, Package, CheckCircle, XCircle, Clock, Barcode, Download, Store,
+  ArrowLeftRight, Plus, Trash2, Barcode, Download, CheckCircle, XCircle, Clock,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
@@ -14,14 +13,13 @@ const BRAND_BLUE = "#1B3A5C";
 
 export default function TransfersPage() {
   const utils = trpc.useUtils();
-  const { data: stores } = trpc.inventory.allStores.useQuery();
-  const { data: transfersList, isLoading } = trpc.inventory.getTransfers.useQuery({ storeId: 1 });
+  const { data: transfersList, isLoading } = trpc.inventory.getTransfers.useQuery({});
 
   const createTransfer = trpc.inventory.createTransfer.useMutation({
-    onSuccess: () => { utils.inventory.getTransfers.invalidate(); setDialogOpen(false); },
+    onSuccess: () => { utils.inventory.getTransfers.invalidate(); setShowCreate(false); },
   });
   const addItem = trpc.inventory.addTransferItem.useMutation({
-    onSuccess: () => { utils.inventory.getTransferItems.invalidate(); setBarcode(""); barcodeRef.current?.focus(); },
+    onSuccess: () => { utils.inventory.getTransferItems.invalidate(); setBarcode(""); setScannedProduct(null); setScanQty(1); barcodeRef.current?.focus(); },
   });
   const removeItem = trpc.inventory.removeTransferItem.useMutation({
     onSuccess: () => utils.inventory.getTransferItems.invalidate(),
@@ -29,15 +27,11 @@ export default function TransfersPage() {
   const completeTransfer = trpc.inventory.completeTransfer.useMutation({
     onSuccess: () => { utils.inventory.getTransfers.invalidate(); setViewingTransfer(null); },
   });
-  const cancelTransfer = trpc.inventory.cancelTransfer.useMutation({
-    onSuccess: () => { utils.inventory.getTransfers.invalidate(); setViewingTransfer(null); },
-  });
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [newTransfer, setNewTransfer] = useState({ fromStoreId: "", toStoreId: "", fecha: new Date().toISOString().split("T")[0] });
-  const [transferError, setTransferError] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [destino, setDestino] = useState("");
 
-  // Viewing a single transfer
+  // Viewing
   const [viewingTransfer, setViewingTransfer] = useState<number | null>(null);
   const { data: transferDetail } = trpc.inventory.getTransferItems.useQuery(
     { transferId: viewingTransfer! },
@@ -45,19 +39,18 @@ export default function TransfersPage() {
   );
   const currentTransfer = transfersList?.find(t => t.id === viewingTransfer);
 
-  // Barcode scanning
+  // Scanning
   const [barcode, setBarcode] = useState("");
   const [scannedProduct, setScannedProduct] = useState<any>(null);
   const [scanQty, setScanQty] = useState(1);
   const barcodeRef = useRef<HTMLInputElement>(null);
 
-  // Search product query
-  const { data: foundProduct, isFetching: searching } = trpc.inventory.searchProductByBarcode.useQuery(
-    { storeId: Number(newTransfer.fromStoreId) || 1, barcode },
+  // Search by barcode across all products (storeId=1 for now)
+  const { data: foundProduct } = trpc.inventory.searchProductByBarcode.useQuery(
+    { storeId: 1, barcode },
     { enabled: barcode.length >= 5 && !!viewingTransfer && currentTransfer?.estado === "activo" }
   );
 
-  // Auto-detect when product is found
   useEffect(() => {
     if (foundProduct && barcode.length >= 5) {
       setScannedProduct(foundProduct);
@@ -65,67 +58,47 @@ export default function TransfersPage() {
     }
   }, [foundProduct]);
 
-  // Handle barcode scan (Enter key)
-  const handleBarcodeKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && scannedProduct && viewingTransfer) {
-      e.preventDefault();
-      handleAddItem();
-    }
-  };
-
   const handleAddItem = () => {
     if (!viewingTransfer || !scannedProduct || scanQty < 1) return;
     addItem.mutate({
       transferId: viewingTransfer,
-      codigoBarras: scannedProduct.codigoBarras,
+      codigoBarras: scannedProduct.codigoBarras || barcode,
       nombre: scannedProduct.nombre,
       precio: String(scannedProduct.precio),
       cantidad: scanQty,
       orden: (transferDetail?.length || 0) + 1,
     });
-    setScannedProduct(null);
-    setBarcode("");
   };
 
-  const handleCreateTransfer = () => {
-    setTransferError("");
-    if (!newTransfer.fromStoreId) { setTransferError("Seleccione tienda origen"); return; }
-    if (!newTransfer.toStoreId) { setTransferError("Seleccione tienda destino"); return; }
-    if (newTransfer.fromStoreId === newTransfer.toStoreId) { setTransferError("Tienda origen y destino deben ser diferentes"); return; }
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && scannedProduct) {
+      e.preventDefault();
+      handleAddItem();
+    }
+  };
+
+  const handleCreate = () => {
+    if (!destino.trim()) return;
     createTransfer.mutate({
-      fromStoreId: Number(newTransfer.fromStoreId),
-      toStoreId: Number(newTransfer.toStoreId),
-      fecha: newTransfer.fecha,
+      fromStoreId: 1,
+      toStoreId: 1,
+      fecha: new Date().toISOString().split("T")[0],
     });
-    setNewTransfer({ fromStoreId: "", toStoreId: "", fecha: new Date().toISOString().split("T")[0] });
-    setTransferError("");
+    setDestino("");
   };
 
-  // Export to CSV
-  const exportToCSV = () => {
-    if (!transferDetail || transferDetail.length === 0 || !currentTransfer) return;
-    const fromStore = stores?.find(s => s.id === currentTransfer.fromStoreId)?.name || "Origen";
-    const toStore = stores?.find(s => s.id === currentTransfer.toStoreId)?.name || "Destino";
-
-    let csv = "Codigo Barras,Nombre,Precio Unitario,Cantidad,Subtotal\n";
-    let total = 0;
-    let totalQty = 0;
+  // Export QUPOS format
+  const exportQupos = () => {
+    if (!transferDetail || transferDetail.length === 0) return;
+    let csv = "CODIGO ARTICULO,DESCRIPCION,CATEGORIA,SUBCATEGORIA,ESTADO,CANTIDAD,PRECIO\n";
     transferDetail.forEach(item => {
-      const subtotal = Number(item.precio) * item.cantidad;
-      total += subtotal;
-      totalQty += item.cantidad;
-      csv += `${item.codigoBarras || ""},"${item.nombre}",${item.precio},${item.cantidad},${subtotal}\n`;
+      csv += `${item.codigoBarras || ""},${item.nombre},2,FNCQ,Nuevo,${item.cantidad},${item.precio}\n`;
     });
-    csv += `,,TOTAL:,${totalQty},${total}\n`;
-    csv += `,,De:,${fromStore},\n`;
-    csv += `,,Para:,${toStore},\n`;
-    csv += `,,Fecha:,${currentTransfer.fecha},\n`;
-
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `transferencia-${currentTransfer.id}-${currentTransfer.fecha}.csv`;
+    link.download = `qupos-transferencia-${currentTransfer?.id || 0}-${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -134,10 +107,10 @@ export default function TransfersPage() {
 
   const getStatusConfig = (estado: string) => {
     switch (estado) {
-      case "activo": return { icon: Clock, color: "#D97706", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", label: "Activo" };
-      case "completado": return { icon: CheckCircle, color: "#16A34A", bg: "bg-green-50", text: "text-green-700", border: "border-green-200", label: "Completado" };
-      case "cancelado": return { icon: XCircle, color: "#DC2626", bg: "bg-red-50", text: "text-red-700", border: "border-red-200", label: "Cancelado" };
-      default: return { icon: Clock, color: "#9CA3AF", bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-200", label: estado };
+      case "activo": return { icon: Clock, color: "#D97706", bg: "bg-amber-50", text: "text-amber-700", label: "Activo" };
+      case "completado": return { icon: CheckCircle, color: "#16A34A", bg: "bg-green-50", text: "text-green-700", label: "Completado" };
+      case "cancelado": return { icon: XCircle, color: "#DC2626", bg: "bg-red-50", text: "text-red-700", label: "Cancelado" };
+      default: return { icon: Clock, color: "#9CA3AF", bg: "bg-gray-50", text: "text-gray-700", label: estado };
     }
   };
 
@@ -166,35 +139,31 @@ export default function TransfersPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight" style={{ color: "hsl(207 55% 15%)" }}>Transferencia #{currentTransfer.id}</h1>
+                <h1 className="text-xl font-bold tracking-tight" style={{ color: "hsl(207 55% 15%)" }}>{currentTransfer.fecha}</h1>
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${status.bg} ${status.text} ${status.border} border`}>
                   {status.label}
                 </span>
               </div>
-              <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
-                De: {stores?.find(s => s.id === currentTransfer.fromStoreId)?.name || "?"} → {stores?.find(s => s.id === currentTransfer.toStoreId)?.name || "?"} | {currentTransfer.fecha}
-              </p>
+              <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>Transferencia #{currentTransfer.id}</p>
             </div>
           </div>
         </div>
 
-        {/* Stats bar */}
+        {/* Stats + Export */}
         {transferDetail && transferDetail.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 mb-5">
             <div className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: "rgba(178,34,52,0.12)", color: BRAND_RED }}>
-              <Package className="w-4 h-4" />
-              <span>{transferDetail.length} productos | {transferDetail.reduce((s, i) => s + i.cantidad, 0)} unidades | {transferDetail.reduce((s, i) => s + Number(i.precio) * i.cantidad, 0).toLocaleString("es-CR")}</span>
+              <ArrowLeftRight className="w-4 h-4" />
+              <span>{transferDetail.length} productos | {transferDetail.reduce((s, i) => s + i.cantidad, 0)} unidades</span>
             </div>
-            {currentTransfer.estado !== "cancelado" && (
-              <Button variant="outline" size="sm" onClick={exportToCSV} className="font-medium" style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}>
-                <Download className="w-4 h-4 mr-2" />
-                Descargar Excel
-              </Button>
-            )}
+            <Button variant="outline" size="sm" onClick={exportQupos} className="font-medium" style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}>
+              <Download className="w-4 h-4 mr-2" />
+              Descargar para Qupos
+            </Button>
           </div>
         )}
 
-        {/* Barcode scanner */}
+        {/* Scanner */}
         {currentTransfer.estado === "activo" && (
           <Card className="mb-6 border shadow-sm">
             <CardContent className="p-5">
@@ -207,18 +176,14 @@ export default function TransfersPage() {
                   <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "hsl(207 20% 55%)" }} />
                   <Input
                     ref={barcodeRef}
-                    placeholder="Escanee codigo de barras con la pistola..."
+                    placeholder="Escanea codigo de barras..."
                     value={barcode}
-                    onChange={(e) => setBarcode(e.target.value)}
-                    onKeyDown={handleBarcodeKeyDown}
+                    onChange={(e) => { setBarcode(e.target.value); if (e.target.value.length < 5) setScannedProduct(null); }}
+                    onKeyDown={handleKeyDown}
                     className="pl-10 h-12 text-lg font-mono"
                     autoFocus
                   />
                 </div>
-
-                {searching && (
-                  <p className="text-sm" style={{ color: "hsl(207 20% 55%)" }}>Buscando...</p>
-                )}
 
                 {scannedProduct && (
                   <div className="p-4 rounded-lg border" style={{ background: "hsl(0 0% 98%)", borderColor: "hsl(210 20% 90%)" }}>
@@ -231,19 +196,11 @@ export default function TransfersPage() {
                         <Label className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>Precio</Label>
                         <p className="text-sm font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{formatCurrency(String(scannedProduct.precio))}</p>
                       </div>
-                      <div>
-                        <Label className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>Stock disponible</Label>
-                        <p className="text-sm font-semibold" style={{ color: BRAND_BLUE }}>{scannedProduct.cantidad} unidades</p>
-                      </div>
-                      <div>
-                        <Label className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>Cod. Barras</Label>
-                        <p className="text-sm font-mono" style={{ color: "hsl(207 55% 15%)" }}>{scannedProduct.codigoBarras}</p>
-                      </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="w-32">
                         <Label className="text-xs">Cantidad a enviar</Label>
-                        <Input type="number" min={1} max={scannedProduct.cantidad} value={scanQty} onChange={(e) => setScanQty(Number(e.target.value))} className="h-10 text-center" />
+                        <Input type="number" min={1} value={scanQty} onChange={(e) => setScanQty(Number(e.target.value))} className="h-10 text-center" />
                       </div>
                       <Button onClick={handleAddItem} className="h-10 mt-5 font-medium" style={{ background: BRAND_RED }}>
                         <Plus className="w-4 h-4 mr-2" />
@@ -253,8 +210,8 @@ export default function TransfersPage() {
                   </div>
                 )}
 
-                {barcode.length >= 5 && !scannedProduct && !searching && (
-                  <p className="text-sm" style={{ color: "#DC2626" }}>Producto no encontrado en esta tienda</p>
+                {barcode.length >= 5 && !scannedProduct && (
+                  <p className="text-sm" style={{ color: "#DC2626" }}>Producto no encontrado</p>
                 )}
               </div>
             </CardContent>
@@ -295,18 +252,11 @@ export default function TransfersPage() {
           </table>
         </div>
 
-        {/* Actions */}
         {currentTransfer.estado === "activo" && (
-          <div className="flex gap-3">
-            <Button onClick={() => completeTransfer.mutate({ id: viewingTransfer })} className="font-medium" style={{ background: "#16A34A" }}>
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Completar Transferencia
-            </Button>
-            <Button variant="destructive" onClick={() => cancelTransfer.mutate({ id: viewingTransfer })} className="font-medium">
-              <XCircle className="w-4 h-4 mr-2" />
-              Cancelar
-            </Button>
-          </div>
+          <Button onClick={() => completeTransfer.mutate({ id: viewingTransfer })} className="font-medium" style={{ background: "#16A34A" }}>
+            <CheckCircle className="w-4 h-4 mr-2" />
+            Completar Transferencia
+          </Button>
         )}
       </div>
     );
@@ -317,61 +267,40 @@ export default function TransfersPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight" style={{ color: "hsl(207 55% 15%)" }}>Transferencias</h1>
-          </div>
-          <p className="text-sm mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>Gestiona transferencias de mercaderia entre tiendas</p>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "hsl(207 55% 15%)" }}>Transferencias</h1>
+          <p className="text-sm mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>Escanea productos y exporta para Qupos</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="font-medium" style={{ background: BRAND_RED }}>
-              <Plus className="w-4 h-4 mr-2" />
-              Nueva Transferencia
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <ArrowLeftRight className="w-5 h-5" style={{ color: BRAND_RED }} />
-                Crear Transferencia
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-2">
-              <div>
-                <Label>Tienda Origen</Label>
-                <select className="w-full h-10 border rounded-md px-3 text-sm" style={{ borderColor: "hsl(210 20% 88%)" }} value={newTransfer.fromStoreId} onChange={(e) => { setTransferError(""); setNewTransfer({ ...newTransfer, fromStoreId: e.target.value }); }}>
-                  <option value="">Seleccionar tienda origen</option>
-                  {stores?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+        <Button className="font-medium" style={{ background: BRAND_RED }} onClick={() => setShowCreate(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Nueva Transferencia
+        </Button>
+      </div>
+
+      {showCreate && (
+        <Card className="mb-6 border shadow-sm">
+          <CardContent className="p-5">
+            <h3 className="text-sm font-semibold mb-4" style={{ color: BRAND_BLUE }}>Crear Transferencia</h3>
+            <div className="flex gap-3 items-end">
+              <div className="flex-1">
+                <Label className="text-xs">A que tienda va?</Label>
+                <Input placeholder="Ej: Santa Rosa, Pavon, Tienda 2..." value={destino} onChange={(e) => setDestino(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleCreate()} className="h-10" />
               </div>
-              <div>
-                <Label>Tienda Destino</Label>
-                <select className="w-full h-10 border rounded-md px-3 text-sm" style={{ borderColor: "hsl(210 20% 88%)" }} value={newTransfer.toStoreId} onChange={(e) => { setTransferError(""); setNewTransfer({ ...newTransfer, toStoreId: e.target.value }); }}>
-                  <option value="">Seleccionar tienda destino</option>
-                  {stores?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <Label>Fecha</Label>
-                <Input type="date" value={newTransfer.fecha} onChange={(e) => setNewTransfer({ ...newTransfer, fecha: e.target.value })} />
-              </div>
-              {transferError && (
-                <p className="text-sm font-medium px-3 py-2 rounded-lg bg-red-50" style={{ color: "#DC2626" }}>{transferError}</p>
-              )}
-              <Button onClick={handleCreateTransfer} className="w-full font-medium" style={{ background: BRAND_RED }}>
-                Crear Transferencia
+              <Button onClick={handleCreate} className="h-10 font-medium" style={{ background: BRAND_RED }}>
+                Crear
+              </Button>
+              <Button variant="outline" onClick={() => setShowCreate(false)} className="h-10">
+                Cancelar
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="space-y-3">
         {transfersList?.map((t) => {
           const status = getStatusConfig(t.estado);
-          const StatusIcon = status.icon;
           return (
-            <Card key={t.id} className="border shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer" onClick={() => { setViewingTransfer(t.id); setBarcode(""); setScannedProduct(null); }}>
+            <Card key={t.id} className="border shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer" onClick={() => setViewingTransfer(t.id)}>
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -385,9 +314,6 @@ export default function TransfersPage() {
                           {status.label}
                         </span>
                       </div>
-                      <p className="text-xs mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>
-                        {stores?.find(s => s.id === t.fromStoreId)?.name || "?"} → {stores?.find(s => s.id === t.toStoreId)?.name || "?"}
-                      </p>
                       <p className="text-[10px] mt-0.5" style={{ color: "hsl(207 20% 55%)" }}>{t.fecha}</p>
                     </div>
                   </div>
