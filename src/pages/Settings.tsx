@@ -18,22 +18,25 @@ const roleConfig = {
 };
 
 export default function SettingsPage() {
-  const { user } = useLocalAuth();
+  const { user, isAdmin, storeId: userStoreId } = useLocalAuth();
   const utils = trpc.useUtils();
-  const { data: employees } = trpc.inventory.employees.useQuery({ storeId: 1 });
+  const { data: stores } = trpc.inventory.allStores.useQuery();
+  const { data: employees } = trpc.inventory.allEmployees.useQuery();
 
-  const createEmployee = trpc.inventory.createEmployee.useMutation({ onSuccess: () => utils.inventory.employees.invalidate() });
-  const deleteEmployee = trpc.inventory.deleteEmployee.useMutation({ onSuccess: () => utils.inventory.employees.invalidate() });
+  const createEmployee = trpc.inventory.createEmployee.useMutation({ onSuccess: () => utils.inventory.allEmployees.invalidate() });
+  const deleteEmployee = trpc.inventory.deleteEmployee.useMutation({ onSuccess: () => utils.inventory.allEmployees.invalidate() });
 
-  const [newUser, setNewUser] = useState({ username: "", password: "", name: "", role: "employee" as "employee" | "manager" | "admin" });
+  const [newUser, setNewUser] = useState({ username: "", password: "", name: "", role: "employee" as "employee" | "manager" | "admin", storeId: 1 });
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const handleCreate = () => {
     if (!newUser.username || !newUser.password || !newUser.name) return;
-    createEmployee.mutate({ storeId: 1, ...newUser });
-    setNewUser({ username: "", password: "", name: "", role: "employee" });
+    createEmployee.mutate({ storeId: newUser.storeId, username: newUser.username, password: newUser.password, name: newUser.name, role: newUser.role });
+    setNewUser({ username: "", password: "", name: "", role: "employee", storeId: 1 });
     setDialogOpen(false);
   };
+
+  const currentStoreName = stores?.find(s => s.id === userStoreId)?.name || "American Outlet Los Chiles";
 
   const currentUserRole = user?.role as keyof typeof roleConfig || "admin";
   const CurrentRoleConfig = roleConfig[currentUserRole] || roleConfig.admin;
@@ -84,7 +87,7 @@ export default function SettingsPage() {
                 <Label className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: "hsl(207 20% 55%)" }}>Tienda</Label>
                 <div className="flex items-center gap-2 mt-0.5">
                   <Store className="w-3.5 h-3.5" style={{ color: "hsl(207 20% 45%)" }} />
-                  <p className="text-sm font-medium" style={{ color: "hsl(207 55% 15%)" }}>American Outlet Los Chiles</p>
+                  <p className="text-sm font-medium" style={{ color: "hsl(207 55% 15%)" }}>{currentStoreName}</p>
                 </div>
               </div>
             </div>
@@ -127,18 +130,33 @@ export default function SettingsPage() {
                       <Input type="password" placeholder="Minimo 4 caracteres" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} />
                     </div>
                   </div>
-                  <div>
-                    <Label>Rol</Label>
-                    <select
-                      className="w-full h-10 border rounded-md px-3 text-sm"
-                      style={{ borderColor: "hsl(210 20% 88%)" }}
-                      value={newUser.role}
-                      onChange={(e) => setNewUser({ ...newUser, role: e.target.value as "employee" | "manager" | "admin" })}
-                    >
-                      <option value="employee">Empleado</option>
-                      <option value="manager">Manager</option>
-                      <option value="admin">Administrador</option>
-                    </select>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Rol</Label>
+                      <select
+                        className="w-full h-10 border rounded-md px-3 text-sm"
+                        style={{ borderColor: "hsl(210 20% 88%)" }}
+                        value={newUser.role}
+                        onChange={(e) => setNewUser({ ...newUser, role: e.target.value as "employee" | "manager" | "admin" })}
+                      >
+                        <option value="employee">Empleado</option>
+                        <option value="manager">Manager</option>
+                        <option value="admin">Administrador</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label>Tienda</Label>
+                      <select
+                        className="w-full h-10 border rounded-md px-3 text-sm"
+                        style={{ borderColor: "hsl(210 20% 88%)" }}
+                        value={newUser.storeId}
+                        onChange={(e) => setNewUser({ ...newUser, storeId: Number(e.target.value) })}
+                      >
+                        {stores?.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                   <Button onClick={handleCreate} className="w-full font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
                     Crear Usuario
@@ -172,6 +190,9 @@ export default function SettingsPage() {
                           <span className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>@{emp.username}</span>
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${empConfig.bg} ${empConfig.text}`}>
                             {empConfig.label}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                            {stores?.find(s => s.id === emp.storeId)?.name || `Tienda #${emp.storeId}`}
                           </span>
                         </div>
                       </div>

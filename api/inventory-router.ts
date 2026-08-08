@@ -920,6 +920,13 @@ export const inventoryRouter = createRouter({
         .from(employees).where(eq(employees.storeId, input.storeId));
     }),
 
+  allEmployees: publicQuery
+    .query(async () => {
+      const db = getDb();
+      return db.select({ id: employees.id, username: employees.username, name: employees.name, role: employees.role, storeId: employees.storeId, isActive: employees.isActive, createdAt: employees.createdAt })
+        .from(employees).where(eq(employees.isActive, true));
+    }),
+
   createEmployee: publicQuery
     .input(z.object({ storeId: z.number(), username: z.string(), password: z.string(), name: z.string(), role: z.enum(["employee", "manager", "admin"]).default("employee") }))
     .mutation(async ({ input }) => {

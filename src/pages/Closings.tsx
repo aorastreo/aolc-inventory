@@ -30,10 +30,10 @@ const paymentConfig = [
 ];
 
 export default function ClosingsPage() {
-  const { isEmployee, isAdmin } = useLocalAuth();
+  const { isEmployee, isAdmin, storeId: userStoreId } = useLocalAuth();
   const utils = trpc.useUtils();
   const { data: stores } = trpc.inventory.allStores.useQuery();
-  const [selectedStoreId, setSelectedStoreId] = useState<number>(1);
+  const [selectedStoreId, setSelectedStoreId] = useState<number>(userStoreId || 1);
 
   const { data: closings } = trpc.inventory.closings.useQuery({ storeId: selectedStoreId });
   const { data: stats } = trpc.inventory.closingStats.useQuery({ storeId: selectedStoreId });
@@ -151,15 +151,21 @@ export default function ClosingsPage() {
             <Receipt className="w-6 h-6" style={{ color: BRAND_RED }} />
             Cierre de Caja
           </h1>
-          <select
-            className="h-9 px-3 rounded-md border border-input bg-background text-sm"
-            value={selectedStoreId}
-            onChange={(e) => setSelectedStoreId(Number(e.target.value))}
-          >
-            {stores?.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+          {isAdmin ? (
+            <select
+              className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+              value={selectedStoreId}
+              onChange={(e) => setSelectedStoreId(Number(e.target.value))}
+            >
+              {stores?.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          ) : (
+            <span className="h-9 px-3 rounded-md border border-input bg-gray-50 text-sm flex items-center" style={{ color: "hsl(207 20% 45%)" }}>
+              {stores?.find(s => s.id === selectedStoreId)?.name || "Tienda"}
+            </span>
+          )}
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>

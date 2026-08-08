@@ -57,6 +57,7 @@ export function useLocalAuth() {
   }, []);
 
   const role = user?.role || null;
+  const storeId = user?.storeId || null;
 
   return {
     user,
@@ -64,6 +65,7 @@ export function useLocalAuth() {
     login,
     logout,
     role,
+    storeId,
     isAdmin: role === "admin",
     isManager: role === "admin" || role === "manager",
     isEmployee: role === "employee",
