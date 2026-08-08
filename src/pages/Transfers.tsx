@@ -14,6 +14,7 @@ const BRAND_BLUE = "#1B3A5C";
 export default function TransfersPage() {
   const utils = trpc.useUtils();
   const { data: transfersList, isLoading } = trpc.inventory.getTransfers.useQuery({});
+  const { data: stores } = trpc.inventory.allStores.useQuery();
 
   const createTransfer = trpc.inventory.createTransfer.useMutation({
     onSuccess: () => { utils.inventory.getTransfers.invalidate(); setShowCreate(false); },
@@ -29,7 +30,8 @@ export default function TransfersPage() {
   });
 
   const [showCreate, setShowCreate] = useState(false);
-  const [destino, setDestino] = useState("");
+  const [fromStoreId, setFromStoreId] = useState<number | null>(null);
+  const [toStoreId, setToStoreId] = useState<number | null>(null);
 
   // Viewing
   const [viewingTransfer, setViewingTransfer] = useState<number | null>(null);
@@ -45,9 +47,9 @@ export default function TransfersPage() {
   const [scanQty, setScanQty] = useState(1);
   const barcodeRef = useRef<HTMLInputElement>(null);
 
-  // Search by barcode across all products (storeId=1 for now)
+  // Search by barcode in the origin store
   const { data: foundProduct } = trpc.inventory.searchProductByBarcode.useQuery(
-    { storeId: 1, barcode },
+    { storeId: currentTransfer?.fromStoreId || 1, barcode },
     { enabled: barcode.length >= 5 && !!viewingTransfer && currentTransfer?.estado === "activo" }
   );
 
@@ -78,13 +80,15 @@ export default function TransfersPage() {
   };
 
   const handleCreate = () => {
-    if (!destino.trim()) return;
+    if (!fromStoreId || !toStoreId) return;
+    if (fromStoreId === toStoreId) return;
     createTransfer.mutate({
-      fromStoreId: 1,
-      toStoreId: 1,
+      fromStoreId,
+      toStoreId,
       fecha: new Date().toISOString().split("T")[0],
     });
-    setDestino("");
+    setFromStoreId(null);
+    setToStoreId(null);
   };
 
   // Export QUPOS format
@@ -102,6 +106,8 @@ export default function TransfersPage() {
     link.click();
     URL.revokeObjectURL(url);
   };
+
+  const getStoreName = (id?: number) => stores?.find(s => s.id === id)?.name || `Tienda #${id}`;
 
   const formatCurrency = (value: string) => Number(value || 0).toLocaleString("es-CR", { style: "currency", currency: "CRC" });
 
@@ -123,7 +129,8 @@ export default function TransfersPage() {
   // Detail view
   if (viewingTransfer && currentTransfer) {
     const status = getStatusConfig(currentTransfer.estado);
-    const StatusIcon = status.icon;
+    const fromName = getStoreName(currentTransfer.fromStoreId);
+    const toName = getStoreName(currentTransfer.toStoreId);
 
     return (
       <div>
@@ -140,11 +147,11 @@ export default function TransfersPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold tracking-tight" style={{ color: "hsl(207 55% 15%)" }}>{currentTransfer.fecha}</h1>
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${status.bg} ${status.text} ${status.border} border`}>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${status.bg} ${status.text} border`}>
                   {status.label}
                 </span>
               </div>
-              <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>Transferencia #{currentTransfer.id}</p>
+              <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>{fromName} <ArrowLeftRight className="w-3 h-3 inline mx-1" /> {toName}</p>
             </div>
           </div>
         </div>
@@ -169,7 +176,7 @@ export default function TransfersPage() {
             <CardContent className="p-5">
               <h3 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: BRAND_BLUE }}>
                 <Barcode className="w-4 h-4" />
-                Escanear Producto
+                Escanear Producto en {fromName}
               </h3>
               <div className="space-y-4">
                 <div className="relative">
@@ -211,7 +218,7 @@ export default function TransfersPage() {
                 )}
 
                 {barcode.length >= 5 && !scannedProduct && (
-                  <p className="text-sm" style={{ color: "#DC2626" }}>Producto no encontrado</p>
+                  <p className="text-sm" style={{ color: "#DC2626" }}>Producto no encontrado en {fromName}</p>
                 )}
               </div>
             </CardContent>
@@ -280,16 +287,40 @@ export default function TransfersPage() {
         <Card className="mb-6 border shadow-sm">
           <CardContent className="p-5">
             <h3 className="text-sm font-semibold mb-4" style={{ color: BRAND_BLUE }}>Crear Transferencia</h3>
-            <div className="flex gap-3 items-end">
-              <div className="flex-1">
-                <Label className="text-xs">A que tienda va?</Label>
-                <Input placeholder="Ej: Santa Rosa, Pavon, Tienda 2..." value={destino} onChange={(e) => setDestino(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleCreate()} className="h-10" />
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <Label className="text-xs">Tienda Origen</Label>
+                <select
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                  value={fromStoreId || ""}
+                  onChange={(e) => setFromStoreId(Number(e.target.value))}
+                >
+                  <option value="">Seleccionar...</option>
+                  {stores?.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
               </div>
-              <Button onClick={handleCreate} className="h-10 font-medium" style={{ background: BRAND_RED }}>
-                Crear
-              </Button>
+              <div>
+                <Label className="text-xs">Tienda Destino</Label>
+                <select
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                  value={toStoreId || ""}
+                  onChange={(e) => setToStoreId(Number(e.target.value))}
+                >
+                  <option value="">Seleccionar...</option>
+                  {stores?.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setShowCreate(false)} className="h-10">
                 Cancelar
+              </Button>
+              <Button onClick={handleCreate} className="h-10 font-medium" style={{ background: BRAND_RED }}>
+                Crear
               </Button>
             </div>
           </CardContent>
@@ -299,6 +330,8 @@ export default function TransfersPage() {
       <div className="space-y-3">
         {transfersList?.map((t) => {
           const status = getStatusConfig(t.estado);
+          const fromName = getStoreName(t.fromStoreId);
+          const toName = getStoreName(t.toStoreId);
           return (
             <Card key={t.id} className="border shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer" onClick={() => setViewingTransfer(t.id)}>
               <CardContent className="p-5">
@@ -309,12 +342,12 @@ export default function TransfersPage() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-sm" style={{ color: "hsl(207 55% 15%)" }}>Transferencia #{t.id}</h3>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${status.bg} ${status.text} ${status.border} border`}>
+                        <h3 className="font-semibold text-sm" style={{ color: "hsl(207 55% 15%)" }}>{fromName} <ArrowLeftRight className="w-3 h-3 inline mx-1" style={{ color: "hsl(207 20% 60%)" }} /> {toName}</h3>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${status.bg} ${status.text} border`}>
                           {status.label}
                         </span>
                       </div>
-                      <p className="text-[10px] mt-0.5" style={{ color: "hsl(207 20% 55%)" }}>{t.fecha}</p>
+                      <p className="text-[10px] mt-0.5" style={{ color: "hsl(207 20% 55%)" }}>#{t.id} &middot; {t.fecha}</p>
                     </div>
                   </div>
                   <ArrowLeftRight className="w-4 h-4" style={{ color: "hsl(207 20% 60%)" }} />
