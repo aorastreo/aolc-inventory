@@ -33,20 +33,23 @@ export default function ClosingsPage() {
   const { isEmployee, isAdmin, storeId: userStoreId } = useLocalAuth();
   const utils = trpc.useUtils();
   const { data: stores } = trpc.inventory.allStores.useQuery();
-  const [selectedStoreId, setSelectedStoreId] = useState<number>(userStoreId || 1);
+  const [adminStoreId, setAdminStoreId] = useState<number>(1);
 
-  const { data: closings } = trpc.inventory.closings.useQuery({ storeId: selectedStoreId });
-  const { data: stats } = trpc.inventory.closingStats.useQuery({ storeId: selectedStoreId });
-  const { data: trend } = trpc.inventory.closingTrend.useQuery({ storeId: selectedStoreId });
-  const { data: paymentMethods } = trpc.inventory.closingByPaymentMethod.useQuery({ storeId: selectedStoreId });
-  const { data: weeklyBreakdown } = trpc.inventory.closingWeeklyBreakdown.useQuery({ storeId: selectedStoreId });
+  // Empleados ven solo su tienda. Admin puede cambiar.
+  const effectiveStoreId = isAdmin ? adminStoreId : (userStoreId || 1);
+
+  const { data: closings } = trpc.inventory.closings.useQuery({ storeId: effectiveStoreId });
+  const { data: stats } = trpc.inventory.closingStats.useQuery({ storeId: effectiveStoreId });
+  const { data: trend } = trpc.inventory.closingTrend.useQuery({ storeId: effectiveStoreId });
+  const { data: paymentMethods } = trpc.inventory.closingByPaymentMethod.useQuery({ storeId: effectiveStoreId });
+  const { data: weeklyBreakdown } = trpc.inventory.closingWeeklyBreakdown.useQuery({ storeId: effectiveStoreId });
 
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [reportGenerated, setReportGenerated] = useState(false);
 
   const { data: periodReport } = trpc.inventory.closingReportByPeriod.useQuery(
-    { storeId: selectedStoreId, desde, hasta },
+    { storeId: effectiveStoreId, desde, hasta },
     { enabled: reportGenerated && desde !== "" && hasta !== "" }
   );
 
@@ -119,7 +122,7 @@ export default function ClosingsPage() {
   const handleCreate = () => {
     if (!newClosing.fecha) return;
     createClosing.mutate({
-      storeId: selectedStoreId, fecha: newClosing.fecha, dia: newClosing.dia,
+      storeId: effectiveStoreId, fecha: newClosing.fecha, dia: newClosing.dia,
       efectivo: newClosing.efectivo || "0", sinpe: newClosing.sinpe || "0",
       tarjeta: newClosing.tarjeta || "0", sinFactura: newClosing.sinFactura || "0",
       total: String(totalCalculado), inicial: "50000",
@@ -154,8 +157,8 @@ export default function ClosingsPage() {
           {isAdmin ? (
             <select
               className="h-9 px-3 rounded-md border border-input bg-background text-sm"
-              value={selectedStoreId}
-              onChange={(e) => setSelectedStoreId(Number(e.target.value))}
+              value={adminStoreId}
+              onChange={(e) => setAdminStoreId(Number(e.target.value))}
             >
               {stores?.map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
@@ -163,7 +166,7 @@ export default function ClosingsPage() {
             </select>
           ) : (
             <span className="h-9 px-3 rounded-md border border-input bg-gray-50 text-sm flex items-center" style={{ color: "hsl(207 20% 45%)" }}>
-              {stores?.find(s => s.id === selectedStoreId)?.name || "Tienda"}
+              {stores?.find(s => s.id === effectiveStoreId)?.name || "Cargando..."}
             </span>
           )}
         </div>
