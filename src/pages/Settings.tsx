@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Users, Plus, Trash2, Shield, UserCircle, Crown, User, Store } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
@@ -23,7 +23,11 @@ export default function SettingsPage() {
   const { data: stores } = trpc.inventory.allStores.useQuery();
   const { data: employees } = trpc.inventory.allEmployees.useQuery();
 
-  const createEmployee = trpc.inventory.createEmployee.useMutation({ onSuccess: () => utils.inventory.allEmployees.invalidate() });
+  const [createError, setCreateError] = useState("");
+  const createEmployee = trpc.inventory.createEmployee.useMutation({
+    onSuccess: () => { utils.inventory.allEmployees.invalidate(); setCreateError(""); },
+    onError: (err) => setCreateError(err.message),
+  });
   const deleteEmployee = trpc.inventory.deleteEmployee.useMutation({ onSuccess: () => utils.inventory.allEmployees.invalidate() });
 
   const [newUser, setNewUser] = useState({ username: "", password: "", name: "", role: "employee" as "employee" | "manager" | "admin", storeId: 1 });
@@ -31,10 +35,17 @@ export default function SettingsPage() {
 
   const handleCreate = () => {
     if (!newUser.username || !newUser.password || !newUser.name) return;
+    setCreateError("");
     createEmployee.mutate({ storeId: newUser.storeId, username: newUser.username, password: newUser.password, name: newUser.name, role: newUser.role });
-    setNewUser({ username: "", password: "", name: "", role: "employee", storeId: 1 });
-    setDialogOpen(false);
   };
+
+  // Close dialog and reset on success
+  useEffect(() => {
+    if (createEmployee.isSuccess) {
+      setNewUser({ username: "", password: "", name: "", role: "employee", storeId: 1 });
+      setDialogOpen(false);
+    }
+  }, [createEmployee.isSuccess]);
 
   const currentStoreName = stores?.find(s => s.id === userStoreId)?.name || "American Outlet Los Chiles";
 
@@ -158,6 +169,9 @@ export default function SettingsPage() {
                       </select>
                     </div>
                   </div>
+                  {createError && (
+                    <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{createError}</p>
+                  )}
                   <Button onClick={handleCreate} className="w-full font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
                     Crear Usuario
                   </Button>
