@@ -32,18 +32,21 @@ const paymentConfig = [
 export default function ClosingsPage() {
   const { isEmployee, isAdmin } = useLocalAuth();
   const utils = trpc.useUtils();
-  const { data: closings } = trpc.inventory.closings.useQuery({ storeId: 1 });
-  const { data: stats } = trpc.inventory.closingStats.useQuery({ storeId: 1 });
-  const { data: trend } = trpc.inventory.closingTrend.useQuery({ storeId: 1 });
-  const { data: paymentMethods } = trpc.inventory.closingByPaymentMethod.useQuery({ storeId: 1 });
-  const { data: weeklyBreakdown } = trpc.inventory.closingWeeklyBreakdown.useQuery({ storeId: 1 });
+  const { data: stores } = trpc.inventory.allStores.useQuery();
+  const [selectedStoreId, setSelectedStoreId] = useState<number>(1);
+
+  const { data: closings } = trpc.inventory.closings.useQuery({ storeId: selectedStoreId });
+  const { data: stats } = trpc.inventory.closingStats.useQuery({ storeId: selectedStoreId });
+  const { data: trend } = trpc.inventory.closingTrend.useQuery({ storeId: selectedStoreId });
+  const { data: paymentMethods } = trpc.inventory.closingByPaymentMethod.useQuery({ storeId: selectedStoreId });
+  const { data: weeklyBreakdown } = trpc.inventory.closingWeeklyBreakdown.useQuery({ storeId: selectedStoreId });
 
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [reportGenerated, setReportGenerated] = useState(false);
 
   const { data: periodReport } = trpc.inventory.closingReportByPeriod.useQuery(
-    { storeId: 1, desde, hasta },
+    { storeId: selectedStoreId, desde, hasta },
     { enabled: reportGenerated && desde !== "" && hasta !== "" }
   );
 
@@ -116,7 +119,7 @@ export default function ClosingsPage() {
   const handleCreate = () => {
     if (!newClosing.fecha) return;
     createClosing.mutate({
-      storeId: 1, fecha: newClosing.fecha, dia: newClosing.dia,
+      storeId: selectedStoreId, fecha: newClosing.fecha, dia: newClosing.dia,
       efectivo: newClosing.efectivo || "0", sinpe: newClosing.sinpe || "0",
       tarjeta: newClosing.tarjeta || "0", sinFactura: newClosing.sinFactura || "0",
       total: String(totalCalculado), inicial: "50000",
@@ -143,10 +146,21 @@ export default function ClosingsPage() {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2" style={{ color: "hsl(207 55% 15%)" }}>
-          <Receipt className="w-6 h-6" style={{ color: BRAND_RED }} />
-          Cierre de Caja
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2" style={{ color: "hsl(207 55% 15%)" }}>
+            <Receipt className="w-6 h-6" style={{ color: BRAND_RED }} />
+            Cierre de Caja
+          </h1>
+          <select
+            className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+            value={selectedStoreId}
+            onChange={(e) => setSelectedStoreId(Number(e.target.value))}
+          >
+            {stores?.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button className="font-medium hover:shadow-lg hover:opacity-90 transition-all" style={{ background: BRAND_RED }}>
