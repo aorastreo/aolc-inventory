@@ -292,4 +292,17 @@ export function initRoute(app: Hono) {
       await conn.end();
     }
   });
+
+  // Check all stores in DB
+  app.get("/api/check-stores", async (c) => {
+    const conn = await getRawDb();
+    try {
+      const [rows]: any = await conn.execute("SELECT id, name, slug, isActive FROM stores ORDER BY id");
+      return c.json({ stores: rows });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
 }
