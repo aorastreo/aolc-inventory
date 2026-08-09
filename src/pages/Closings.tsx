@@ -9,6 +9,7 @@ import {
   TrendingUp, Calendar, BarChart3, Printer, FileSpreadsheet, ArrowDownToLine, Pencil,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
+import { CheckCircle, AlertCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell } from "recharts";
 import { useLocalAuth } from "@/hooks/useLocalAuth";
 
@@ -43,6 +44,8 @@ export default function ClosingsPage() {
   const { data: trend } = trpc.inventory.closingTrend.useQuery({ storeId: effectiveStoreId });
   const { data: paymentMethods } = trpc.inventory.closingByPaymentMethod.useQuery({ storeId: effectiveStoreId });
   const { data: weeklyBreakdown } = trpc.inventory.closingWeeklyBreakdown.useQuery({ storeId: effectiveStoreId });
+  const { data: storeConfigData } = trpc.inventory.storeConfig.useQuery({ storeId: effectiveStoreId });
+  const { data: pendingReviews } = trpc.inventory.pendingReviews.useQuery();
 
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -60,7 +63,10 @@ export default function ClosingsPage() {
       utils.inventory.closingTrend.invalidate();
       utils.inventory.closingByPaymentMethod.invalidate();
       utils.inventory.closingWeeklyBreakdown.invalidate();
+      utils.inventory.pendingReviews.invalidate();
+      setCreateError("");
     },
+    onError: (err) => setCreateError(err.message),
   });
   const deleteClosing = trpc.inventory.deleteClosing.useMutation({
     onSuccess: () => {
@@ -69,16 +75,25 @@ export default function ClosingsPage() {
       utils.inventory.closingTrend.invalidate();
       utils.inventory.closingByPaymentMethod.invalidate();
       utils.inventory.closingWeeklyBreakdown.invalidate();
+      utils.inventory.pendingReviews.invalidate();
+    },
+  });
+  const markReviewed = trpc.inventory.markClosingReviewed.useMutation({
+    onSuccess: () => {
+      utils.inventory.closings.invalidate();
+      utils.inventory.pendingReviews.invalidate();
     },
   });
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newClosing, setNewClosing] = useState({
-    fecha: "", dia: "",
+    fecha: "", dia: "", hora: "",
     efectivo: "", tarjeta: "", sinpe: "", sinFactura: "",
+    observaciones: "",
   });
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editClosing, setEditClosing] = useState({ id: 0, fecha: "", dia: "", efectivo: "", tarjeta: "", sinpe: "", sinFactura: "" });
+  const [editClosing, setEditClosing] = useState({ id: 0, fecha: "", dia: "", efectivo: "", tarjeta: "", sinpe: "", sinFactura: "", observaciones: "" });
+  const [createError, setCreateError] = useState("");
 
   const updateClosing = trpc.inventory.updateClosing.useMutation({
     onSuccess: () => {
@@ -116,20 +131,34 @@ export default function ClosingsPage() {
   const handleDateChange = (fecha: string) => {
     const date = new Date(fecha + "T12:00:00");
     const diasSemana = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
-    setNewClosing({ ...newClosing, fecha, dia: diasSemana[date.getDay()] });
+    const now = new Date();
+    const hora = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    setNewClosing({ ...newClosing, fecha, dia: diasSemana[date.getDay()], hora });
   };
+
+  const montoInicialDefault = storeConfigData?.montoInicial || "50000";
 
   const handleCreate = () => {
     if (!newClosing.fecha) return;
+    setCreateError("");
+    const userName = (document.cookie.match(/local_auth_user=([^;]+)/) || ["", ""])[1];
     createClosing.mutate({
-      storeId: effectiveStoreId, fecha: newClosing.fecha, dia: newClosing.dia,
+      storeId: effectiveStoreId, fecha: newClosing.fecha, dia: newClosing.dia, hora: newClosing.hora,
       efectivo: newClosing.efectivo || "0", sinpe: newClosing.sinpe || "0",
       tarjeta: newClosing.tarjeta || "0", sinFactura: newClosing.sinFactura || "0",
-      total: String(totalCalculado), inicial: "50000",
+      total: String(totalCalculado), inicial: montoInicialDefault,
+      observaciones: newClosing.observaciones,
+      createdBy: userName ? decodeURIComponent(userName) : undefined,
     });
-    setNewClosing({ fecha: new Date().toISOString().split("T")[0], dia: "", efectivo: "", tarjeta: "", sinpe: "", sinFactura: "" });
-    setDialogOpen(false);
   };
+
+  // Close dialog on success
+  useEffect(() => {
+    if (createClosing.isSuccess) {
+      setNewClosing({ fecha: new Date().toISOString().split("T")[0], dia: "", hora: "", efectivo: "", tarjeta: "", sinpe: "", sinFactura: "", observaciones: "" });
+      setDialogOpen(false);
+    }
+  }, [createClosing.isSuccess]);
 
   const handleGenerate = () => {
     if (desde && hasta) setReportGenerated(true);
@@ -147,6 +176,17 @@ export default function ClosingsPage() {
 
   return (
     <div>
+      {/* Pending reviews alert for admin */}
+      {isAdmin && pendingReviews && pendingReviews.length > 0 && (
+        <div className="mb-4 p-4 rounded-lg border bg-amber-50 border-amber-200 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Cierres pendientes de revisar</p>
+            <p className="text-xs text-amber-700">{pendingReviews.length} cierres sin revisar en todas las tiendas</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -195,7 +235,7 @@ export default function ClosingsPage() {
                     <Label className="text-xs font-semibold uppercase" style={{ color: "#B45309" }}>Monto Inicial (Caja Chica)</Label>
                     <p className="text-xs mt-0.5" style={{ color: "#D97706" }}>Este monto NO se cuenta en el total de ventas</p>
                   </div>
-                  <p className="text-2xl font-bold" style={{ color: "#B45309" }}>₡50,000</p>
+                  <p className="text-2xl font-bold" style={{ color: "#B45309" }}>₡{Number(montoInicialDefault).toLocaleString("es-CR")}</p>
                 </div>
               </div>
               <div>
@@ -226,6 +266,21 @@ export default function ClosingsPage() {
                   <p className="text-3xl font-bold" style={{ color: "#16A34A" }}>{formatMoneyCurrency(totalCalculado)}</p>
                 </div>
               </div>
+              <div>
+                <Label className="text-xs font-semibold" style={{ color: "#1B3A5C" }}>Observaciones (opcional)</Label>
+                <textarea
+                  className="w-full mt-1 p-3 border rounded-md text-sm"
+                  style={{ borderColor: "hsl(210 20% 88%)", minHeight: 60 }}
+                  placeholder="Ej: Se quedo sin cambio, problema con tarjeta, etc."
+                  value={newClosing.observaciones}
+                  onChange={(e) => setNewClosing({ ...newClosing, observaciones: e.target.value })}
+                />
+              </div>
+              {createError && (
+                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  {createError}
+                </div>
+              )}
               <Button onClick={handleCreate} className="w-full h-11 font-medium" style={{ background: BRAND_RED }}>
                 Guardar Cierre
               </Button>
@@ -483,41 +538,47 @@ export default function ClosingsPage() {
         <h3 className="text-sm font-semibold mb-3" style={{ color: "hsl(207 55% 15%)" }}>Cierres Recientes</h3>
         {closings?.map((closing) => {
           const totalVentas = Number(closing.efectivo || 0) + Number(closing.tarjeta || 0) + Number(closing.sinpe || 0) + Number(closing.sinFactura || 0);
+          const diferencia = Number(closing.diferencia || 0);
+          const hasDiferencia = Math.abs(diferencia) > 100;
           return (
             <Card key={closing.id} className="border shadow-sm hover:shadow-md transition-all">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "rgba(27,58,92,0.08)" }}>
-                      <Receipt className="w-5 h-5" style={{ color: "#1B3A5C" }} />
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: closing.revisado ? "rgba(22,163,74,0.08)" : "rgba(217,119,6,0.08)" }}>
+                      <Receipt className="w-5 h-5" style={{ color: closing.revisado ? "#16A34A" : "#D97706" }} />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-sm" style={{ color: "hsl(207 55% 15%)" }}>{closing.fecha}</h3>
-                      <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>{closing.dia}</p>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-sm" style={{ color: "hsl(207 55% 15%)" }}>{closing.fecha}</h3>
+                        {closing.revisado ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-200">
+                            <CheckCircle className="w-3 h-3" /> Revisado
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            <AlertCircle className="w-3 h-3" /> Pendiente
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
+                        {closing.dia} {closing.hora ? `· ${closing.hora}` : ""}
+                        {closing.createdBy ? ` · ${closing.createdBy}` : ""}
+                      </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="hidden md:flex items-center gap-3">
-                      {[
-                        { label: "Efectivo", value: closing.efectivo },
-                        { label: "Tarjeta", value: closing.tarjeta },
-                        { label: "SINPE", value: closing.sinpe },
-                        { label: "Sin Fact.", value: closing.sinFactura },
-                      ].map((pm) => (
-                        <div key={pm.label} className="text-right">
-                          <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: "hsl(207 20% 55%)" }}>{pm.label}</p>
-                          <p className="text-sm font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{formatMoneyCurrency(Number(pm.value || 0))}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="text-right rounded-lg px-4 py-2" style={{ background: "rgba(22,163,74,0.06)" }}>
-                      <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: "#16A34A" }}>Total Ventas</p>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: "#16A34A" }}>Ventas</p>
                       <p className="text-lg font-bold" style={{ color: "#16A34A" }}>{formatMoneyCurrency(totalVentas)}</p>
                     </div>
                     {isAdmin && (
                       <>
-                        <Button variant="ghost" size="sm" onClick={() => { setEditClosing({ id: closing.id, fecha: closing.fecha, dia: closing.dia || "", efectivo: String(closing.efectivo || ""), tarjeta: String(closing.tarjeta || ""), sinpe: String(closing.sinpe || ""), sinFactura: String(closing.sinFactura || "") }); setEditDialogOpen(true); }} className="hover:bg-blue-50">
+                        <Button variant="ghost" size="sm" onClick={() => { setEditClosing({ id: closing.id, fecha: closing.fecha, dia: closing.dia || "", efectivo: String(closing.efectivo || ""), tarjeta: String(closing.tarjeta || ""), sinpe: String(closing.sinpe || ""), sinFactura: String(closing.sinFactura || ""), observaciones: closing.observaciones || "" }); setEditDialogOpen(true); }} className="hover:bg-blue-50">
                           <Pencil className="w-4 h-4" style={{ color: "#1B3A5C" }} />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => markReviewed.mutate({ id: closing.id, revisado: !closing.revisado })} className="hover:bg-green-50">
+                          <CheckCircle className="w-4 h-4" style={{ color: closing.revisado ? "#DC2626" : "#16A34A" }} />
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => deleteClosing.mutate({ id: closing.id })} className="hover:bg-red-50">
                           <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
@@ -526,6 +587,16 @@ export default function ClosingsPage() {
                     )}
                   </div>
                 </div>
+                {hasDiferencia && (
+                  <div className="mt-3 p-2 rounded-md text-xs font-semibold text-center" style={{ background: diferencia < 0 ? "rgba(220,38,38,0.06)" : "rgba(217,119,6,0.06)", color: diferencia < 0 ? "#DC2626" : "#D97706", border: `1px solid ${diferencia < 0 ? "rgba(220,38,38,0.15)" : "rgba(217,119,6,0.15)"}` }}>
+                    {diferencia < 0 ? "FALTANTE" : "SOBRANTE"}: {formatMoneyCurrency(Math.abs(diferencia))}
+                  </div>
+                )}
+                {closing.observaciones && (
+                  <div className="mt-2 p-2 rounded-md text-xs bg-gray-50 text-gray-600 border border-gray-100">
+                    📝 {closing.observaciones}
+                  </div>
+                )}
               </CardContent>
             </Card>
           );

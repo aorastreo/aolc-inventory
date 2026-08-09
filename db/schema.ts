@@ -179,12 +179,18 @@ export const closings = mysqlTable("closings", {
   storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
   fecha: varchar("fecha", { length: 20 }).notNull(),
   dia: varchar("dia", { length: 20 }),
+  hora: varchar("hora", { length: 10 }),
   efectivo: decimal("efectivo", { precision: 12, scale: 2 }).default("0"),
   sinpe: decimal("sinpe", { precision: 12, scale: 2 }).default("0"),
   tarjeta: decimal("tarjeta", { precision: 12, scale: 2 }).default("0"),
   sinFactura: decimal("sinFactura", { precision: 12, scale: 2 }).default("0"),
   total: decimal("total", { precision: 12, scale: 2 }).default("0"),
   inicial: decimal("inicial", { precision: 12, scale: 2 }).default("0"),
+  diferencia: decimal("diferencia", { precision: 12, scale: 2 }).default("0"),
+  observaciones: text("observaciones"),
+  revisado: boolean("revisado").default(false).notNull(),
+  createdBy: varchar("createdBy", { length: 255 }),
+  cierreHora: timestamp("cierreHora").defaultNow().notNull(),
   semana: int("semana"),
   anio: int("anio"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -192,6 +198,19 @@ export const closings = mysqlTable("closings", {
 
 export type Closing = typeof closings.$inferSelect;
 export type InsertClosing = typeof closings.$inferInsert;
+
+// ============================================
+// STORE CONFIG (Monto inicial por tienda)
+// ============================================
+export const storeConfig = mysqlTable("storeConfig", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull().unique(),
+  montoInicial: decimal("montoInicial", { precision: 12, scale: 2 }).default("50000"),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type StoreConfig = typeof storeConfig.$inferSelect;
+export type InsertStoreConfig = typeof storeConfig.$inferInsert;
 
 // ============================================
 // ASSEMBLERS (Armadores)

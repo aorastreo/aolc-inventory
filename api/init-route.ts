@@ -305,4 +305,58 @@ export function initRoute(app: Hono) {
       await conn.end();
     }
   });
+
+  // Migrate closings table - add new columns
+  app.get("/api/migrate-closings", async (c) => {
+    const conn = await getRawDb();
+    const results: string[] = [];
+    try {
+      // Add new columns if they don't exist
+      const columns = [
+        "ALTER TABLE closings ADD COLUMN hora VARCHAR(10) DEFAULT NULL",
+        "ALTER TABLE closings ADD COLUMN diferencia DECIMAL(12,2) DEFAULT 0",
+        "ALTER TABLE closings ADD COLUMN observaciones TEXT DEFAULT NULL",
+        "ALTER TABLE closings ADD COLUMN revisado TINYINT(1) DEFAULT 0 NOT NULL",
+        "ALTER TABLE closings ADD COLUMN createdBy VARCHAR(255) DEFAULT NULL",
+        "ALTER TABLE closings ADD COLUMN cierreHora TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+      ];
+      for (const sql of columns) {
+        try {
+          await conn.execute(sql);
+          results.push(`OK: ${sql.split("ADD COLUMN")[1].split(" ")[1]}`);
+        } catch (e: any) {
+          if (e.message.includes("Duplicate column")) {
+            results.push(`SKIP: ${sql.split("ADD COLUMN")[1].split(" ")[1]} already exists`);
+          } else {
+            results.push(`ERR: ${e.message}`);
+          }
+        }
+      }
+
+      // Create storeConfig table
+      try {
+        await conn.execute(`
+          CREATE TABLE IF NOT EXISTS storeConfig (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            storeId BIGINT UNSIGNED NOT NULL UNIQUE,
+            montoInicial DECIMAL(12,2) DEFAULT 50000,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )
+        `);
+        results.push("OK: storeConfig table created");
+
+        // Seed default values
+        await conn.execute("INSERT INTO storeConfig (storeId, montoInicial) VALUES (1, 50000) ON DUPLICATE KEY UPDATE montoInicial = VALUES(montoInicial)");
+        results.push("OK: storeConfig seeded");
+      } catch (e: any) {
+        results.push(`ERR storeConfig: ${e.message}`);
+      }
+
+      return c.json({ success: true, results });
+    } catch (e: any) {
+      return c.json({ success: false, error: e.message, results }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
 }

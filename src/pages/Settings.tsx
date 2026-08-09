@@ -53,6 +53,23 @@ export default function SettingsPage() {
   const CurrentRoleConfig = roleConfig[currentUserRole] || roleConfig.admin;
   const CurrentRoleIcon = CurrentRoleConfig.icon;
 
+  // Store config for initial amounts
+  const { data: config1 } = trpc.inventory.storeConfig.useQuery({ storeId: 1 });
+  const { data: config2 } = trpc.inventory.storeConfig.useQuery({ storeId: 2 });
+  const { data: config3 } = trpc.inventory.storeConfig.useQuery({ storeId: 3 });
+  const updateStoreConfig = trpc.inventory.updateStoreConfig.useMutation({
+    onSuccess: () => {
+      utils.inventory.storeConfig.invalidate();
+    },
+  });
+
+  const getConfig = (storeId: number) => {
+    if (storeId === 1) return config1;
+    if (storeId === 2) return config2;
+    if (storeId === 3) return config3;
+    return undefined;
+  };
+
   return (
     <div>
       <div className="mb-6">
@@ -223,6 +240,36 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Store Config - Monto Inicial */}
+      {isAdmin && (
+        <Card className="border-0 shadow-sm mt-6">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-base" style={{ color: BRAND_BLUE }}>
+              <Store className="w-5 h-5" />
+              Monto Inicial de Caja por Tienda
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {stores?.map((s) => (
+                <div key={s.id} className="p-4 rounded-xl border" style={{ borderColor: "hsl(210 20% 90%)" }}>
+                  <p className="text-sm font-semibold mb-2" style={{ color: "hsl(207 55% 15%)" }}>{s.name}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>Monto inicial:</span>
+                    <Input
+                      type="number"
+                      defaultValue={Number(getConfig(s.id)?.montoInicial || 50000)}
+                      className="h-8 w-32 text-sm"
+                      onBlur={(e) => updateStoreConfig.mutate({ storeId: s.id, montoInicial: e.target.value })}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

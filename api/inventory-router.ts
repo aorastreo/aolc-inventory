@@ -4,7 +4,7 @@ import { getDb } from "./queries/connection";
 import {
   stores, pallets, products, productDatabase,
   adjustments, adjustmentItems, closings, assemblers, assemblyAssignments, employees, printedLabels,
-  transfers, transferItems,
+  transfers, transferItems, storeConfig,
 } from "@db/schema";
 import { eq, and, desc, like, sql, count, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -504,6 +504,25 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
+  // ========== STORE CONFIG ==========
+  storeConfig: publicQuery
+    .input(z.object({ storeId: z.number() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const rows = await db.select().from(storeConfig).where(eq(storeConfig.storeId, input.storeId)).limit(1);
+      if (rows.length === 0) return { montoInicial: "50000" };
+      return { montoInicial: String(rows[0].montoInicial || "50000") };
+    }),
+
+  updateStoreConfig: adminQuery
+    .input(z.object({ storeId: z.number(), montoInicial: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.insert(storeConfig).values({ storeId: input.storeId, montoInicial: input.montoInicial })
+        .onDuplicateKeyUpdate({ set: { montoInicial: input.montoInicial } });
+      return { success: true };
+    }),
+
   // ========== CLOSINGS ==========
   closings: publicQuery
     .input(z.object({ storeId: z.number() }))
@@ -513,15 +532,36 @@ export const inventoryRouter = createRouter({
     }),
 
   createClosing: publicQuery
-    .input(z.object({ storeId: z.number(), fecha: z.string(), dia: z.string().optional(), efectivo: z.string().default("0"), sinpe: z.string().default("0"), tarjeta: z.string().default("0"), sinFactura: z.string().default("0"), total: z.string().default("0"), inicial: z.string().default("50000"), semana: z.number().optional(), anio: z.number().optional() }))
+    .input(z.object({ storeId: z.number(), fecha: z.string(), dia: z.string().optional(), hora: z.string().optional(), efectivo: z.string().default("0"), sinpe: z.string().default("0"), tarjeta: z.string().default("0"), sinFactura: z.string().default("0"), total: z.string().default("0"), inicial: z.string().default("50000"), observaciones: z.string().optional(), createdBy: z.string().optional(), semana: z.number().optional(), anio: z.number().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const result = await db.insert(closings).values(input);
+
+      // Check for duplicate closing on same date and store
+      const existing = await db.select().from(closings)
+        .where(and(eq(closings.storeId, input.storeId), eq(closings.fecha, input.fecha)))
+        .limit(1);
+      if (existing.length > 0) {
+        throw new Error("Ya existe un cierre para esta fecha en esta tienda");
+      }
+
+      // Calculate diferencia
+      const ventas = Number(input.efectivo || 0) + Number(input.sinpe || 0) + Number(input.tarjeta || 0) + Number(input.sinFactura || 0);
+      const inicial = Number(input.inicial || 50000);
+      // Diferencia = efectivo disponible esperado (inicial + ventas) vs lo que reporta
+      // Asumimos que el cierre reporta el efectivo final, la diferencia es efectivo - ventas - inicial
+      const diferencia = Number(input.efectivo || 0) - ventas - inicial;
+
+      const result = await db.insert(closings).values({
+        ...input,
+        diferencia: String(diferencia),
+        revisado: false,
+        cierreHora: new Date(),
+      });
       return { id: Number(result[0].insertId) };
     }),
 
   updateClosing: adminQuery
-    .input(z.object({ id: z.number(), fecha: z.string().optional(), dia: z.string().optional(), efectivo: z.string().optional(), sinpe: z.string().optional(), tarjeta: z.string().optional(), sinFactura: z.string().optional(), total: z.string().optional() }))
+    .input(z.object({ id: z.number(), fecha: z.string().optional(), dia: z.string().optional(), efectivo: z.string().optional(), sinpe: z.string().optional(), tarjeta: z.string().optional(), sinFactura: z.string().optional(), total: z.string().optional(), observaciones: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
       const { id, ...data } = input;
@@ -535,6 +575,23 @@ export const inventoryRouter = createRouter({
       const db = getDb();
       await db.delete(closings).where(eq(closings.id, input.id));
       return { success: true };
+    }),
+
+  markClosingReviewed: adminQuery
+    .input(z.object({ id: z.number(), revisado: z.boolean() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.update(closings).set({ revisado: input.revisado }).where(eq(closings.id, input.id));
+      return { success: true };
+    }),
+
+  pendingReviews: publicQuery
+    .query(async () => {
+      const db = getDb();
+      const rows = await db.select().from(closings)
+        .where(eq(closings.revisado, false))
+        .orderBy(desc(closings.createdAt));
+      return rows;
     }),
 
   closingStats: publicQuery
