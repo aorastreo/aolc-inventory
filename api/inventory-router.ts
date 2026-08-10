@@ -528,10 +528,7 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
-      // Use SQL raw to avoid selecting columns that may not exist in DB yet
-      const rows = await db.execute(
-        sql`SELECT id, storeId, fecha, dia, hora, efectivo, sinpe, tarjeta, sinFactura, total, inicial, diferencia, observaciones, revisado, createdBy, semana, anio, createdAt FROM closings WHERE storeId = ${input.storeId} ORDER BY fecha DESC`
-      );
+      const rows = await db.execute(sql`SELECT * FROM closings WHERE storeId = ${input.storeId} ORDER BY fecha DESC`);
       return Array.isArray(rows) ? rows[0] : (rows.rows || rows);
     }),
 
@@ -605,19 +602,20 @@ export const inventoryRouter = createRouter({
   pendingReviews: publicQuery
     .query(async () => {
       const db = getDb();
-      const rows = await db.select().from(closings)
-        .where(eq(closings.revisado, false))
-        .orderBy(desc(closings.createdAt));
-      return rows;
+      const rows = await db.execute(sql`SELECT * FROM closings ORDER BY createdAt DESC`);
+      const all = Array.isArray(rows) ? rows[0] : (rows.rows || rows);
+      // Filter manually since 'revisado' column may not exist in old DB schema
+      return (all || []).filter((c: any) => c.revisado === false || c.revisado === 0 || c.revisado === undefined);
     }),
 
   closingStats: publicQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
-      const all = await db.select().from(closings).where(eq(closings.storeId, input.storeId)).orderBy(desc(closings.fecha));
+      const rows = await db.execute(sql`SELECT * FROM closings WHERE storeId = ${input.storeId} ORDER BY fecha DESC`);
+      const all = Array.isArray(rows) ? rows[0] : (rows.rows || rows);
 
-      if (all.length === 0) {
+      if (!all || all.length === 0) {
         return { ultimo: null, semana: 0, mes: 0, total: 0, diasSemana: 0, diasMes: 0, totalCierres: 0 };
       }
 
@@ -680,14 +678,15 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
-      const all = await db.select().from(closings).where(eq(closings.storeId, input.storeId)).orderBy(desc(closings.fecha));
+      const rows = await db.execute(sql`SELECT * FROM closings WHERE storeId = ${input.storeId} ORDER BY fecha DESC`);
+      const all = Array.isArray(rows) ? rows[0] : (rows.rows || rows);
 
       // Get last 7 days with data
       const dayNames = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
       const trend: { dia: string; fecha: string; total: number }[] = [];
 
       // Take last 7 closings
-      const last7 = all.slice(0, 7).reverse();
+      const last7 = (all || []).slice(0, 7).reverse();
       for (const c of last7) {
         const cDate = new Date(c.fecha + "T12:00:00");
         const total = Number(c.efectivo || 0) + Number(c.tarjeta || 0) + Number(c.sinpe || 0) + Number(c.sinFactura || 0);
@@ -705,11 +704,12 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
-      const all = await db.select().from(closings).where(eq(closings.storeId, input.storeId));
+      const rows = await db.execute(sql`SELECT * FROM closings WHERE storeId = ${input.storeId}`);
+      const all = Array.isArray(rows) ? rows[0] : (rows.rows || rows);
 
       let efectivo = 0, tarjeta = 0, sinpe = 0, sinFactura = 0;
 
-      for (const c of all) {
+      for (const c of (all || [])) {
         efectivo += Number(c.efectivo || 0);
         tarjeta += Number(c.tarjeta || 0);
         sinpe += Number(c.sinpe || 0);
@@ -730,7 +730,8 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
-      const all = await db.select().from(closings).where(eq(closings.storeId, input.storeId)).orderBy(desc(closings.fecha));
+      const rows = await db.execute(sql`SELECT * FROM closings WHERE storeId = ${input.storeId} ORDER BY fecha DESC`);
+      const all = Array.isArray(rows) ? rows[0] : (rows.rows || rows);
 
       // Get current week info
       const now = new Date();
@@ -764,7 +765,7 @@ export const inventoryRouter = createRouter({
       let weekTotal = 0;
 
       // Fill in data from closings
-      for (const c of all) {
+      for (const c of (all || [])) {
         const cDate = new Date(c.fecha + "T12:00:00");
         // Only this week
         if (cDate >= weekStart && cDate < new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)) {
@@ -793,14 +794,13 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number(), desde: z.string(), hasta: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
-      const all = await db.select().from(closings)
-        .where(eq(closings.storeId, input.storeId))
-        .orderBy(desc(closings.fecha));
+      const rows = await db.execute(sql`SELECT * FROM closings WHERE storeId = ${input.storeId} ORDER BY fecha DESC`);
+      const all = Array.isArray(rows) ? rows[0] : (rows.rows || rows);
 
       const desde = new Date(input.desde + "T00:00:00");
       const hasta = new Date(input.hasta + "T23:59:59");
 
-      const filtered = all.filter(c => {
+      const filtered = (all || []).filter((c: any) => {
         const cDate = new Date(c.fecha + "T12:00:00");
         return cDate >= desde && cDate <= hasta;
       });
@@ -808,7 +808,7 @@ export const inventoryRouter = createRouter({
       let totalVentas = 0;
       let totalEfectivo = 0, totalTarjeta = 0, totalSinpe = 0, totalSinFact = 0;
 
-      const rows = filtered.map(c => {
+      const resultRows = filtered.map((c: any) => {
         const ef = Number(c.efectivo || 0);
         const ta = Number(c.tarjeta || 0);
         const si = Number(c.sinpe || 0);
@@ -834,7 +834,7 @@ export const inventoryRouter = createRouter({
         totalVentas,
         diasConCierre: filtered.length,
         promedioDia: filtered.length > 0 ? Math.round(totalVentas / filtered.length) : 0,
-        rows,
+        rows: resultRows,
         totalEfectivo,
         totalTarjeta,
         totalSinpe,
