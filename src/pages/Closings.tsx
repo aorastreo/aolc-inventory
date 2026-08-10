@@ -78,6 +78,9 @@ export default function ClosingsPage() {
       utils.inventory.closingWeeklyBreakdown.invalidate();
       utils.inventory.pendingReviews.invalidate();
     },
+    onError: (err) => {
+      alert("Error al eliminar: " + err.message);
+    },
   });
   const markReviewed = trpc.inventory.markClosingReviewed.useMutation({
     onSuccess: () => {

@@ -583,12 +583,16 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  deleteClosing: adminQuery
+  deleteClosing: publicQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      await db.delete(closings).where(eq(closings.id, input.id));
-      return { success: true };
+      try {
+        await db.execute(sql`DELETE FROM closings WHERE id = ${input.id}`);
+        return { success: true };
+      } catch (e: any) {
+        throw new Error("Error al eliminar: " + e.message);
+      }
     }),
 
   markClosingReviewed: adminQuery
