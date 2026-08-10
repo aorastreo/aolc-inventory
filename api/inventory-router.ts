@@ -528,7 +528,11 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
-      return db.select().from(closings).where(eq(closings.storeId, input.storeId)).orderBy(desc(closings.fecha));
+      // Use SQL raw to avoid selecting columns that may not exist in DB yet
+      const rows = await db.execute(
+        sql`SELECT id, storeId, fecha, dia, hora, efectivo, sinpe, tarjeta, sinFactura, total, inicial, diferencia, observaciones, revisado, createdBy, semana, anio, createdAt FROM closings WHERE storeId = ${input.storeId} ORDER BY fecha DESC`
+      );
+      return Array.isArray(rows) ? rows[0] : (rows.rows || rows);
     }),
 
   createClosing: publicQuery
@@ -536,27 +540,31 @@ export const inventoryRouter = createRouter({
     .mutation(async ({ input }) => {
       const db = getDb();
 
-      // Check for duplicate closing on same date and store
-      const existing = await db.select().from(closings)
-        .where(and(eq(closings.storeId, input.storeId), eq(closings.fecha, input.fecha)))
-        .limit(1);
-      if (existing.length > 0) {
+      // Check for duplicate closing on same date and store - using SQL raw to avoid column issues
+      const dupRows = await db.execute(
+        sql`SELECT id FROM closings WHERE storeId = ${input.storeId} AND fecha = ${input.fecha} LIMIT 1`
+      );
+      const dupCheck = Array.isArray(dupRows) ? dupRows[0] : (dupRows.rows || dupRows);
+      if (Array.isArray(dupCheck) && dupCheck.length > 0) {
         throw new Error("Ya existe un cierre para esta fecha en esta tienda");
       }
 
       // Calculate diferencia
       const ventas = Number(input.efectivo || 0) + Number(input.sinpe || 0) + Number(input.tarjeta || 0) + Number(input.sinFactura || 0);
       const inicial = Number(input.inicial || 50000);
-      // Diferencia = efectivo disponible esperado (inicial + ventas) vs lo que reporta
       const diferencia = Number(input.efectivo || 0) - ventas - inicial;
 
-      const result = await db.insert(closings).values({
-        ...input,
-        diferencia: String(diferencia),
-        revisado: false,
-        cierreHora: new Date(),
-      });
-      return { id: Number(result[0].insertId) };
+      // Build insert columns dynamically to avoid missing column errors
+      const columns = ['storeId', 'fecha', 'dia', 'hora', 'efectivo', 'sinpe', 'tarjeta', 'sinFactura', 'total', 'inicial', 'diferencia', 'observaciones', 'revisado', 'createdBy', 'semana', 'anio'];
+      const values = [input.storeId, input.fecha, input.dia || null, input.hora || null, input.efectivo || '0', input.sinpe || '0', input.tarjeta || '0', input.sinFactura || '0', input.total || '0', input.inicial || '50000', String(diferencia), input.observaciones || null, false, input.createdBy || null, input.semana || null, input.anio || null];
+
+      const colStr = columns.join(', ');
+      const placeholders = columns.map(() => '?').join(', ');
+      const rawSql = `INSERT INTO closings (${colStr}) VALUES (${placeholders})`;
+
+      const result = await db.execute(sql.raw(rawSql), values);
+      const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
+      return { id: Number(insertResult?.insertId || 0) };
     }),
 
   updateClosing: adminQuery
