@@ -278,7 +278,6 @@ export function initRoute(app: Hono) {
 
   // Quick rename store
   app.get("/api/rename-store", async (c) => {
-  app.get("/api/rename-store", async (c) => {
     const id = c.req.query("id");
     const name = c.req.query("name");
     if (!id || !name) return c.json({ error: "Missing ?id= and ?name= parameters" }, 400);
@@ -308,7 +307,6 @@ export function initRoute(app: Hono) {
   });
 
   // Migrate closings table - add new columns
-  app.get("/api/migrate-closings", async (c) => {
   app.get("/api/migrate-closings", async (c) => {
     const conn = await getRawDb();
     const results: string[] = [];
