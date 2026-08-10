@@ -563,16 +563,17 @@ export const inventoryRouter = createRouter({
         const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
         return { id: Number(insertResult?.insertId || 0) };
       } catch (e: any) {
-        // If column doesn't exist, fallback to basic insert
-        if (e.message && (e.message.includes("Unknown column") || e.message.includes("doesn't have a default value"))) {
+        // Fallback: insert with only base columns (for old DB schema without new columns)
+        try {
           const result = await db.execute(sql`
             INSERT INTO closings (storeId, fecha, dia, efectivo, sinpe, tarjeta, sinFactura, total, inicial)
             VALUES (${input.storeId}, ${input.fecha}, ${input.dia || null}, ${input.efectivo || '0'}, ${input.sinpe || '0'}, ${input.tarjeta || '0'}, ${input.sinFactura || '0'}, ${input.total || '0'}, ${input.inicial || '50000'})
           `);
           const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
           return { id: Number(insertResult?.insertId || 0) };
+        } catch (fallbackError: any) {
+          throw fallbackError;
         }
-        throw e;
       }
     }),
 
