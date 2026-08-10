@@ -540,7 +540,7 @@ export const inventoryRouter = createRouter({
     .mutation(async ({ input }) => {
       const db = getDb();
 
-      // Check for duplicate closing on same date and store - using SQL raw to avoid column issues
+      // Check for duplicate closing on same date and store
       const dupRows = await db.execute(
         sql`SELECT id FROM closings WHERE storeId = ${input.storeId} AND fecha = ${input.fecha} LIMIT 1`
       );
@@ -554,17 +554,26 @@ export const inventoryRouter = createRouter({
       const inicial = Number(input.inicial || 50000);
       const diferencia = Number(input.efectivo || 0) - ventas - inicial;
 
-      // Build insert columns dynamically to avoid missing column errors
-      const columns = ['storeId', 'fecha', 'dia', 'hora', 'efectivo', 'sinpe', 'tarjeta', 'sinFactura', 'total', 'inicial', 'diferencia', 'observaciones', 'revisado', 'createdBy', 'semana', 'anio'];
-      const values = [input.storeId, input.fecha, input.dia || null, input.hora || null, input.efectivo || '0', input.sinpe || '0', input.tarjeta || '0', input.sinFactura || '0', input.total || '0', input.inicial || '50000', String(diferencia), input.observaciones || null, false, input.createdBy || null, input.semana || null, input.anio || null];
-
-      const colStr = columns.join(', ');
-      const placeholders = columns.map(() => '?').join(', ');
-      const rawSql = `INSERT INTO closings (${colStr}) VALUES (${placeholders})`;
-
-      const result = await db.execute(sql.raw(rawSql), values);
-      const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
-      return { id: Number(insertResult?.insertId || 0) };
+      // Use INSERT with all columns but catch errors
+      try {
+        const result = await db.execute(sql`
+          INSERT INTO closings (storeId, fecha, dia, hora, efectivo, sinpe, tarjeta, sinFactura, total, inicial, diferencia, observaciones, revisado, createdBy, semana, anio)
+          VALUES (${input.storeId}, ${input.fecha}, ${input.dia || null}, ${input.hora || null}, ${input.efectivo || '0'}, ${input.sinpe || '0'}, ${input.tarjeta || '0'}, ${input.sinFactura || '0'}, ${input.total || '0'}, ${input.inicial || '50000'}, ${String(diferencia)}, ${input.observaciones || null}, ${0}, ${input.createdBy || null}, ${input.semana || null}, ${input.anio || null})
+        `);
+        const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
+        return { id: Number(insertResult?.insertId || 0) };
+      } catch (e: any) {
+        // If column doesn't exist, fallback to basic insert
+        if (e.message && (e.message.includes("Unknown column") || e.message.includes("doesn't have a default value"))) {
+          const result = await db.execute(sql`
+            INSERT INTO closings (storeId, fecha, dia, efectivo, sinpe, tarjeta, sinFactura, total, inicial)
+            VALUES (${input.storeId}, ${input.fecha}, ${input.dia || null}, ${input.efectivo || '0'}, ${input.sinpe || '0'}, ${input.tarjeta || '0'}, ${input.sinFactura || '0'}, ${input.total || '0'}, ${input.inicial || '50000'})
+          `);
+          const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
+          return { id: Number(insertResult?.insertId || 0) };
+        }
+        throw e;
+      }
     }),
 
   updateClosing: adminQuery
