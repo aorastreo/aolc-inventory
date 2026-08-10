@@ -9,6 +9,14 @@ import {
 import { eq, and, desc, like, sql, count, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
+// Helper: format Date to YYYY-MM-DD string (local date, no timezone issues)
+function formatDateToString(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export const inventoryRouter = createRouter({
   // ========== STORES ==========
   stores: publicQuery.query(async () => {
@@ -632,15 +640,16 @@ export const inventoryRouter = createRouter({
       const currentYear = now.getFullYear();
       const currentMonth = now.getMonth();
 
-      // Week calculation (Monday = 1, Sunday = 0)
+      // Week calculation using string YYYY-MM-DD (no timezone issues)
       const dayOfWeek = now.getDay();
       const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       const weekStart = new Date(now);
       weekStart.setDate(now.getDate() - mondayOffset);
-      weekStart.setHours(0, 0, 0, 0);
+      const weekStartStr = formatDateToString(weekStart);
 
-      // Month start
+      // Month start using string YYYY-MM-DD
       const monthStart = new Date(currentYear, currentMonth, 1);
+      const monthStartStr = formatDateToString(monthStart);
 
       let semanaTotal = 0;
       let diasSemana = 0;
@@ -652,16 +661,16 @@ export const inventoryRouter = createRouter({
         const cTotal = Number(c.efectivo || 0) + Number(c.tarjeta || 0) + Number(c.sinpe || 0) + Number(c.sinFactura || 0);
         totalAcumulado += cTotal;
 
-        const cDate = new Date(c.fecha + "T12:00:00");
+        const cFecha = String(c.fecha || "");
 
-        // This week
-        if (cDate >= weekStart) {
+        // This week - compare as strings
+        if (cFecha >= weekStartStr) {
           semanaTotal += cTotal;
           diasSemana++;
         }
 
-        // This month
-        if (cDate >= monthStart) {
+        // This month - compare as strings
+        if (cFecha >= monthStartStr && cFecha.startsWith(String(currentYear))) {
           mesTotal += cTotal;
           diasMes++;
         }
@@ -692,7 +701,12 @@ export const inventoryRouter = createRouter({
       // Take last 7 closings
       const last7 = (all || []).slice(0, 7).reverse();
       for (const c of last7) {
-        const cDate = new Date(c.fecha + "T12:00:00");
+        // Parse fecha YYYY-MM-DD to get day safely (treat as local date)
+        const fechaParts = String(c.fecha || "").split("-");
+        const year = parseInt(fechaParts[0] || "0");
+        const month = parseInt(fechaParts[1] || "0") - 1;
+        const day = parseInt(fechaParts[2] || "0");
+        const cDate = new Date(year, month, day);
         const total = Number(c.efectivo || 0) + Number(c.tarjeta || 0) + Number(c.sinpe || 0) + Number(c.sinFactura || 0);
         trend.push({
           dia: dayNames[cDate.getDay()],
@@ -737,13 +751,17 @@ export const inventoryRouter = createRouter({
       const rows = await db.execute(sql`SELECT * FROM closings WHERE storeId = ${input.storeId} ORDER BY fecha DESC`);
       const all = Array.isArray(rows) ? rows[0] : (rows.rows || rows);
 
-      // Get current week info
+      // Get current week info using string dates (no timezone issues)
       const now = new Date();
       const dayOfWeek = now.getDay();
       const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       const weekStart = new Date(now);
       weekStart.setDate(now.getDate() - mondayOffset);
-      weekStart.setHours(0, 0, 0, 0);
+      const weekStartStr = formatDateToString(weekStart);
+      // Week end = weekStart + 6 days
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      const weekEndStr = formatDateToString(weekEnd);
 
       // Calculate week number
       const startOfYear = new Date(now.getFullYear(), 0, 1);
@@ -751,16 +769,15 @@ export const inventoryRouter = createRouter({
       const weekNumber = Math.ceil((daysSinceStart + startOfYear.getDay() + 1) / 7);
 
       const dayNames = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
-      const dayFullNames = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
 
-      // Initialize week days (Mon-Sun)
+      // Initialize week days (Mon-Sun) using string dates
       const weekDays: { dia: string; fecha: string; total: number; hasData: boolean }[] = [];
       for (let i = 0; i < 7; i++) {
         const d = new Date(weekStart);
         d.setDate(weekStart.getDate() + i);
         weekDays.push({
           dia: dayNames[d.getDay()],
-          fecha: d.toISOString().split("T")[0],
+          fecha: formatDateToString(d),
           total: 0,
           hasData: false,
         });
@@ -768,16 +785,15 @@ export const inventoryRouter = createRouter({
 
       let weekTotal = 0;
 
-      // Fill in data from closings
+      // Fill in data from closings - compare as strings
       for (const c of (all || [])) {
-        const cDate = new Date(c.fecha + "T12:00:00");
-        // Only this week
-        if (cDate >= weekStart && cDate < new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)) {
+        const cFecha = String(c.fecha || "");
+        if (cFecha >= weekStartStr && cFecha <= weekEndStr) {
           const total = Number(c.efectivo || 0) + Number(c.tarjeta || 0) + Number(c.sinpe || 0) + Number(c.sinFactura || 0);
           weekTotal += total;
-          const dayIdx = cDate.getDay();
-          const weekIdx = dayIdx === 0 ? 6 : dayIdx - 1; // Mon=0, Sun=6
-          if (weekDays[weekIdx]) {
+          // Find the day index by matching the date string
+          const weekIdx = weekDays.findIndex(wd => wd.fecha === cFecha);
+          if (weekIdx >= 0) {
             weekDays[weekIdx].total = total;
             weekDays[weekIdx].hasData = true;
           }
@@ -801,12 +817,12 @@ export const inventoryRouter = createRouter({
       const rows = await db.execute(sql`SELECT * FROM closings WHERE storeId = ${input.storeId} ORDER BY fecha DESC`);
       const all = Array.isArray(rows) ? rows[0] : (rows.rows || rows);
 
-      const desde = new Date(input.desde + "T00:00:00");
-      const hasta = new Date(input.hasta + "T23:59:59");
+      const desde = input.desde;
+      const hasta = input.hasta;
 
       const filtered = (all || []).filter((c: any) => {
-        const cDate = new Date(c.fecha + "T12:00:00");
-        return cDate >= desde && cDate <= hasta;
+        const cFecha = String(c.fecha || "");
+        return cFecha >= desde && cFecha <= hasta;
       });
 
       let totalVentas = 0;
