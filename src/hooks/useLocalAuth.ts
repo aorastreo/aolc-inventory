@@ -32,6 +32,14 @@ export function useLocalAuth() {
     { enabled: !!token && !user, retry: false }
   );
 
+  // Safety timeout: never stay loading more than 3 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     if (meQuery.data) {
       setUser(meQuery.data);
