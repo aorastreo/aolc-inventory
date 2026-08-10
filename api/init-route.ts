@@ -377,18 +377,8 @@ export function initRoute(app: Hono) {
   });
 
   // Check closings columns
-  app.get("/api/check-closings-columns", async (c) => {
-    const conn = await getRawDb();
-    try {
-      const [rows]: any = await conn.execute("SHOW COLUMNS FROM closings");
-      return c.json({ columns: rows.map((r: any) => r.Field) });
-    } catch (e: any) {
-      return c.json({ error: e.message }, 500);
-    } finally {
-      await conn.end();
-    }
-  });
-}
+  // Quick fix - add registradoPor column to closings
+  app.get("/api/fix-closings-registradoPor", async (c) => {
     const conn = await getRawDb();
     const results: string[] = [];
     try {
@@ -423,6 +413,19 @@ export function initRoute(app: Hono) {
       return c.json({ success: true, results });
     } catch (e: any) {
       return c.json({ success: false, error: e.message, results }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
+
+  // Check closings columns
+  app.get("/api/check-closings-columns", async (c) => {
+    const conn = await getRawDb();
+    try {
+      const [rows]: any = await conn.execute("SHOW COLUMNS FROM closings");
+      return c.json({ columns: rows.map((r: any) => r.Field) });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
     } finally {
       await conn.end();
     }
