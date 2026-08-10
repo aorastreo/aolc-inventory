@@ -278,6 +278,7 @@ export function initRoute(app: Hono) {
 
   // Quick rename store
   app.get("/api/rename-store", async (c) => {
+  app.get("/api/rename-store", async (c) => {
     const id = c.req.query("id");
     const name = c.req.query("name");
     if (!id || !name) return c.json({ error: "Missing ?id= and ?name= parameters" }, 400);
@@ -307,6 +308,7 @@ export function initRoute(app: Hono) {
   });
 
   // Migrate closings table - add new columns
+  app.get("/api/migrate-closings", async (c) => {
   app.get("/api/migrate-closings", async (c) => {
     const conn = await getRawDb();
     const results: string[] = [];
@@ -350,6 +352,47 @@ export function initRoute(app: Hono) {
         results.push("OK: storeConfig seeded");
       } catch (e: any) {
         results.push(`ERR storeConfig: ${e.message}`);
+      }
+
+      return c.json({ success: true, results });
+    } catch (e: any) {
+      return c.json({ success: false, error: e.message, results }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
+
+  // Migrate store employees table + registradoPor column
+  app.get("/api/migrate-store-employees", async (c) => {
+    const conn = await getRawDb();
+    const results: string[] = [];
+    try {
+      // Add registradoPor to closings
+      try {
+        await conn.execute("ALTER TABLE closings ADD COLUMN registradoPor VARCHAR(255) DEFAULT NULL");
+        results.push("OK: registradoPor column added to closings");
+      } catch (e: any) {
+        if (e.message.includes("Duplicate column")) {
+          results.push("SKIP: registradoPor already exists in closings");
+        } else {
+          results.push(`ERR closings: ${e.message}`);
+        }
+      }
+
+      // Create storeEmployees table
+      try {
+        await conn.execute(`
+          CREATE TABLE IF NOT EXISTS storeEmployees (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            storeId BIGINT UNSIGNED NOT NULL,
+            nombre VARCHAR(255) NOT NULL,
+            isActive TINYINT(1) DEFAULT 1 NOT NULL,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        results.push("OK: storeEmployees table created");
+      } catch (e: any) {
+        results.push(`ERR storeEmployees: ${e.message}`);
       }
 
       return c.json({ success: true, results });

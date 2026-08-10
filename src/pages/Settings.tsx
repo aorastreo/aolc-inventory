@@ -63,6 +63,18 @@ export default function SettingsPage() {
     },
   });
 
+  // Store employees (for closings selector)
+  const { data: allStoreEmployees } = trpc.inventory.allStoreEmployees.useQuery();
+  const createStoreEmployee = trpc.inventory.createStoreEmployee.useMutation({
+    onSuccess: () => utils.inventory.allStoreEmployees.invalidate(),
+  });
+  const deleteStoreEmployee = trpc.inventory.deleteStoreEmployee.useMutation({
+    onSuccess: () => utils.inventory.allStoreEmployees.invalidate(),
+  });
+
+  const [newStoreEmployee, setNewStoreEmployee] = useState({ storeId: 1, nombre: "" });
+  const [empDialogOpen, setEmpDialogOpen] = useState(false);
+
   const getConfig = (storeId: number) => {
     if (storeId === 1) return config1;
     if (storeId === 2) return config2;
@@ -267,6 +279,77 @@ export default function SettingsPage() {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Store Employees - Names for closing selector */}
+      {isAdmin && (
+        <Card className="border-0 shadow-sm mt-6">
+          <CardHeader className="flex flex-row items-center justify-between pb-4">
+            <CardTitle className="flex items-center gap-2 text-base" style={{ color: BRAND_BLUE }}>
+              <Users className="w-5 h-5" />
+              Empleados por Tienda (para Cierre)
+            </CardTitle>
+            <Dialog open={empDialogOpen} onOpenChange={setEmpDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
+                  <Plus className="w-4 h-4 mr-1" />
+                  Nuevo Empleado
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Users className="w-5 h-5" style={{ color: BRAND_RED }} />
+                    Agregar Empleado a Tienda
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-2">
+                  <div>
+                    <Label>Tienda</Label>
+                    <select
+                      className="w-full h-10 border rounded-md px-3 text-sm"
+                      style={{ borderColor: "hsl(210 20% 88%)" }}
+                      value={newStoreEmployee.storeId}
+                      onChange={(e) => setNewStoreEmployee({ ...newStoreEmployee, storeId: Number(e.target.value) })}
+                    >
+                      {stores?.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Nombre del empleado</Label>
+                    <Input placeholder="Ej: Elvis Gomez" value={newStoreEmployee.nombre} onChange={(e) => setNewStoreEmployee({ ...newStoreEmployee, nombre: e.target.value })} />
+                  </div>
+                  <Button onClick={() => { createStoreEmployee.mutate(newStoreEmployee); setNewStoreEmployee({ storeId: 1, nombre: "" }); setEmpDialogOpen(false); }} className="w-full font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
+                    Agregar Empleado
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </CardHeader>
+          <CardContent>
+            {stores?.map((s) => {
+              const emps = (allStoreEmployees || []).filter(e => e.storeId === s.id);
+              if (emps.length === 0) return null;
+              return (
+                <div key={s.id} className="mb-4">
+                  <p className="text-sm font-semibold mb-2" style={{ color: "hsl(207 55% 15%)" }}>{s.name}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {emps.map((emp) => (
+                      <div key={emp.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-white" style={{ borderColor: "hsl(210 20% 90%)" }}>
+                        <span className="text-sm">{emp.nombre}</span>
+                        <Button variant="ghost" size="sm" onClick={() => deleteStoreEmployee.mutate({ id: emp.id })} className="h-6 w-6 p-0 hover:bg-red-50">
+                          <Trash2 className="w-3 h-3" style={{ color: BRAND_RED }} />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}

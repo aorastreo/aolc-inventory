@@ -46,6 +46,7 @@ export default function ClosingsPage() {
   const { data: weeklyBreakdown } = trpc.inventory.closingWeeklyBreakdown.useQuery({ storeId: effectiveStoreId });
   const { data: storeConfigData } = trpc.inventory.storeConfig.useQuery({ storeId: effectiveStoreId });
   const { data: pendingReviews } = trpc.inventory.pendingReviews.useQuery();
+  const { data: storeEmployees } = trpc.inventory.storeEmployees.useQuery({ storeId: effectiveStoreId });
 
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -89,7 +90,7 @@ export default function ClosingsPage() {
   const [newClosing, setNewClosing] = useState({
     fecha: "", dia: "", hora: "",
     efectivo: "", tarjeta: "", sinpe: "", sinFactura: "",
-    observaciones: "",
+    observaciones: "", registradoPor: "",
   });
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editClosing, setEditClosing] = useState({ id: 0, fecha: "", dia: "", efectivo: "", tarjeta: "", sinpe: "", sinFactura: "", observaciones: "" });
@@ -149,13 +150,14 @@ export default function ClosingsPage() {
       total: String(totalCalculado), inicial: montoInicialDefault,
       observaciones: newClosing.observaciones,
       createdBy: userName ? decodeURIComponent(userName) : undefined,
+      registradoPor: newClosing.registradoPor || undefined,
     });
   };
 
   // Close dialog on success
   useEffect(() => {
     if (createClosing.isSuccess) {
-      setNewClosing({ fecha: new Date().toISOString().split("T")[0], dia: "", hora: "", efectivo: "", tarjeta: "", sinpe: "", sinFactura: "", observaciones: "" });
+      setNewClosing({ fecha: new Date().toISOString().split("T")[0], dia: "", hora: "", efectivo: "", tarjeta: "", sinpe: "", sinFactura: "", observaciones: "", registradoPor: "" });
       setDialogOpen(false);
     }
   }, [createClosing.isSuccess]);
@@ -275,6 +277,20 @@ export default function ClosingsPage() {
                   value={newClosing.observaciones}
                   onChange={(e) => setNewClosing({ ...newClosing, observaciones: e.target.value })}
                 />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold" style={{ color: "#1B3A5C" }}>Quien hizo el cierre?</Label>
+                <select
+                  className="w-full mt-1 h-10 px-3 rounded-md border text-sm"
+                  style={{ borderColor: "hsl(210 20% 88%)" }}
+                  value={newClosing.registradoPor}
+                  onChange={(e) => setNewClosing({ ...newClosing, registradoPor: e.target.value })}
+                >
+                  <option value="">Seleccionar empleado...</option>
+                  {storeEmployees?.map((emp) => (
+                    <option key={emp.id} value={emp.nombre}>{emp.nombre}</option>
+                  ))}
+                </select>
               </div>
               {createError && (
                 <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
@@ -563,7 +579,7 @@ export default function ClosingsPage() {
                       </div>
                       <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
                         {closing.dia} {closing.hora ? `· ${closing.hora}` : ""}
-                        {closing.createdBy ? ` · ${closing.createdBy}` : ""}
+                        {closing.registradoPor ? ` · Cierre: ${closing.registradoPor}` : ""}
                       </p>
                     </div>
                   </div>

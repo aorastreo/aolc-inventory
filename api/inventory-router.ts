@@ -4,7 +4,7 @@ import { getDb } from "./queries/connection";
 import {
   stores, pallets, products, productDatabase,
   adjustments, adjustmentItems, closings, assemblers, assemblyAssignments, employees, printedLabels,
-  transfers, transferItems, storeConfig,
+  transfers, transferItems, storeConfig, storeEmployees,
 } from "@db/schema";
 import { eq, and, desc, like, sql, count, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -532,7 +532,7 @@ export const inventoryRouter = createRouter({
     }),
 
   createClosing: publicQuery
-    .input(z.object({ storeId: z.number(), fecha: z.string(), dia: z.string().optional(), hora: z.string().optional(), efectivo: z.string().default("0"), sinpe: z.string().default("0"), tarjeta: z.string().default("0"), sinFactura: z.string().default("0"), total: z.string().default("0"), inicial: z.string().default("50000"), observaciones: z.string().optional(), createdBy: z.string().optional(), semana: z.number().optional(), anio: z.number().optional() }))
+    .input(z.object({ storeId: z.number(), fecha: z.string(), dia: z.string().optional(), hora: z.string().optional(), efectivo: z.string().default("0"), sinpe: z.string().default("0"), tarjeta: z.string().default("0"), sinFactura: z.string().default("0"), total: z.string().default("0"), inicial: z.string().default("50000"), observaciones: z.string().optional(), createdBy: z.string().optional(), registradoPor: z.string().optional(), semana: z.number().optional(), anio: z.number().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
 
@@ -548,7 +548,6 @@ export const inventoryRouter = createRouter({
       const ventas = Number(input.efectivo || 0) + Number(input.sinpe || 0) + Number(input.tarjeta || 0) + Number(input.sinFactura || 0);
       const inicial = Number(input.inicial || 50000);
       // Diferencia = efectivo disponible esperado (inicial + ventas) vs lo que reporta
-      // Asumimos que el cierre reporta el efectivo final, la diferencia es efectivo - ventas - inicial
       const diferencia = Number(input.efectivo || 0) - ventas - inicial;
 
       const result = await db.insert(closings).values({
@@ -1094,6 +1093,36 @@ export const inventoryRouter = createRouter({
     .mutation(async ({ input }) => {
       const db = getDb();
       await db.update(transfers).set({ estado: "cancelado" }).where(eq(transfers.id, input.id));
+      return { success: true };
+    }),
+
+  // ========== STORE EMPLOYEES (nombres para cierre) ==========
+  storeEmployees: publicQuery
+    .input(z.object({ storeId: z.number() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      return db.select().from(storeEmployees).where(and(eq(storeEmployees.storeId, input.storeId), eq(storeEmployees.isActive, true)));
+    }),
+
+  allStoreEmployees: publicQuery
+    .query(async () => {
+      const db = getDb();
+      return db.select().from(storeEmployees).where(eq(storeEmployees.isActive, true));
+    }),
+
+  createStoreEmployee: publicQuery
+    .input(z.object({ storeId: z.number(), nombre: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const result = await db.insert(storeEmployees).values(input);
+      return { id: Number(result[0].insertId) };
+    }),
+
+  deleteStoreEmployee: publicQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.update(storeEmployees).set({ isActive: false }).where(eq(storeEmployees.id, input.id));
       return { success: true };
     }),
 });

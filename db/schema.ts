@@ -190,6 +190,7 @@ export const closings = mysqlTable("closings", {
   observaciones: text("observaciones"),
   revisado: boolean("revisado").default(false).notNull(),
   createdBy: varchar("createdBy", { length: 255 }),
+  registradoPor: varchar("registradoPor", { length: 255 }),
   cierreHora: timestamp("cierreHora").defaultNow().notNull(),
   semana: int("semana"),
   anio: int("anio"),
@@ -198,6 +199,20 @@ export const closings = mysqlTable("closings", {
 
 export type Closing = typeof closings.$inferSelect;
 export type InsertClosing = typeof closings.$inferInsert;
+
+// ============================================
+// STORE EMPLOYEES (nombres para cierre)
+// ============================================
+export const storeEmployees = mysqlTable("storeEmployees", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  nombre: varchar("nombre", { length: 255 }).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type StoreEmployee = typeof storeEmployees.$inferSelect;
+export type InsertStoreEmployee = typeof storeEmployees.$inferInsert;
 
 // ============================================
 // STORE CONFIG (Monto inicial por tienda)
