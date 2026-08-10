@@ -360,8 +360,35 @@ export function initRoute(app: Hono) {
     }
   });
 
-  // Migrate store employees table + registradoPor column
-  app.get("/api/migrate-store-employees", async (c) => {
+  // Add registradoPor column to closings (simple fix)
+  app.get("/api/fix-closings-registradoPor", async (c) => {
+    const conn = await getRawDb();
+    try {
+      await conn.execute("ALTER TABLE closings ADD COLUMN registradoPor VARCHAR(255) DEFAULT NULL");
+      return c.json({ success: true, message: "registradoPor added" });
+    } catch (e: any) {
+      if (e.message.includes("Duplicate column")) {
+        return c.json({ success: true, message: "registradoPor already exists" });
+      }
+      return c.json({ success: false, error: e.message }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
+
+  // Check closings columns
+  app.get("/api/check-closings-columns", async (c) => {
+    const conn = await getRawDb();
+    try {
+      const [rows]: any = await conn.execute("SHOW COLUMNS FROM closings");
+      return c.json({ columns: rows.map((r: any) => r.Field) });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
+}
     const conn = await getRawDb();
     const results: string[] = [];
     try {
