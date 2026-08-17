@@ -901,7 +901,7 @@ export const inventoryRouter = createRouter({
       const db = getDb();
       const items = await db.select().from(adjustmentItems)
         .where(eq(adjustmentItems.adjustmentId, input.adjustmentId))
-        .orderBy(adjustmentItems.orden);
+        .orderBy(desc(adjustmentItems.id));
 
       let printedSet = new Set<number>();
       try {
@@ -924,14 +924,14 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number(), palletId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
-      // Get all products for this pallet
+      // Get all products for this pallet - last added first
       const productList = await db.select().from(products)
         .where(and(
           eq(products.storeId, input.storeId),
           eq(products.palletId, input.palletId),
           eq(products.isActive, true)
         ))
-        .orderBy(products.nombre);
+        .orderBy(desc(products.id));
 
       let printedSet = new Set<number>();
       try {
