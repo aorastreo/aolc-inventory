@@ -30,8 +30,9 @@ export default function TransfersPage() {
   });
 
   const [showCreate, setShowCreate] = useState(false);
-  const [fromStoreId, setFromStoreId] = useState<number | null>(null);
   const [toStoreId, setToStoreId] = useState<number | null>(null);
+  // Origen is always Bodega (storeId 1)
+  const BODEGA_STORE_ID = 1;
 
   // Viewing
   const [viewingTransfer, setViewingTransfer] = useState<number | null>(null);
@@ -47,9 +48,9 @@ export default function TransfersPage() {
   const [scanQty, setScanQty] = useState(1);
   const barcodeRef = useRef<HTMLInputElement>(null);
 
-  // Search by barcode in the origin store
+  // Search by barcode in Bodega (storeId 1) always
   const { data: foundProduct } = trpc.inventory.searchProductByBarcode.useQuery(
-    { storeId: currentTransfer?.fromStoreId || 1, barcode },
+    { storeId: BODEGA_STORE_ID, barcode },
     { enabled: barcode.length >= 5 && !!viewingTransfer && currentTransfer?.estado === "activo" }
   );
 
@@ -80,14 +81,13 @@ export default function TransfersPage() {
   };
 
   const handleCreate = () => {
-    if (!fromStoreId || !toStoreId) return;
-    if (fromStoreId === toStoreId) return;
+    if (!toStoreId) return;
+    if (BODEGA_STORE_ID === toStoreId) return;
     createTransfer.mutate({
-      fromStoreId,
+      fromStoreId: BODEGA_STORE_ID,
       toStoreId,
       fecha: new Date().toISOString().split("T")[0],
     });
-    setFromStoreId(null);
     setToStoreId(null);
   };
 
@@ -176,7 +176,7 @@ export default function TransfersPage() {
             <CardContent className="p-5">
               <h3 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: BRAND_BLUE }}>
                 <Barcode className="w-4 h-4" />
-                Escanear Producto en {fromName}
+                Escanear Producto en Bodega
               </h3>
               <div className="space-y-4">
                 <div className="relative">
@@ -218,7 +218,7 @@ export default function TransfersPage() {
                 )}
 
                 {barcode.length >= 5 && !scannedProduct && (
-                  <p className="text-sm" style={{ color: "#DC2626" }}>Producto no encontrado en {fromName}</p>
+                  <p className="text-sm" style={{ color: "#DC2626" }}>Producto no encontrado en Bodega</p>
                 )}
               </div>
             </CardContent>
@@ -289,17 +289,10 @@ export default function TransfersPage() {
             <h3 className="text-sm font-semibold mb-4" style={{ color: BRAND_BLUE }}>Crear Transferencia</h3>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <Label className="text-xs">Tienda Origen</Label>
-                <select
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                  value={fromStoreId || ""}
-                  onChange={(e) => setFromStoreId(Number(e.target.value))}
-                >
-                  <option value="">Seleccionar...</option>
-                  {stores?.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                <Label className="text-xs">Origen</Label>
+                <div className="w-full h-10 px-3 rounded-md border border-input bg-gray-50 text-sm flex items-center font-semibold" style={{ color: BRAND_BLUE }}>
+                  Bodega
+                </div>
               </div>
               <div>
                 <Label className="text-xs">Tienda Destino</Label>
@@ -309,7 +302,7 @@ export default function TransfersPage() {
                   onChange={(e) => setToStoreId(Number(e.target.value))}
                 >
                   <option value="">Seleccionar...</option>
-                  {stores?.map(s => (
+                  {stores?.filter(s => s.id !== BODEGA_STORE_ID).map(s => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
