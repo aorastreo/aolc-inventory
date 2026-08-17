@@ -435,4 +435,53 @@ export function initRoute(app: Hono) {
       await conn.end();
     }
   });
+
+  // Migrate closings from Bodega (old Los Chiles) to new Los Chiles store + update German's store
+  app.get("/api/migrate-loschiles", async (c) => {
+    const conn = await getRawDb();
+    try {
+      // 1. Find the new Los Chiles store (not Bodega = id 1)
+      const [losChilesRows]: any = await conn.execute(
+        "SELECT id FROM stores WHERE (name LIKE ? OR slug = ?) AND id != 1 LIMIT 1",
+        ["%Los Chiles%", "los-chiles"]
+      );
+      if (!losChilesRows || losChilesRows.length === 0) {
+        return c.json({ error: "No se encontro tienda Los Chiles. Primero creala con /api/add-store" }, 404);
+      }
+      const losChilesId = losChilesRows[0].id;
+
+      const results: string[] = [];
+      results.push(`Tienda Los Chiles encontrada: id=${losChilesId}`);
+
+      // 2. Move closings from storeId 1 (old Los Chiles) to new Los Chiles
+      const [cierresResult]: any = await conn.execute(
+        "UPDATE closings SET storeId = ? WHERE storeId = 1",
+        [losChilesId]
+      );
+      results.push(`Cierres movidos: ${cierresResult.affectedRows || 0}`);
+
+      // 3. Move pallets from storeId 1 to new Los Chiles (if needed later)
+      // Note: Pallets stay in Bodega, that's correct
+
+      // 4. Update German's storeId from 1 to Los Chiles
+      const [germanResult]: any = await conn.execute(
+        "UPDATE employees SET storeId = ? WHERE username = 'german' AND storeId = 1",
+        [losChilesId]
+      );
+      results.push(`German actualizado: ${germanResult.affectedRows || 0}`);
+
+      // 5. Also update any other employees that were on store 1 (old Los Chiles) to new Los Chiles
+      const [otherEmps]: any = await conn.execute(
+        "UPDATE employees SET storeId = ? WHERE storeId = 1 AND username != 'german'",
+        [losChilesId]
+      );
+      results.push(`Otros empleados actualizados: ${otherEmps.affectedRows || 0}`);
+
+      return c.json({ success: true, losChilesId, results });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
 }
