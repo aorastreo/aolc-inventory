@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import {
   Tag, Package, ClipboardList, Printer, Wifi, ScanBarcode,
   Search, CheckSquare, Square, List, Layers, WifiOff,
-  AlertCircle, ArrowDownAZ, ArrowUpAZ, ChevronDown, Check,
+  AlertCircle, ChevronDown, Check,
 } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import JsBarcode from "jsbarcode";
@@ -124,7 +124,6 @@ export default function LabelsPage() {
   const [rangeEnd, setRangeEnd] = useState("");
   const [labelSize, setLabelSize] = useState("50x25");
   const [showPrice, setShowPrice] = useState("si");
-  const [sortAsc, setSortAsc] = useState(true);
   // Editable quantities and names per product
   const [labelQuantities, setLabelQuantities] = useState<Record<number, number>>({});
   const [labelNames, setLabelNames] = useState<Record<number, string>>({});
@@ -259,9 +258,8 @@ export default function LabelsPage() {
     (p.codigoBarras && p.codigoBarras.includes(search))
   ) || [];
 
-  const sorted = [...filtered].sort((a, b) =>
-    sortAsc ? a.nombre.localeCompare(b.nombre) : b.nombre.localeCompare(a.nombre)
-  );
+  // No sort — use backend order (last added first via desc(id))
+  const sorted = filtered;
 
   // Selected items expanded by quantity
   const selectedItemsList = sorted.filter(p => selectedProducts.has(p.id));
@@ -371,9 +369,6 @@ export default function LabelsPage() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "hsl(207 20% 60%)" }} />
                   <Input placeholder="Buscar articulo por nombre..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-10" />
                 </div>
-                <Button variant="outline" size="sm" className="h-10" onClick={() => setSortAsc(!sortAsc)}>
-                  {sortAsc ? <ArrowDownAZ className="w-4 h-4" /> : <ArrowUpAZ className="w-4 h-4" />}
-                </Button>
               </div>
 
               {/* Range selector */}
