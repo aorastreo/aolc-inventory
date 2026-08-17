@@ -17,6 +17,57 @@ function formatDateToString(d: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// Helper: get next auto barcode in range 77000000-77999999
+// Manual codes outside this range never affect auto sequence
+const AUTO_BARCODE_MIN = 77000000;
+const AUTO_BARCODE_MAX = 77999999;
+const AUTO_BARCODE_START = 77001400; // Next after 77001399
+
+async function getNextAutoBarcode(db: any): Promise<string> {
+  // Search in products table
+  const pResult: any = await db.execute(
+    sql`SELECT codigoBarras FROM products 
+        WHERE codigoBarras REGEXP '^[0-9]+$' 
+        AND CAST(codigoBarras AS UNSIGNED) >= ${AUTO_BARCODE_MIN} 
+        AND CAST(codigoBarras AS UNSIGNED) <= ${AUTO_BARCODE_MAX}
+        ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
+  );
+  // Search in productDatabase table
+  const dResult: any = await db.execute(
+    sql`SELECT codigoBarras FROM productDatabase 
+        WHERE codigoBarras REGEXP '^[0-9]+$' 
+        AND CAST(codigoBarras AS UNSIGNED) >= ${AUTO_BARCODE_MIN} 
+        AND CAST(codigoBarras AS UNSIGNED) <= ${AUTO_BARCODE_MAX}
+        ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
+  );
+  // Search in adjustmentItems table
+  const aResult: any = await db.execute(
+    sql`SELECT codigoBarras FROM adjustmentItems 
+        WHERE codigoBarras REGEXP '^[0-9]+$' 
+        AND CAST(codigoBarras AS UNSIGNED) >= ${AUTO_BARCODE_MIN} 
+        AND CAST(codigoBarras AS UNSIGNED) <= ${AUTO_BARCODE_MAX}
+        ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
+  );
+
+  const pRows = Array.isArray(pResult) ? pResult[0] : (pResult.rows || pResult);
+  const dRows = Array.isArray(dResult) ? dResult[0] : (dResult.rows || dResult);
+  const aRows = Array.isArray(aResult) ? aResult[0] : (aResult.rows || aResult);
+
+  const pMax = (Array.isArray(pRows) && pRows.length > 0) ? parseInt(pRows[0].codigoBarras, 10) : 0;
+  const dMax = (Array.isArray(dRows) && dRows.length > 0) ? parseInt(dRows[0].codigoBarras, 10) : 0;
+  const aMax = (Array.isArray(aRows) && aRows.length > 0) ? parseInt(aRows[0].codigoBarras, 10) : 0;
+
+  const lastAuto = Math.max(pMax, dMax, aMax);
+  const nextCode = lastAuto > 0 ? lastAuto + 1 : AUTO_BARCODE_START;
+
+  // Safety: don't exceed max range
+  if (nextCode > AUTO_BARCODE_MAX) {
+    throw new Error("Se agotaron los codigos automaticos en el rango 7700xxxx");
+  }
+
+  return String(nextCode);
+}
+
 export const inventoryRouter = createRouter({
   // ========== STORES ==========
   stores: publicQuery.query(async () => {
@@ -216,18 +267,7 @@ export const inventoryRouter = createRouter({
 
       // Auto-generate barcode if not provided or empty
       if (!codigoBarras || codigoBarras.trim() === "") {
-        const result: any = await db.execute(
-          sql`SELECT codigoBarras FROM products WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
-        );
-        // mysql2 returns [rows, fields] tuple
-        const rows = Array.isArray(result) ? result[0] : (result.rows || result);
-        const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
-        if (row && row.codigoBarras) {
-          const lastCode = parseInt(row.codigoBarras, 10);
-          codigoBarras = String(lastCode + 1);
-        } else {
-          codigoBarras = "770001";
-        }
+        codigoBarras = await getNextAutoBarcode(db);
       }
 
       const result = await db.insert(products).values({ ...input, codigoBarras });
@@ -284,8 +324,15 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number(), nombre: z.string(), precio: z.string().optional(), codigoBarras: z.string().optional(), categoria: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const result = await db.insert(productDatabase).values(input);
-      return { id: Number(result[0].insertId) };
+      let codigoBarras = input.codigoBarras;
+
+      // Auto-generate barcode if not provided or empty
+      if (!codigoBarras || codigoBarras.trim() === "") {
+        codigoBarras = await getNextAutoBarcode(db);
+      }
+
+      const result = await db.insert(productDatabase).values({ ...input, codigoBarras });
+      return { id: Number(result[0].insertId), codigoBarras };
     }),
 
   updateProductDB: publicQuery
@@ -377,22 +424,7 @@ export const inventoryRouter = createRouter({
 
       // Auto-generate barcode if not provided or empty
       if (!codigoBarras || codigoBarras.trim() === "") {
-        // Find the highest numeric barcode across all tables (products + adjustmentItems)
-        const productResult: any = await db.execute(
-          sql`SELECT codigoBarras FROM products WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
-        );
-        const adjResult: any = await db.execute(
-          sql`SELECT codigoBarras FROM adjustmentItems WHERE codigoBarras REGEXP '^[0-9]+$' ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
-        );
-        // mysql2 returns [rows, fields] tuple
-        const pRows = Array.isArray(productResult) ? productResult[0] : (productResult.rows || productResult);
-        const aRows = Array.isArray(adjResult) ? adjResult[0] : (adjResult.rows || adjResult);
-        const pRow = Array.isArray(pRows) && pRows.length > 0 ? pRows[0] : null;
-        const aRow = Array.isArray(aRows) && aRows.length > 0 ? aRows[0] : null;
-        const lastProduct = pRow && pRow.codigoBarras ? parseInt(pRow.codigoBarras, 10) : 0;
-        const lastAdj = aRow && aRow.codigoBarras ? parseInt(aRow.codigoBarras, 10) : 0;
-        const lastCode = Math.max(lastProduct, lastAdj);
-        codigoBarras = lastCode > 0 ? String(lastCode + 1) : "770001";
+        codigoBarras = await getNextAutoBarcode(db);
       }
 
       const result = await db.insert(adjustmentItems).values({ ...input, codigoBarras });
