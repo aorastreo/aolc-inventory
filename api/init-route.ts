@@ -280,12 +280,17 @@ export function initRoute(app: Hono) {
   app.get("/api/rename-store", async (c) => {
     const id = c.req.query("id");
     const name = c.req.query("name");
+    const slug = c.req.query("slug");
     if (!id || !name) return c.json({ error: "Missing ?id= and ?name= parameters" }, 400);
 
     const conn = await getRawDb();
     try {
-      await conn.execute("UPDATE stores SET name = ?, description = ? WHERE id = ?", [name, name, id]);
-      return c.json({ success: true, id, name });
+      if (slug) {
+        await conn.execute("UPDATE stores SET name = ?, description = ?, slug = ? WHERE id = ?", [name, name, slug, id]);
+      } else {
+        await conn.execute("UPDATE stores SET name = ?, description = ? WHERE id = ?", [name, name, id]);
+      }
+      return c.json({ success: true, id, name, slug });
     } catch (e: any) {
       return c.json({ error: e.message }, 500);
     } finally {
