@@ -161,7 +161,7 @@ export default function TransfersPage() {
           <div className="flex flex-wrap items-center gap-3 mb-5">
             <div className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: "rgba(178,34,52,0.12)", color: BRAND_RED }}>
               <ArrowLeftRight className="w-4 h-4" />
-              <span>{transferDetail.length} productos | {transferDetail.reduce((s, i) => s + i.cantidad, 0)} unidades</span>
+              <span>{transferDetail.length} productos | {transferDetail.reduce((s, i) => s + i.cantidad, 0)} unidades | {formatCurrency(String(transferDetail.reduce((s, i) => s + (Number(i.precio || 0) * i.cantidad), 0)))}</span>
             </div>
             <Button variant="outline" size="sm" onClick={exportQupos} className="font-medium" style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}>
               <Download className="w-4 h-4 mr-2" />
