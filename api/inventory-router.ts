@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createRouter, publicQuery, adminQuery } from "./middleware";
-import { getDb } from "./queries/connection";
+import { getDb, getRawDb } from "./queries/connection";
 import {
   stores, pallets, products, productDatabase,
   adjustments, adjustmentItems, closings, assemblers, assemblyAssignments, employees, printedLabels,
@@ -1194,5 +1194,38 @@ export const inventoryRouter = createRouter({
       const db = getDb();
       await db.update(storeEmployees).set({ isActive: false }).where(eq(storeEmployees.id, input.id));
       return { success: true };
+    }),
+
+  // Fix: move employees from Bodega (storeId 1) to new Los Chiles store
+  fixLosChilesEmployees: publicQuery
+    .mutation(async () => {
+      const conn = await getRawDb();
+      try {
+        // Find Los Chiles store (not Bodega = id 1)
+        const [losChilesRows]: any = await conn.execute(
+          "SELECT id FROM stores WHERE (name LIKE ? OR slug = ?) AND id != 1 LIMIT 1",
+          ["%Los Chiles%", "los-chiles"]
+        );
+        if (!losChilesRows || losChilesRows.length === 0) {
+          throw new Error("No se encontro tienda Los Chiles");
+        }
+        const losChilesId = losChilesRows[0].id;
+
+        // Move all employees from storeId 1 to Los Chiles
+        const [result]: any = await conn.execute(
+          "UPDATE employees SET storeId = ? WHERE storeId = 1",
+          [losChilesId]
+        );
+
+        return {
+          success: true,
+          losChilesId,
+          message: `Empleados movidos: ${result.affectedRows || 0}`,
+        };
+      } catch (e: any) {
+        throw new Error(e.message);
+      } finally {
+        await conn.end();
+      }
     }),
 });
