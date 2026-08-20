@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import mysql from "mysql2/promise";
+import bcrypt from "bcryptjs";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -478,6 +479,32 @@ export function initRoute(app: Hono) {
       results.push(`Otros empleados actualizados: ${otherEmps.affectedRows || 0}`);
 
       return c.json({ success: true, losChilesId, results });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
+
+  // Change German's username and password
+  app.get("/api/change-german", async (c) => {
+    const conn = await getRawDb();
+    try {
+      const newUsername = "aoloschiles";
+      const newPassword = "aoloschiles123";
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      const [result]: any = await conn.execute(
+        "UPDATE employees SET username = ?, password = ? WHERE username = 'german' OR username = 'aoloschiles'",
+        [newUsername, hashedPassword]
+      );
+
+      return c.json({
+        success: true,
+        message: "Usuario actualizado",
+        username: newUsername,
+        affectedRows: result.affectedRows || 0,
+      });
     } catch (e: any) {
       return c.json({ error: e.message }, 500);
     } finally {
