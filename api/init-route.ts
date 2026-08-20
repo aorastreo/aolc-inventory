@@ -586,4 +586,35 @@ export function initRoute(app: Hono) {
       await conn.end();
     }
   });
+
+  // Migrate storeEmployees from Bodega (storeId 1) to new Los Chiles
+  app.get("/api/migrate-store-employees", async (c) => {
+    const conn = await getRawDb();
+    try {
+      const [losChilesRows]: any = await conn.execute(
+        "SELECT id FROM stores WHERE (name LIKE ? OR slug = ?) AND id != 1 LIMIT 1",
+        ["%Los Chiles%", "los-chiles"]
+      );
+      if (!losChilesRows || losChilesRows.length === 0) {
+        return c.json({ error: "No se encontro tienda Los Chiles" }, 404);
+      }
+      const losChilesId = losChilesRows[0].id;
+
+      const [result]: any = await conn.execute(
+        "UPDATE storeEmployees SET storeId = ? WHERE storeId = 1",
+        [losChilesId]
+      );
+
+      return c.json({
+        success: true,
+        losChilesId,
+        empleadosMovidos: result.affectedRows || 0,
+        message: `Empleados de cierre migrados: ${result.affectedRows || 0}`,
+      });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
 }
