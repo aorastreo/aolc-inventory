@@ -486,25 +486,35 @@ export function initRoute(app: Hono) {
     }
   });
 
-  // Change German's username and password
-  app.get("/api/change-german", async (c) => {
+  // List active employees
+  app.get("/api/list-employees", async (c) => {
     const conn = await getRawDb();
     try {
-      const newUsername = "aoloschiles";
-      const newPassword = "aoloschiles123";
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-      const [result]: any = await conn.execute(
-        "UPDATE employees SET username = ?, password = ? WHERE username = 'german' OR username = 'aoloschiles'",
-        [newUsername, hashedPassword]
+      const [rows]: any = await conn.execute(
+        "SELECT id, username, name, storeId, role FROM employees WHERE isActive = true ORDER BY storeId"
       );
+      return c.json({ employees: rows });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
 
-      return c.json({
-        success: true,
-        message: "Usuario actualizado",
-        username: newUsername,
-        affectedRows: result.affectedRows || 0,
-      });
+  // Reset employee password
+  app.get("/api/reset-password", async (c) => {
+    const id = c.req.query("id");
+    const password = c.req.query("password");
+    if (!id || !password) return c.json({ error: "Missing ?id= and ?password=" }, 400);
+
+    const conn = await getRawDb();
+    try {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await conn.execute(
+        "UPDATE employees SET password = ? WHERE id = ?",
+        [hashedPassword, id]
+      );
+      return c.json({ success: true, message: "Contrasena actualizada" });
     } catch (e: any) {
       return c.json({ error: e.message }, 500);
     } finally {
