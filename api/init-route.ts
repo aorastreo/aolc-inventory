@@ -501,20 +501,31 @@ export function initRoute(app: Hono) {
     }
   });
 
-  // Reset employee password
-  app.get("/api/reset-password", async (c) => {
-    const id = c.req.query("id");
-    const password = c.req.query("password");
-    if (!id || !password) return c.json({ error: "Missing ?id= and ?password=" }, 400);
-
+  // Fix: move employees from Bodega (storeId 1) to new Los Chiles store
+  app.get("/api/fix-loschiles-employees", async (c) => {
     const conn = await getRawDb();
     try {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      await conn.execute(
-        "UPDATE employees SET password = ? WHERE id = ?",
-        [hashedPassword, id]
+      // Find Los Chiles store (not Bodega = id 1)
+      const [losChilesRows]: any = await conn.execute(
+        "SELECT id FROM stores WHERE (name LIKE ? OR slug = ?) AND id != 1 LIMIT 1",
+        ["%Los Chiles%", "los-chiles"]
       );
-      return c.json({ success: true, message: "Contrasena actualizada" });
+      if (!losChilesRows || losChilesRows.length === 0) {
+        return c.json({ error: "No se encontro tienda Los Chiles" }, 404);
+      }
+      const losChilesId = losChilesRows[0].id;
+
+      // Move all employees from storeId 1 to Los Chiles
+      const [result]: any = await conn.execute(
+        "UPDATE employees SET storeId = ? WHERE storeId = 1",
+        [losChilesId]
+      );
+
+      return c.json({
+        success: true,
+        losChilesId,
+        message: `Empleados movidos: ${result.affectedRows || 0}`,
+      });
     } catch (e: any) {
       return c.json({ error: e.message }, 500);
     } finally {
