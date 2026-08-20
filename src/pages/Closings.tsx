@@ -606,6 +606,29 @@ export default function ClosingsPage() {
                     )}
                   </div>
                 </div>
+                {/* Desglose por metodo de pago */}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {Number(closing.efectivo || 0) > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                      Efectivo: {formatMoneyCurrency(Number(closing.efectivo))}
+                    </span>
+                  )}
+                  {Number(closing.tarjeta || 0) > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-100">
+                      Tarjeta: {formatMoneyCurrency(Number(closing.tarjeta))}
+                    </span>
+                  )}
+                  {Number(closing.sinpe || 0) > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
+                      SINPE: {formatMoneyCurrency(Number(closing.sinpe))}
+                    </span>
+                  )}
+                  {Number(closing.sinFactura || 0) > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-orange-50 text-orange-700 border border-orange-100">
+                      Sin Fact: {formatMoneyCurrency(Number(closing.sinFactura))}
+                    </span>
+                  )}
+                </div>
                 {hasDiferencia && (
                   <div className="mt-3 p-2 rounded-md text-xs font-semibold text-center" style={{ background: diferencia < 0 ? "rgba(220,38,38,0.06)" : "rgba(217,119,6,0.06)", color: diferencia < 0 ? "#DC2626" : "#D97706", border: `1px solid ${diferencia < 0 ? "rgba(220,38,38,0.15)" : "rgba(217,119,6,0.15)"}` }}>
                     {diferencia < 0 ? "FALTANTE" : "SOBRANTE"}: {formatMoneyCurrency(Math.abs(diferencia))}
