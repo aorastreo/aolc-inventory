@@ -587,10 +587,11 @@ export function initRoute(app: Hono) {
     }
   });
 
-  // Migrate storeEmployees from Bodega (storeId 1) to new Los Chiles
-  app.get("/api/migrate-store-employees", async (c) => {
+  // Add German as store employee for Los Chiles
+  app.get("/api/add-german-cierre", async (c) => {
     const conn = await getRawDb();
     try {
+      // Find Los Chiles store
       const [losChilesRows]: any = await conn.execute(
         "SELECT id FROM stores WHERE (name LIKE ? OR slug = ?) AND id != 1 LIMIT 1",
         ["%Los Chiles%", "los-chiles"]
@@ -600,16 +601,26 @@ export function initRoute(app: Hono) {
       }
       const losChilesId = losChilesRows[0].id;
 
+      // Check if German already exists
+      const [existing]: any = await conn.execute(
+        "SELECT id FROM storeEmployees WHERE storeId = ? AND nombre = 'German' LIMIT 1",
+        [losChilesId]
+      );
+
+      if (existing && existing.length > 0) {
+        return c.json({ success: true, message: "German ya existe como empleado de cierre", id: existing[0].id });
+      }
+
+      // Insert German
       const [result]: any = await conn.execute(
-        "UPDATE storeEmployees SET storeId = ? WHERE storeId = 1",
+        "INSERT INTO storeEmployees (storeId, nombre, isActive) VALUES (?, 'German', true)",
         [losChilesId]
       );
 
       return c.json({
         success: true,
-        losChilesId,
-        empleadosMovidos: result.affectedRows || 0,
-        message: `Empleados de cierre migrados: ${result.affectedRows || 0}`,
+        message: "German agregado como empleado de cierre",
+        id: result.insertId,
       });
     } catch (e: any) {
       return c.json({ error: e.message }, 500);
