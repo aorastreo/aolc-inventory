@@ -532,4 +532,25 @@ export function initRoute(app: Hono) {
       await conn.end();
     }
   });
+
+  // Reset password by username
+  app.get("/api/reset-password", async (c) => {
+    const username = c.req.query("username");
+    const password = c.req.query("password");
+    if (!username || !password) return c.json({ error: "Missing ?username= and ?password=" }, 400);
+
+    const conn = await getRawDb();
+    try {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const [result]: any = await conn.execute(
+        "UPDATE employees SET password = ? WHERE username = ?",
+        [hashedPassword, username]
+      );
+      return c.json({ success: true, message: "Contrasena actualizada", username, affectedRows: result.affectedRows || 0 });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    } finally {
+      await conn.end();
+    }
+  });
 }
