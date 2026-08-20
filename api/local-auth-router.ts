@@ -13,7 +13,48 @@ async function getRawDb() {
 }
 
 export const localAuthRouter = createRouter({
-  // Login with username/password
+  // Login by store (select store + password, no username needed)
+  loginByStore: publicQuery
+    .input(z.object({
+      storeId: z.number(),
+      password: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const conn = await getRawDb();
+      try {
+        // Get all active employees for this store
+        const [rows]: any = await conn.execute(
+          "SELECT id, storeId, username, password, name, role FROM employees WHERE storeId = ? AND isActive = true",
+          [input.storeId]
+        );
+
+        if (rows.length === 0) {
+          throw new Error("No hay usuarios configurados para esta tienda");
+        }
+
+        // Try each employee's password
+        for (const user of rows) {
+          const valid = await bcrypt.compare(input.password, user.password);
+          if (valid) {
+            const token = await new SignJWT({ id: user.id, username: user.username, name: user.name, role: user.role, storeId: user.storeId })
+              .setProtectedHeader({ alg: "HS256" })
+              .setExpirationTime("7d")
+              .sign(JWT_SECRET);
+
+            return {
+              token,
+              user: { id: user.id, name: user.name, username: user.username, role: user.role, storeId: user.storeId }
+            };
+          }
+        }
+
+        throw new Error("Contraseña incorrecta");
+      } finally {
+        await conn.end();
+      }
+    }),
+
+  // Login with username/password (for admin)
   login: publicQuery
     .input(z.object({
       username: z.string(),

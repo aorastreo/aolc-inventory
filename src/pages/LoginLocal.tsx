@@ -3,16 +3,41 @@ import { useLocalAuth } from "@/hooks/useLocalAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogIn, Store } from "lucide-react";
+import { LogIn, Store, UserCog } from "lucide-react";
+import { trpc } from "@/providers/trpc";
+
+const BRAND_RED = "#B22234";
 
 export default function LoginLocalPage() {
-  const { login, error } = useLocalAuth();
+  const { login, loginByStore, error } = useLocalAuth();
+  const [mode, setMode] = useState<"store" | "admin">("store");
+  const [storeId, setStoreId] = useState<string>("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [localError, setLocalError] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const { data: stores } = trpc.inventory.allStores.useQuery();
+
+  const handleStoreLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!storeId) {
+      setLocalError("Selecciona una tienda");
+      return;
+    }
+    setLoading(true);
+    setLocalError("");
+    try {
+      await loginByStore(Number(storeId), password);
+      window.location.href = "/";
+    } catch (err: any) {
+      setLocalError(err.message || "Error al iniciar sesion");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setLocalError("");
@@ -26,11 +51,18 @@ export default function LoginLocalPage() {
     }
   };
 
+  const tiendas = stores?.filter((s) => s.id !== 1) || [];
+
   return (
     <div className="min-h-screen flex">
       {/* Left side - Brand */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden" style={{ background: "linear-gradient(135deg, hsl(207 55% 18%) 0%, hsl(207 55% 12%) 100%)" }}>
-        {/* Decorative elements */}
+      <div
+        className="hidden lg:flex lg:w-1/2 relative overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(135deg, hsl(207 55% 18%) 0%, hsl(207 55% 12%) 100%)",
+        }}
+      >
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-20 left-20 w-64 h-64 border border-white/20 rounded-full" />
           <div className="absolute top-40 left-40 w-96 h-96 border border-white/10 rounded-full" />
@@ -38,25 +70,26 @@ export default function LoginLocalPage() {
         </div>
 
         <div className="relative z-10 flex flex-col justify-center items-center w-full px-12 text-white">
-          {/* Logo */}
           <div className="mb-8">
             <div className="relative">
               <img
                 src="/logo.jpg"
                 alt="American Outlet"
                 className="w-24 h-24 rounded-2xl object-cover border-2"
-                style={{ borderColor: "hsl(354 78% 42%)" }}
+                style={{ borderColor: BRAND_RED }}
               />
-              <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "hsl(43 89% 50%)" }}>
+              <div
+                className="absolute -top-2 -right-2 w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: "hsl(43 89% 50%)" }}
+              >
                 <Store className="w-4 h-4 text-white" />
               </div>
             </div>
           </div>
 
-          <h1 className="text-4xl font-bold mb-3 tracking-tight">American Outlet</h1>
-          <div className="inline-block px-4 py-1.5 rounded-full text-sm font-semibold mb-6" style={{ background: "hsl(354 78% 42%)" }}>
-            Los Chiles
-          </div>
+          <h1 className="text-4xl font-bold mb-3 tracking-tight">
+            American Outlet
+          </h1>
           <p className="text-white/60 text-center max-w-sm text-lg leading-relaxed">
             Sistema de gestion de inventario y control de ventas
           </p>
@@ -69,7 +102,10 @@ export default function LoginLocalPage() {
       </div>
 
       {/* Right side - Login form */}
-      <div className="flex-1 flex items-center justify-center p-8" style={{ background: "hsl(0 0% 97%)" }}>
+      <div
+        className="flex-1 flex items-center justify-center p-8"
+        style={{ background: "hsl(0 0% 97%)" }}
+      >
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
@@ -77,74 +113,197 @@ export default function LoginLocalPage() {
               src="/logo.jpg"
               alt="American Outlet"
               className="w-16 h-16 rounded-xl mx-auto mb-4 object-cover border-2"
-              style={{ borderColor: "hsl(354 78% 42%)" }}
+              style={{ borderColor: BRAND_RED }}
             />
-            <h1 className="text-2xl font-bold" style={{ color: "hsl(207 55% 23%)" }}>American Outlet</h1>
-            <p className="text-sm mt-1" style={{ color: "hsl(354 78% 42%)" }}>Los Chiles</p>
+            <h1
+              className="text-2xl font-bold"
+              style={{ color: "hsl(207 55% 23%)" }}
+            >
+              American Outlet
+            </h1>
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border p-8">
             <div className="mb-6">
-              <h2 className="text-xl font-bold" style={{ color: "hsl(207 55% 15%)" }}>Bienvenido</h2>
-              <p className="text-sm mt-1" style={{ color: "hsl(207 20% 45%)" }}>Ingresa tus credenciales para continuar</p>
+              <h2
+                className="text-xl font-bold"
+                style={{ color: "hsl(207 55% 15%)" }}
+              >
+                Bienvenido
+              </h2>
+              <p className="text-sm mt-1" style={{ color: "hsl(207 20% 45%)" }}>
+                {mode === "store"
+                  ? "Selecciona tu tienda e ingresa la contrasena"
+                  : "Ingresa tus credenciales de administrador"}
+              </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <Label htmlFor="username" className="text-sm font-medium" style={{ color: "hsl(207 55% 15%)" }}>Usuario</Label>
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder="Tu usuario"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                  className="mt-1.5 h-11"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="password" className="text-sm font-medium" style={{ color: "hsl(207 55% 15%)" }}>Contraseña</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Tu contraseña"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="mt-1.5 h-11"
-                />
-              </div>
-
-              {(error || localError) && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                  {error || localError}
+            {mode === "store" ? (
+              <form onSubmit={handleStoreLogin} className="space-y-5">
+                <div>
+                  <Label
+                    className="text-sm font-medium"
+                    style={{ color: "hsl(207 55% 15%)" }}
+                  >
+                    Tienda
+                  </Label>
+                  <select
+                    className="w-full h-11 mt-1.5 rounded-md border border-input bg-background px-3 text-sm"
+                    value={storeId}
+                    onChange={(e) => setStoreId(e.target.value)}
+                    required
+                  >
+                    <option value="">Seleccionar tienda...</option>
+                    {tiendas.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              )}
 
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full h-11 text-base font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90"
-                style={{ background: "hsl(354 78% 42%)" }}
-              >
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Cargando...
+                <div>
+                  <Label
+                    htmlFor="password"
+                    className="text-sm font-medium"
+                    style={{ color: "hsl(207 55% 15%)" }}
+                  >
+                    Contrasena
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Tu contrasena"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="mt-1.5 h-11"
+                  />
+                </div>
+
+                {(error || localError) && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    {error || localError}
                   </div>
-                ) : (
-                  <>
-                    <LogIn className="w-4 h-4 mr-2" />
-                    Iniciar Sesion
-                  </>
                 )}
-              </Button>
-            </form>
+
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full h-11 text-base font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90"
+                  style={{ background: BRAND_RED }}
+                >
+                  {loading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Cargando...
+                    </div>
+                  ) : (
+                    <>
+                      <LogIn className="w-4 h-4 mr-2" />
+                      Iniciar Sesion
+                    </>
+                  )}
+                </Button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("admin");
+                    setLocalError("");
+                  }}
+                  className="w-full text-center text-sm mt-3"
+                  style={{ color: "hsl(207 20% 55%)" }}
+                >
+                  <UserCog className="w-3.5 h-3.5 inline mr-1" />
+                  Soy administrador
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleAdminLogin} className="space-y-5">
+                <div>
+                  <Label
+                    htmlFor="username"
+                    className="text-sm font-medium"
+                    style={{ color: "hsl(207 55% 15%)" }}
+                  >
+                    Usuario
+                  </Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="Tu usuario"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                    className="mt-1.5 h-11"
+                  />
+                </div>
+
+                <div>
+                  <Label
+                    htmlFor="password"
+                    className="text-sm font-medium"
+                    style={{ color: "hsl(207 55% 15%)" }}
+                  >
+                    Contrasena
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Tu contrasena"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="mt-1.5 h-11"
+                  />
+                </div>
+
+                {(error || localError) && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    {error || localError}
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full h-11 text-base font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90"
+                  style={{ background: BRAND_RED }}
+                >
+                  {loading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Cargando...
+                    </div>
+                  ) : (
+                    <>
+                      <LogIn className="w-4 h-4 mr-2" />
+                      Iniciar Sesion
+                    </>
+                  )}
+                </Button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("store");
+                    setLocalError("");
+                  }}
+                  className="w-full text-center text-sm mt-3"
+                  style={{ color: "hsl(207 20% 55%)" }}
+                >
+                  Volver a login de tienda
+                </button>
+              </form>
+            )}
           </div>
 
-          <p className="text-center mt-6 text-xs" style={{ color: "hsl(207 20% 55%)" }}>
-            American Outlet Los Chiles - Sistema Interno
+          <p
+            className="text-center mt-6 text-xs"
+            style={{ color: "hsl(207 20% 55%)" }}
+          >
+            American Outlet - Sistema Interno
           </p>
         </div>
       </div>

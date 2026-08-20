@@ -24,6 +24,17 @@ export function useLocalAuth() {
     }
   });
 
+  const loginByStoreMutation = trpc.localAuth.loginByStore.useMutation({
+    onSuccess: (data) => {
+      localStorage.setItem("aolc_token", data.token);
+      setUser(data.user);
+      setIsLoading(false);
+    },
+    onError: () => {
+      setIsLoading(false);
+    }
+  });
+
   // Get token from localStorage
   const token = typeof window !== "undefined" ? localStorage.getItem("aolc_token") : null;
 
@@ -58,6 +69,11 @@ export function useLocalAuth() {
     return loginMutation.mutateAsync({ username, password });
   }, [loginMutation]);
 
+  const loginByStore = useCallback(async (storeId: number, password: string) => {
+    setIsLoading(true);
+    return loginByStoreMutation.mutateAsync({ storeId, password });
+  }, [loginByStoreMutation]);
+
   const logout = useCallback(() => {
     localStorage.removeItem("aolc_token");
     setUser(null);
@@ -71,12 +87,13 @@ export function useLocalAuth() {
     user,
     isLoading,
     login,
+    loginByStore,
     logout,
     role,
     storeId,
     isAdmin: role === "admin",
     isManager: role === "admin" || role === "manager",
     isEmployee: role === "employee",
-    error: loginMutation.error?.message,
+    error: loginMutation.error?.message || loginByStoreMutation.error?.message,
   };
 }
