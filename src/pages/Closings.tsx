@@ -87,6 +87,9 @@ export default function ClosingsPage() {
       utils.inventory.closings.invalidate();
       utils.inventory.pendingReviews.invalidate();
     },
+    onError: (err) => {
+      alert("Error al marcar revisado: " + err.message);
+    },
   });
 
   const [dialogOpen, setDialogOpen] = useState(false);

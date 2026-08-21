@@ -639,7 +639,9 @@ export const inventoryRouter = createRouter({
     .input(z.object({ id: z.number(), revisado: z.boolean() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      await db.update(closings).set({ revisado: input.revisado }).where(eq(closings.id, input.id));
+      // Use raw SQL to avoid column issues
+      const revisadoValue = input.revisado ? 1 : 0;
+      await db.execute(sql`UPDATE closings SET revisado = ${revisadoValue} WHERE id = ${input.id}`);
       return { success: true };
     }),
 
