@@ -115,11 +115,16 @@ export const inventoryRouter = createRouter({
     }),
 
   updatePallet: publicQuery
-    .input(z.object({ id: z.number(), description: z.string().optional(), costo: z.string().optional() }))
+    .input(z.object({ id: z.number(), palletId: z.string().optional(), description: z.string().optional(), costo: z.string().optional(), fecha: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
       const { id, ...data } = input;
-      await db.update(pallets).set(data).where(eq(pallets.id, id));
+      const setData: Record<string, any> = {};
+      if (data.palletId !== undefined) setData.palletId = data.palletId;
+      if (data.description !== undefined) setData.description = data.description;
+      if (data.costo !== undefined) setData.costo = data.costo;
+      if (data.fecha !== undefined) setData.fecha = data.fecha;
+      await db.update(pallets).set(setData).where(eq(pallets.id, id));
       return { success: true };
     }),
 

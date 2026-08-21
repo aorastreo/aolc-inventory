@@ -1,7 +1,7 @@
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router";
-import { Plus, Eye, ArrowUpDown, Container, ClipboardList } from "lucide-react";
+import { Plus, Eye, ArrowUpDown, Container, ClipboardList, Pencil } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -31,10 +31,47 @@ export default function PalletsPage() {
     },
   });
 
+  const updatePallet = trpc.inventory.updatePallet.useMutation({
+    onSuccess: () => {
+      utils.inventory.palletsWithStats.invalidate();
+      utils.inventory.pallets.invalidate();
+    },
+    onError: (err) => alert("Error al guardar: " + err.message),
+  });
+
+  const openEdit = (pallet: any) => {
+    setEditingPallet(pallet);
+    setEditForm({
+      palletId: pallet.palletId || "",
+      description: pallet.description || "",
+      costo: String(pallet.costo || "0"),
+      fecha: pallet.fecha || "",
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSave = () => {
+    if (!editingPallet) return;
+    updatePallet.mutate({
+      id: editingPallet.id,
+      palletId: editForm.palletId || undefined,
+      description: editForm.description || undefined,
+      costo: editForm.costo || undefined,
+      fecha: editForm.fecha || undefined,
+    });
+    setEditDialogOpen(false);
+    setEditingPallet(null);
+  };
+
   const [newPallet, setNewPallet] = useState({ palletId: "", description: "", costo: "" });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>("palletId");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingPallet, setEditingPallet] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ palletId: "", description: "", costo: "", fecha: "" });
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -113,6 +150,39 @@ export default function PalletsPage() {
               </div>
               <Button onClick={handleCreate} className="w-full font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
                 Crear Contenedor
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="w-5 h-5" style={{ color: BRAND_RED }} />
+                Editar Contenedor
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-2">
+              <div>
+                <Label htmlFor="edit-palletId">ID del Contenedor</Label>
+                <Input id="edit-palletId" value={editForm.palletId} onChange={(e) => setEditForm({ ...editForm, palletId: e.target.value })} />
+              </div>
+              <div>
+                <Label htmlFor="edit-description">Descripcion</Label>
+                <Input id="edit-description" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+              </div>
+              <div>
+                <Label htmlFor="edit-costo">Costo del Contenedor (₡)</Label>
+                <Input id="edit-costo" type="number" value={editForm.costo} onChange={(e) => setEditForm({ ...editForm, costo: e.target.value })} />
+              </div>
+              <div>
+                <Label htmlFor="edit-fecha">Fecha</Label>
+                <Input id="edit-fecha" type="date" value={editForm.fecha} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} />
+              </div>
+              <Button onClick={handleEditSave} className="w-full font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
+                Guardar Cambios
               </Button>
             </div>
           </DialogContent>
@@ -198,6 +268,16 @@ export default function PalletsPage() {
                           Ajustes
                         </Button>
                       </Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs font-medium transition-all duration-200 hover:shadow-md hover:bg-blue-50"
+                        style={{ borderColor: "hsl(210 20% 88%)", color: "#2563EB" }}
+                        onClick={() => openEdit(pallet)}
+                      >
+                        <Pencil className="w-3.5 h-3.5 mr-1" />
+                        Editar
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
