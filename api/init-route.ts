@@ -587,41 +587,34 @@ export function initRoute(app: Hono) {
     }
   });
 
-  // Add German as store employee for Los Chiles
-  app.get("/api/add-german-cierre", async (c) => {
+  // Add missing columns to closings table
+  app.get("/api/fix-closings-columns", async (c) => {
     const conn = await getRawDb();
     try {
-      // Find Los Chiles store
-      const [losChilesRows]: any = await conn.execute(
-        "SELECT id FROM stores WHERE (name LIKE ? OR slug = ?) AND id != 1 LIMIT 1",
-        ["%Los Chiles%", "los-chiles"]
-      );
-      if (!losChilesRows || losChilesRows.length === 0) {
-        return c.json({ error: "No se encontro tienda Los Chiles" }, 404);
+      const results: string[] = [];
+
+      const columnsToAdd = [
+        { col: "hora", def: "VARCHAR(10) NULL" },
+        { col: "diferencia", def: "DECIMAL(15,2) NULL" },
+        { col: "observaciones", def: "TEXT NULL" },
+        { col: "revisado", def: "TINYINT(1) DEFAULT 0" },
+        { col: "createdBy", def: "VARCHAR(100) NULL" },
+      ];
+
+      for (const { col, def } of columnsToAdd) {
+        try {
+          await conn.execute(`ALTER TABLE closings ADD COLUMN ${col} ${def}`);
+          results.push(`+ ${col}`);
+        } catch (e: any) {
+          if (e.message && e.message.includes("Duplicate column")) {
+            results.push(`= ${col} (ya existe)`);
+          } else {
+            results.push(`? ${col}: ${e.message}`);
+          }
+        }
       }
-      const losChilesId = losChilesRows[0].id;
 
-      // Check if German already exists
-      const [existing]: any = await conn.execute(
-        "SELECT id FROM storeEmployees WHERE storeId = ? AND nombre = 'German' LIMIT 1",
-        [losChilesId]
-      );
-
-      if (existing && existing.length > 0) {
-        return c.json({ success: true, message: "German ya existe como empleado de cierre", id: existing[0].id });
-      }
-
-      // Insert German
-      const [result]: any = await conn.execute(
-        "INSERT INTO storeEmployees (storeId, nombre, isActive) VALUES (?, 'German', true)",
-        [losChilesId]
-      );
-
-      return c.json({
-        success: true,
-        message: "German agregado como empleado de cierre",
-        id: result.insertId,
-      });
+      return c.json({ success: true, results });
     } catch (e: any) {
       return c.json({ error: e.message }, 500);
     } finally {
