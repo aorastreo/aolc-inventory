@@ -64,6 +64,31 @@ export default function AdjustmentsPage() {
     { enabled: !!adjDetail?.palletId }
   );
 
+  const [searchingBarcode, setSearchingBarcode] = useState(false);
+
+  const handleBarcodeSearch = async () => {
+    const barcode = newItem.codigoBarras.trim();
+    if (!barcode) return;
+    setSearchingBarcode(true);
+    try {
+      const result = await utils.inventory.searchProductByBarcode.fetch({ storeId: 1, barcode });
+      if (result) {
+        setNewItem(prev => ({
+          ...prev,
+          nombre: result.nombre || "",
+          precio: String(result.precio || ""),
+          codigoBarras: barcode,
+        }));
+      } else {
+        alert("No se encontro ningun articulo con ese codigo de barras");
+      }
+    } catch (e: any) {
+      alert("Error al buscar: " + (e.message || "Desconocido"));
+    } finally {
+      setSearchingBarcode(false);
+    }
+  };
+
   if (isLoading) return (
     <div className="flex items-center justify-center h-full">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: BRAND_RED }} />
@@ -202,7 +227,29 @@ export default function AdjustmentsPage() {
                     <Barcode className="w-3.5 h-3.5" />
                     Cod. Barras
                   </Label>
-                  <Input placeholder="Opcional" value={newItem.codigoBarras} onChange={(e) => setNewItem({ ...newItem, codigoBarras: e.target.value })} />
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Escribe el codigo y presiona Enter o Buscar"
+                      value={newItem.codigoBarras}
+                      onChange={(e) => setNewItem({ ...newItem, codigoBarras: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleBarcodeSearch(); }}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleBarcodeSearch}
+                      disabled={searchingBarcode}
+                      className="font-medium"
+                      style={{ borderColor: "hsl(210 20% 88%)", color: BRAND_BLUE }}
+                    >
+                      <Search className="w-4 h-4 mr-1" />
+                      {searchingBarcode ? "Buscando..." : "Buscar"}
+                    </Button>
+                  </div>
+                  <p className="text-xs mt-1" style={{ color: "hsl(207 20% 55%)" }}>
+                    Si el articulo existe, se completaran el nombre y precio automaticamente.
+                  </p>
                 </div>
 
                 <Button onClick={handleAddItem} className="font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
