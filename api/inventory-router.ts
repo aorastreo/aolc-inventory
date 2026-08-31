@@ -1285,21 +1285,34 @@ export const inventoryRouter = createRouter({
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const result = await db.insert(payrollEmployees).values({
-        storeId: input.storeId,
-        nombre: input.nombre,
-        apellidos: input.apellidos,
-        puesto: input.puesto,
-        salarioBase: input.salarioBase,
-        fechaIngreso: input.fechaIngreso,
-        cedula: input.cedula || "",
-        tipoSalario: input.tipoSalario || "quincenal",
-        telefono: input.telefono || null,
-        correo: input.correo || null,
-        cuentaBancaria: input.cuentaBancaria || null,
-        banco: input.banco || null,
-      });
-      return { id: Number(result[0].insertId) };
+      // Use raw SQL with fallback for DB compatibility
+      const cedula = input.cedula || "";
+      const tipoSalario = input.tipoSalario || "quincenal";
+      const telefono = input.telefono || null;
+      const correo = input.correo || null;
+      const cuentaBancaria = input.cuentaBancaria || null;
+      const banco = input.banco || null;
+
+      try {
+        const result: any = await db.execute(sql`
+          INSERT INTO payrollEmployees (storeId, cedula, nombre, apellidos, puesto, salarioBase, tipoSalario, fechaIngreso, telefono, correo, cuentaBancaria, banco, estado, isActive)
+          VALUES (${input.storeId}, ${cedula || null}, ${input.nombre}, ${input.apellidos}, ${input.puesto}, ${input.salarioBase}, ${tipoSalario}, ${input.fechaIngreso}, ${telefono}, ${correo}, ${cuentaBancaria}, ${banco}, 'activo', 1)
+        `);
+        const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
+        return { id: Number(insertResult?.insertId || 0) };
+      } catch (e: any) {
+        // Fallback: try without cedula if column is not nullable
+        try {
+          const result2: any = await db.execute(sql`
+            INSERT INTO payrollEmployees (storeId, nombre, apellidos, puesto, salarioBase, tipoSalario, fechaIngreso, telefono, correo, cuentaBancaria, banco, estado, isActive)
+            VALUES (${input.storeId}, ${input.nombre}, ${input.apellidos}, ${input.puesto}, ${input.salarioBase}, ${tipoSalario}, ${input.fechaIngreso}, ${telefono}, ${correo}, ${cuentaBancaria}, ${banco}, 'activo', 1)
+          `);
+          const insertResult2 = Array.isArray(result2) ? result2[0] : (result2.rows || result2);
+          return { id: Number(insertResult2?.insertId || 0) };
+        } catch (fallbackError: any) {
+          throw fallbackError;
+        }
+      }
     }),
 
   updatePayrollEmployee: publicQuery
