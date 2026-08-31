@@ -237,17 +237,51 @@ function EmployeesTab({ employees, loading, utils }: { employees: any[]; loading
 // ============================================
 function PeriodsTab({ periods, loading, utils }: { periods: any[]; loading: boolean; utils: any }) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editingPeriod, setEditingPeriod] = useState<any>(null);
   const [form, setForm] = useState({ nombre: "", tipo: "quincenal" as const, fechaInicio: "", fechaFin: "" });
 
-  const createPeriod = trpc.inventory.createPayrollPeriod.useMutation({ onSuccess: () => { utils.inventory.payrollPeriods.invalidate(); setDialogOpen(false); setForm({ nombre: "", tipo: "quincenal", fechaInicio: "", fechaFin: "" }); } });
-  const updatePeriod = trpc.inventory.updatePayrollPeriod.useMutation({ onSuccess: () => utils.inventory.payrollPeriods.invalidate() });
+  const createPeriod = trpc.inventory.createPayrollPeriod.useMutation({
+    onSuccess: () => { utils.inventory.payrollPeriods.invalidate(); setDialogOpen(false); setForm({ nombre: "", tipo: "quincenal", fechaInicio: "", fechaFin: "" }); },
+    onError: (err) => alert("Error al crear: " + err.message),
+  });
+  const updatePeriod = trpc.inventory.updatePayrollPeriod.useMutation({
+    onSuccess: () => { utils.inventory.payrollPeriods.invalidate(); setDialogOpen(false); setEditMode(false); setEditingPeriod(null); },
+    onError: (err) => alert("Error al actualizar: " + err.message),
+  });
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-b-2 rounded-full" style={{ borderColor: BRAND_RED }} /></div>;
+
+  const openNew = () => {
+    setEditMode(false);
+    setEditingPeriod(null);
+    setForm({ nombre: "", tipo: "quincenal", fechaInicio: "", fechaFin: "" });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (p: any) => {
+    setEditMode(true);
+    setEditingPeriod(p);
+    setForm({ nombre: p.nombre, tipo: p.tipo, fechaInicio: p.fechaInicio, fechaFin: p.fechaFin });
+    setDialogOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!form.nombre.trim() || !form.fechaInicio || !form.fechaFin) {
+      alert("Por favor complete todos los campos obligatorios");
+      return;
+    }
+    if (editMode && editingPeriod) {
+      updatePeriod.mutate({ id: editingPeriod.id, nombre: form.nombre });
+    } else {
+      createPeriod.mutate(form);
+    }
+  };
 
   return (
     <div>
       <div className="flex justify-end mb-4">
-        <Button onClick={() => setDialogOpen(true)} style={{ background: BRAND_RED }}><Plus className="w-4 h-4 mr-2" /> Nuevo Periodo</Button>
+        <Button onClick={openNew} style={{ background: BRAND_RED }}><Plus className="w-4 h-4 mr-2" /> Nuevo Periodo</Button>
       </div>
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
         <table className="w-full">
@@ -258,7 +292,7 @@ function PeriodsTab({ periods, loading, utils }: { periods: any[]; loading: bool
               <th className="text-left px-4 py-3 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Fecha Inicio</th>
               <th className="text-left px-4 py-3 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Fecha Fin</th>
               <th className="text-center px-4 py-3 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Estado</th>
-              <th className="w-20"></th>
+              <th className="w-28"></th>
             </tr>
           </thead>
           <tbody>
@@ -274,11 +308,16 @@ function PeriodsTab({ periods, loading, utils }: { periods: any[]; loading: bool
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  {p.estado === "abierto" && (
-                    <Button variant="ghost" size="sm" onClick={() => { if (confirm("Cerrar periodo?")) updatePeriod.mutate({ id: p.id, estado: "cerrado" }); }} className="h-8 w-8 p-0 hover:bg-blue-50" title="Cerrar periodo">
-                      <CheckCircle className="w-3.5 h-3.5" style={{ color: BRAND_BLUE }} />
+                  <div className="flex gap-1 justify-end">
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(p)} className="h-8 w-8 p-0 hover:bg-blue-50" title="Editar">
+                      <Pencil className="w-3.5 h-3.5" style={{ color: BRAND_BLUE }} />
                     </Button>
-                  )}
+                    {p.estado === "abierto" && (
+                      <Button variant="ghost" size="sm" onClick={() => { if (confirm("Cerrar periodo?")) updatePeriod.mutate({ id: p.id, estado: "cerrado" }); }} className="h-8 w-8 p-0 hover:bg-green-50" title="Cerrar periodo">
+                        <CheckCircle className="w-3.5 h-3.5" style={{ color: "#16A34A" }} />
+                      </Button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -291,7 +330,7 @@ function PeriodsTab({ periods, loading, utils }: { periods: any[]; loading: bool
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle className="text-lg font-semibold" style={{ color: BRAND_BLUE }}>Nuevo Periodo</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-lg font-semibold" style={{ color: BRAND_BLUE }}>{editMode ? "Editar Periodo" : "Nuevo Periodo"}</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-2">
             <div><Label className="text-xs">Nombre del Periodo</Label><Input placeholder="ej: Quincena Agosto 2026" value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} /></div>
             <div><Label className="text-xs">Tipo</Label>
@@ -303,7 +342,7 @@ function PeriodsTab({ periods, loading, utils }: { periods: any[]; loading: bool
               <div><Label className="text-xs">Fecha Inicio</Label><Input type="date" value={form.fechaInicio} onChange={e => setForm({...form, fechaInicio: e.target.value})} /></div>
               <div><Label className="text-xs">Fecha Fin</Label><Input type="date" value={form.fechaFin} onChange={e => setForm({...form, fechaFin: e.target.value})} /></div>
             </div>
-            <Button onClick={() => createPeriod.mutate(form)} className="w-full font-medium" style={{ background: BRAND_RED }}>Crear Periodo</Button>
+            <Button onClick={handleSave} className="w-full font-medium" style={{ background: BRAND_RED }}>{editMode ? "Guardar Cambios" : "Crear Periodo"}</Button>
           </div>
         </DialogContent>
       </Dialog>
