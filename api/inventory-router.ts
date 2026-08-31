@@ -1279,7 +1279,7 @@ export const inventoryRouter = createRouter({
     .input(z.object({
       storeId: z.number(), nombre: z.string(), apellidos: z.string(),
       puesto: z.string(), salarioBase: z.string(), fechaIngreso: z.string(),
-      cedula: z.string().optional(), tipoSalario: z.enum(["quincenal", "mensual", "hora"]).optional(),
+      cedula: z.string().optional(), tipoSalario: z.enum(["quincenal", "mensual", "semanal", "hora"]).optional(),
       telefono: z.string().optional(), correo: z.string().optional(),
       cuentaBancaria: z.string().optional(), banco: z.string().optional(),
     }))
@@ -1305,7 +1305,7 @@ export const inventoryRouter = createRouter({
   updatePayrollEmployee: publicQuery
     .input(z.object({
       id: z.number(), cedula: z.string().optional(), nombre: z.string().optional(), apellidos: z.string().optional(),
-      puesto: z.string().optional(), salarioBase: z.string().optional(), tipoSalario: z.enum(["quincenal", "mensual", "hora"]).optional(),
+      puesto: z.string().optional(), salarioBase: z.string().optional(), tipoSalario: z.enum(["quincenal", "mensual", "semanal", "hora"]).optional(),
       fechaIngreso: z.string().optional(), telefono: z.string().optional(), correo: z.string().optional(),
       cuentaBancaria: z.string().optional(), banco: z.string().optional(), estado: z.enum(["activo", "inactivo", "suspendido"]).optional(),
     }))

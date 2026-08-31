@@ -359,7 +359,7 @@ export const payrollEmployees = mysqlTable("payrollEmployees", {
   apellidos: varchar("apellidos", { length: 255 }).notNull(),
   puesto: varchar("puesto", { length: 100 }).notNull(),
   salarioBase: decimal("salarioBase", { precision: 12, scale: 2 }).notNull(),
-  tipoSalario: mysqlEnum("tipoSalario", ["quincenal", "mensual", "hora"]).default("quincenal").notNull(),
+  tipoSalario: mysqlEnum("tipoSalario", ["quincenal", "mensual", "semanal", "hora"]).default("quincenal").notNull(),
   fechaIngreso: varchar("fechaIngreso", { length: 20 }).notNull(),
   telefono: varchar("telefono", { length: 50 }),
   correo: varchar("correo", { length: 255 }),

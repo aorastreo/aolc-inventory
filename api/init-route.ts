@@ -601,7 +601,7 @@ export function initRoute(app: Hono) {
         apellidos VARCHAR(255) NOT NULL,
         puesto VARCHAR(100) NOT NULL,
         salarioBase DECIMAL(12,2) NOT NULL,
-        tipoSalario ENUM('quincenal','mensual','hora') DEFAULT 'quincenal' NOT NULL,
+        tipoSalario ENUM('quincenal','mensual','semanal','hora') DEFAULT 'quincenal' NOT NULL,
         fechaIngreso VARCHAR(20) NOT NULL,
         telefono VARCHAR(50),
         correo VARCHAR(255),
@@ -664,6 +664,14 @@ export function initRoute(app: Hono) {
       results.push("OK: cedula column altered to nullable");
     } catch (e: any) {
       results.push("SKIP/ERR cedula alter: " + e.message);
+    }
+
+    // Alter tipoSalario to add 'semanal' option (for existing tables)
+    try {
+      await conn.execute("ALTER TABLE payrollEmployees MODIFY tipoSalario ENUM('quincenal','mensual','semanal','hora') DEFAULT 'quincenal' NOT NULL");
+      results.push("OK: tipoSalario column altered to include semanal");
+    } catch (e: any) {
+      results.push("SKIP/ERR tipoSalario alter: " + e.message);
     }
 
     return c.json({ success: true, results });

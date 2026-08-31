@@ -201,7 +201,7 @@ function EmployeesTab({ employees, loading, utils }: { employees: any[]; loading
               <div><Label className="text-xs">Salario Base</Label><Input type="number" value={form.salarioBase} onChange={e => setForm({...form, salarioBase: e.target.value})} /></div>
               <div><Label className="text-xs">Tipo Salario</Label>
                 <select className="w-full h-10 border rounded-md px-3 text-sm" style={{ borderColor: "hsl(210 20% 88%)" }} value={form.tipoSalario} onChange={e => setForm({...form, tipoSalario: e.target.value as any})}>
-                  <option value="quincenal">Quincenal</option><option value="mensual">Mensual</option><option value="hora">Por Hora</option>
+                  <option value="quincenal">Quincenal</option><option value="mensual">Mensual</option><option value="semanal">Semanal</option><option value="hora">Por Hora</option>
                 </select>
               </div>
             </div>
