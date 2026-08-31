@@ -587,38 +587,77 @@ export function initRoute(app: Hono) {
     }
   });
 
-  // Add missing columns to closings table
-  app.get("/api/fix-closings-columns", async (c) => {
+  // Create payroll tables
+  app.get("/api/init-payroll", async (c) => {
     const conn = await getRawDb();
-    try {
-      const results: string[] = [];
+    const results: string[] = [];
 
-      const columnsToAdd = [
-        { col: "hora", def: "VARCHAR(10) NULL" },
-        { col: "diferencia", def: "DECIMAL(15,2) NULL" },
-        { col: "observaciones", def: "TEXT NULL" },
-        { col: "revisado", def: "TINYINT(1) DEFAULT 0" },
-        { col: "createdBy", def: "VARCHAR(100) NULL" },
-      ];
+    const tables = [
+      `CREATE TABLE IF NOT EXISTS payrollEmployees (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        storeId BIGINT UNSIGNED NOT NULL,
+        cedula VARCHAR(50) NOT NULL,
+        nombre VARCHAR(255) NOT NULL,
+        apellidos VARCHAR(255) NOT NULL,
+        puesto VARCHAR(100) NOT NULL,
+        salarioBase DECIMAL(12,2) NOT NULL,
+        tipoSalario ENUM('quincenal','mensual','hora') DEFAULT 'quincenal' NOT NULL,
+        fechaIngreso VARCHAR(20) NOT NULL,
+        telefono VARCHAR(50),
+        correo VARCHAR(255),
+        cuentaBancaria VARCHAR(100),
+        banco VARCHAR(50),
+        estado ENUM('activo','inactivo','suspendido') DEFAULT 'activo' NOT NULL,
+        isActive TINYINT(1) DEFAULT 1 NOT NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS payrollPeriods (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(100) NOT NULL,
+        tipo ENUM('quincenal','mensual','semanal') DEFAULT 'quincenal' NOT NULL,
+        fechaInicio VARCHAR(20) NOT NULL,
+        fechaFin VARCHAR(20) NOT NULL,
+        estado ENUM('abierto','cerrado','procesando') DEFAULT 'abierto' NOT NULL,
+        isActive TINYINT(1) DEFAULT 1 NOT NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS payrollPayments (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        employeeId BIGINT UNSIGNED NOT NULL,
+        periodId BIGINT UNSIGNED NOT NULL,
+        salarioBase DECIMAL(12,2) NOT NULL,
+        horasExtra DECIMAL(10,2) DEFAULT 0,
+        montoHorasExtra DECIMAL(12,2) DEFAULT 0,
+        comisiones DECIMAL(12,2) DEFAULT 0,
+        aguinaldo DECIMAL(12,2) DEFAULT 0,
+        vacaciones DECIMAL(12,2) DEFAULT 0,
+        totalIngresos DECIMAL(12,2) NOT NULL,
+        ccss DECIMAL(12,2) DEFAULT 0,
+        renta DECIMAL(12,2) DEFAULT 0,
+        adelantos DECIMAL(12,2) DEFAULT 0,
+        ausencias DECIMAL(12,2) DEFAULT 0,
+        otrasDeducciones DECIMAL(12,2) DEFAULT 0,
+        totalDeducciones DECIMAL(12,2) NOT NULL,
+        netoPagar DECIMAL(12,2) NOT NULL,
+        formaPago ENUM('transferencia','cheque','efectivo') DEFAULT 'transferencia' NOT NULL,
+        estado ENUM('pendiente','pagado','anulado') DEFAULT 'pendiente' NOT NULL,
+        observaciones TEXT,
+        fechaPago VARCHAR(20),
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )`,
+    ];
 
-      for (const { col, def } of columnsToAdd) {
-        try {
-          await conn.execute(`ALTER TABLE closings ADD COLUMN ${col} ${def}`);
-          results.push(`+ ${col}`);
-        } catch (e: any) {
-          if (e.message && e.message.includes("Duplicate column")) {
-            results.push(`= ${col} (ya existe)`);
-          } else {
-            results.push(`? ${col}: ${e.message}`);
-          }
-        }
+    for (const sql of tables) {
+      try {
+        await conn.execute(sql);
+        results.push("OK: " + sql.match(/CREATE TABLE IF NOT EXISTS (\w+)/)?.[1]);
+      } catch (e: any) {
+        results.push("ERR: " + e.message);
       }
-
-      return c.json({ success: true, results });
-    } catch (e: any) {
-      return c.json({ error: e.message }, 500);
-    } finally {
-      await conn.end();
     }
+
+    return c.json({ success: true, results });
   });
 }
