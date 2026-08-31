@@ -102,8 +102,14 @@ function EmployeesTab({ employees, loading, utils }: { employees: any[]; loading
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ storeId: 1, cedula: "", nombre: "", apellidos: "", puesto: "", salarioBase: "", tipoSalario: "quincenal" as const, fechaIngreso: "", telefono: "", correo: "", cuentaBancaria: "", banco: "" });
 
-  const createEmp = trpc.inventory.createPayrollEmployee.useMutation({ onSuccess: () => { utils.inventory.payrollEmployees.invalidate(); setDialogOpen(false); setForm({ storeId: 1, cedula: "", nombre: "", apellidos: "", puesto: "", salarioBase: "", tipoSalario: "quincenal", fechaIngreso: "", telefono: "", correo: "", cuentaBancaria: "", banco: "" }); } });
-  const updateEmp = trpc.inventory.updatePayrollEmployee.useMutation({ onSuccess: () => { utils.inventory.payrollEmployees.invalidate(); setDialogOpen(false); setEditing(null); } });
+  const createEmp = trpc.inventory.createPayrollEmployee.useMutation({
+    onSuccess: () => { utils.inventory.payrollEmployees.invalidate(); setDialogOpen(false); setForm({ storeId: 1, cedula: "", nombre: "", apellidos: "", puesto: "", salarioBase: "", tipoSalario: "quincenal", fechaIngreso: "", telefono: "", correo: "", cuentaBancaria: "", banco: "" }); },
+    onError: (err) => alert("Error al guardar: " + err.message),
+  });
+  const updateEmp = trpc.inventory.updatePayrollEmployee.useMutation({
+    onSuccess: () => { utils.inventory.payrollEmployees.invalidate(); setDialogOpen(false); setEditing(null); },
+    onError: (err) => alert("Error al actualizar: " + err.message),
+  });
   const deleteEmp = trpc.inventory.deletePayrollEmployee.useMutation({ onSuccess: () => utils.inventory.payrollEmployees.invalidate() });
 
   const filtered = employees.filter(e =>
@@ -125,6 +131,10 @@ function EmployeesTab({ employees, loading, utils }: { employees: any[]; loading
   };
 
   const handleSave = () => {
+    if (!form.nombre.trim() || !form.apellidos.trim() || !form.puesto.trim() || !form.salarioBase || !form.fechaIngreso) {
+      alert("Por favor complete los campos obligatorios: Nombre, Apellidos, Puesto, Salario Base y Fecha de Ingreso");
+      return;
+    }
     if (editing) {
       updateEmp.mutate({ id: editing.id, ...form, salarioBase: String(form.salarioBase) });
     } else {
