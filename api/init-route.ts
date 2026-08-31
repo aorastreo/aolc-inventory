@@ -596,7 +596,7 @@ export function initRoute(app: Hono) {
       `CREATE TABLE IF NOT EXISTS payrollEmployees (
         id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         storeId BIGINT UNSIGNED NOT NULL,
-        cedula VARCHAR(50) NOT NULL,
+        cedula VARCHAR(50),
         nombre VARCHAR(255) NOT NULL,
         apellidos VARCHAR(255) NOT NULL,
         puesto VARCHAR(100) NOT NULL,
@@ -656,6 +656,14 @@ export function initRoute(app: Hono) {
       } catch (e: any) {
         results.push("ERR: " + e.message);
       }
+    }
+
+    // Alter cedula column to be nullable (for existing tables)
+    try {
+      await conn.execute("ALTER TABLE payrollEmployees MODIFY cedula VARCHAR(50)");
+      results.push("OK: cedula column altered to nullable");
+    } catch (e: any) {
+      results.push("SKIP/ERR cedula alter: " + e.message);
     }
 
     return c.json({ success: true, results });

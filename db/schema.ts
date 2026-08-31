@@ -354,7 +354,7 @@ export type TransferItem = typeof transferItems.$inferInsert;
 export const payrollEmployees = mysqlTable("payrollEmployees", {
   id: serial("id").primaryKey(),
   storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
-  cedula: varchar("cedula", { length: 50 }).notNull(),
+  cedula: varchar("cedula", { length: 50 }),
   nombre: varchar("nombre", { length: 255 }).notNull(),
   apellidos: varchar("apellidos", { length: 255 }).notNull(),
   puesto: varchar("puesto", { length: 100 }).notNull(),

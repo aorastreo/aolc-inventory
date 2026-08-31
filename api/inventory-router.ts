@@ -1277,14 +1277,28 @@ export const inventoryRouter = createRouter({
 
   createPayrollEmployee: publicQuery
     .input(z.object({
-      storeId: z.number(), cedula: z.string(), nombre: z.string(), apellidos: z.string(),
-      puesto: z.string(), salarioBase: z.string(), tipoSalario: z.enum(["quincenal", "mensual", "hora"]).optional(),
-      fechaIngreso: z.string(), telefono: z.string().optional(), correo: z.string().optional(),
+      storeId: z.number(), nombre: z.string(), apellidos: z.string(),
+      puesto: z.string(), salarioBase: z.string(), fechaIngreso: z.string(),
+      cedula: z.string().optional(), tipoSalario: z.enum(["quincenal", "mensual", "hora"]).optional(),
+      telefono: z.string().optional(), correo: z.string().optional(),
       cuentaBancaria: z.string().optional(), banco: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const result = await db.insert(payrollEmployees).values({ ...input, tipoSalario: input.tipoSalario || "quincenal" });
+      const result = await db.insert(payrollEmployees).values({
+        storeId: input.storeId,
+        nombre: input.nombre,
+        apellidos: input.apellidos,
+        puesto: input.puesto,
+        salarioBase: input.salarioBase,
+        fechaIngreso: input.fechaIngreso,
+        cedula: input.cedula || "",
+        tipoSalario: input.tipoSalario || "quincenal",
+        telefono: input.telefono || null,
+        correo: input.correo || null,
+        cuentaBancaria: input.cuentaBancaria || null,
+        banco: input.banco || null,
+      });
       return { id: Number(result[0].insertId) };
     }),
 
