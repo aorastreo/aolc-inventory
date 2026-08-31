@@ -109,6 +109,10 @@ export default function ClosingsPage() {
       utils.inventory.closingTrend.invalidate();
       utils.inventory.closingByPaymentMethod.invalidate();
       utils.inventory.closingWeeklyBreakdown.invalidate();
+      setEditDialogOpen(false);
+    },
+    onError: (err) => {
+      alert("Error al guardar: " + err.message);
     },
   });
 
@@ -345,7 +349,7 @@ export default function ClosingsPage() {
                   <Input type="number" value={editClosing.sinFactura} onChange={(e) => setEditClosing({ ...editClosing, sinFactura: e.target.value })} placeholder="0" className="h-10" min={0} />
                 </div>
               </div>
-              <Button onClick={() => { updateClosing.mutate({ id: editClosing.id, fecha: editClosing.fecha, dia: editClosing.dia, efectivo: Number(editClosing.efectivo) || 0, tarjeta: Number(editClosing.tarjeta) || 0, sinpe: Number(editClosing.sinpe) || 0, sinFactura: Number(editClosing.sinFactura) || 0 }); setEditDialogOpen(false); }} className="w-full h-11 font-medium" style={{ background: BRAND_RED }}>
+              <Button onClick={() => { updateClosing.mutate({ id: editClosing.id, fecha: editClosing.fecha, dia: editClosing.dia, efectivo: editClosing.efectivo || "0", tarjeta: editClosing.tarjeta || "0", sinpe: editClosing.sinpe || "0", sinFactura: editClosing.sinFactura || "0" }); }} className="w-full h-11 font-medium" style={{ background: BRAND_RED }}>
                 Guardar Cambios
               </Button>
             </div>

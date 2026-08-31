@@ -591,16 +591,18 @@ export const inventoryRouter = createRouter({
         throw new Error("Ya existe un cierre para esta fecha en esta tienda");
       }
 
-      // Calculate diferencia
+      // Calculate total and diferencia
       const ventas = Number(input.efectivo || 0) + Number(input.sinpe || 0) + Number(input.tarjeta || 0) + Number(input.sinFactura || 0);
-      const inicial = Number(input.inicial || 50000);
-      const diferencia = Number(input.efectivo || 0) - ventas - inicial;
+      const totalCalculado = String(ventas);
+      // diferencia: since efectivo represents both cash sales and cash counted,
+      // we can only detect discrepancy if user explicitly provides a different total
+      const diferencia = Number(input.total || ventas) - ventas;
 
       // Use INSERT with all columns but catch errors
       try {
         const result = await db.execute(sql`
           INSERT INTO closings (storeId, fecha, dia, hora, efectivo, sinpe, tarjeta, sinFactura, total, inicial, diferencia, observaciones, revisado, createdBy, semana, anio)
-          VALUES (${input.storeId}, ${input.fecha}, ${input.dia || null}, ${input.hora || null}, ${input.efectivo || '0'}, ${input.sinpe || '0'}, ${input.tarjeta || '0'}, ${input.sinFactura || '0'}, ${input.total || '0'}, ${input.inicial || '50000'}, ${String(diferencia)}, ${input.observaciones || null}, ${0}, ${input.createdBy || null}, ${input.semana || null}, ${input.anio || null})
+          VALUES (${input.storeId}, ${input.fecha}, ${input.dia || null}, ${input.hora || null}, ${input.efectivo || '0'}, ${input.sinpe || '0'}, ${input.tarjeta || '0'}, ${input.sinFactura || '0'}, ${totalCalculado}, ${input.inicial || '50000'}, ${String(diferencia)}, ${input.observaciones || null}, ${0}, ${input.createdBy || null}, ${input.semana || null}, ${input.anio || null})
         `);
         const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
         return { id: Number(insertResult?.insertId || 0) };
@@ -609,7 +611,7 @@ export const inventoryRouter = createRouter({
         try {
           const result = await db.execute(sql`
             INSERT INTO closings (storeId, fecha, dia, efectivo, sinpe, tarjeta, sinFactura, total, inicial)
-            VALUES (${input.storeId}, ${input.fecha}, ${input.dia || null}, ${input.efectivo || '0'}, ${input.sinpe || '0'}, ${input.tarjeta || '0'}, ${input.sinFactura || '0'}, ${input.total || '0'}, ${input.inicial || '50000'})
+            VALUES (${input.storeId}, ${input.fecha}, ${input.dia || null}, ${input.efectivo || '0'}, ${input.sinpe || '0'}, ${input.tarjeta || '0'}, ${input.sinFactura || '0'}, ${totalCalculado}, ${input.inicial || '50000'})
           `);
           const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
           return { id: Number(insertResult?.insertId || 0) };
@@ -619,12 +621,40 @@ export const inventoryRouter = createRouter({
       }
     }),
 
-  updateClosing: adminQuery
-    .input(z.object({ id: z.number(), fecha: z.string().optional(), dia: z.string().optional(), efectivo: z.string().optional(), sinpe: z.string().optional(), tarjeta: z.string().optional(), sinFactura: z.string().optional(), total: z.string().optional(), observaciones: z.string().optional() }))
+  updateClosing: publicQuery
+    .input(z.object({ id: z.number(), fecha: z.string().optional(), dia: z.string().optional(), efectivo: z.union([z.string(), z.number()]).optional(), sinpe: z.union([z.string(), z.number()]).optional(), tarjeta: z.union([z.string(), z.number()]).optional(), sinFactura: z.union([z.string(), z.number()]).optional(), total: z.union([z.string(), z.number()]).optional(), observaciones: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
       const { id, ...data } = input;
-      await db.update(closings).set(data).where(eq(closings.id, id));
+
+      // First, fetch the existing closing to get all current values
+      const existingRows = await db.execute(sql`SELECT * FROM closings WHERE id = ${id} LIMIT 1`);
+      const existingArray = Array.isArray(existingRows) ? existingRows[0] : (existingRows.rows || existingRows);
+      const existing = Array.isArray(existingArray) && existingArray.length > 0 ? existingArray[0] : null;
+      if (!existing) throw new Error("Cierre no encontrado");
+
+      // Determine new values (use input if provided, otherwise keep existing)
+      const efectivo = data.efectivo !== undefined ? String(data.efectivo) : String(existing.efectivo || "0");
+      const sinpe = data.sinpe !== undefined ? String(data.sinpe) : String(existing.sinpe || "0");
+      const tarjeta = data.tarjeta !== undefined ? String(data.tarjeta) : String(existing.tarjeta || "0");
+      const sinFactura = data.sinFactura !== undefined ? String(data.sinFactura) : String(existing.sinFactura || "0");
+      const fecha = data.fecha !== undefined ? data.fecha : existing.fecha;
+      const dia = data.dia !== undefined ? data.dia : existing.dia;
+      const observaciones = data.observaciones !== undefined ? data.observaciones : existing.observaciones;
+
+      // Recalculate total and diferencia
+      const ventas = Number(efectivo || 0) + Number(sinpe || 0) + Number(tarjeta || 0) + Number(sinFactura || 0);
+      const totalCalculado = String(ventas);
+      const diferencia = 0; // Since efectivo represents both cash sales and cash counted
+
+      // Update using raw SQL for compatibility
+      await db.execute(sql`
+        UPDATE closings
+        SET fecha = ${fecha}, dia = ${dia || null}, efectivo = ${efectivo}, sinpe = ${sinpe}, tarjeta = ${tarjeta},
+            sinFactura = ${sinFactura}, total = ${totalCalculado}, diferencia = ${String(diferencia)},
+            observaciones = ${observaciones || null}
+        WHERE id = ${id}
+      `);
       return { success: true };
     }),
 
