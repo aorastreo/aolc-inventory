@@ -5,6 +5,7 @@ import {
   stores, pallets, products, productDatabase,
   adjustments, adjustmentItems, closings, assemblers, assemblyAssignments, employees, printedLabels,
   transfers, transferItems, storeConfig, storeEmployees,
+  payrollEmployees, payrollPeriods, payrollPayments,
 } from "@db/schema";
 import { eq, and, desc, like, sql, count, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -1256,6 +1257,220 @@ export const inventoryRouter = createRouter({
         success: true,
         losChilesId,
         message: `Empleados movidos`,
+      };
+    }),
+
+  // ============================================
+  // PAYROLL (Planilla / Nomina)
+  // ============================================
+
+  // -- Employees --
+  payrollEmployees: publicQuery
+    .input(z.object({ storeId: z.number().optional() }).optional())
+    .query(async ({ input }) => {
+      const db = getDb();
+      if (input?.storeId) {
+        return await db.select().from(payrollEmployees).where(and(eq(payrollEmployees.storeId, input.storeId), eq(payrollEmployees.isActive, true)));
+      }
+      return await db.select().from(payrollEmployees).where(eq(payrollEmployees.isActive, true));
+    }),
+
+  createPayrollEmployee: publicQuery
+    .input(z.object({
+      storeId: z.number(), cedula: z.string(), nombre: z.string(), apellidos: z.string(),
+      puesto: z.string(), salarioBase: z.string(), tipoSalario: z.enum(["quincenal", "mensual", "hora"]).optional(),
+      fechaIngreso: z.string(), telefono: z.string().optional(), correo: z.string().optional(),
+      cuentaBancaria: z.string().optional(), banco: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const result = await db.insert(payrollEmployees).values({ ...input, tipoSalario: input.tipoSalario || "quincenal" });
+      return { id: Number(result[0].insertId) };
+    }),
+
+  updatePayrollEmployee: publicQuery
+    .input(z.object({
+      id: z.number(), cedula: z.string().optional(), nombre: z.string().optional(), apellidos: z.string().optional(),
+      puesto: z.string().optional(), salarioBase: z.string().optional(), tipoSalario: z.enum(["quincenal", "mensual", "hora"]).optional(),
+      fechaIngreso: z.string().optional(), telefono: z.string().optional(), correo: z.string().optional(),
+      cuentaBancaria: z.string().optional(), banco: z.string().optional(), estado: z.enum(["activo", "inactivo", "suspendido"]).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const { id, ...data } = input;
+      await db.update(payrollEmployees).set(data).where(eq(payrollEmployees.id, id));
+      return { success: true };
+    }),
+
+  deletePayrollEmployee: publicQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.update(payrollEmployees).set({ isActive: false }).where(eq(payrollEmployees.id, input.id));
+      return { success: true };
+    }),
+
+  // -- Periods --
+  payrollPeriods: publicQuery
+    .query(async () => {
+      const db = getDb();
+      return await db.select().from(payrollPeriods).where(eq(payrollPeriods.isActive, true)).orderBy(desc(payrollPeriods.id));
+    }),
+
+  createPayrollPeriod: publicQuery
+    .input(z.object({
+      nombre: z.string(), tipo: z.enum(["quincenal", "mensual", "semanal"]),
+      fechaInicio: z.string(), fechaFin: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const result = await db.insert(payrollPeriods).values(input);
+      return { id: Number(result[0].insertId) };
+    }),
+
+  updatePayrollPeriod: publicQuery
+    .input(z.object({
+      id: z.number(), nombre: z.string().optional(), estado: z.enum(["abierto", "cerrado", "procesando"]).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const { id, ...data } = input;
+      await db.update(payrollPeriods).set(data).where(eq(payrollPeriods.id, id));
+      return { success: true };
+    }),
+
+  // -- Payments --
+  payrollPayments: publicQuery
+    .input(z.object({ periodId: z.number().optional(), employeeId: z.number().optional() }).optional())
+    .query(async ({ input }) => {
+      const db = getDb();
+      if (input?.periodId && input?.employeeId) {
+        return await db.select().from(payrollPayments)
+          .where(and(eq(payrollPayments.periodId, input.periodId), eq(payrollPayments.employeeId, input.employeeId)))
+          .orderBy(desc(payrollPayments.id));
+      }
+      if (input?.periodId) {
+        return await db.select().from(payrollPayments).where(eq(payrollPayments.periodId, input.periodId)).orderBy(desc(payrollPayments.id));
+      }
+      if (input?.employeeId) {
+        return await db.select().from(payrollPayments).where(eq(payrollPayments.employeeId, input.employeeId)).orderBy(desc(payrollPayments.id));
+      }
+      return await db.select().from(payrollPayments).orderBy(desc(payrollPayments.id));
+    }),
+
+  createPayrollPayment: publicQuery
+    .input(z.object({
+      employeeId: z.number(), periodId: z.number(), salarioBase: z.string(),
+      horasExtra: z.string().optional(), montoHorasExtra: z.string().optional(),
+      comisiones: z.string().optional(), aguinaldo: z.string().optional(), vacaciones: z.string().optional(),
+      ccss: z.string().optional(), renta: z.string().optional(), adelantos: z.string().optional(),
+      ausencias: z.string().optional(), otrasDeducciones: z.string().optional(),
+      formaPago: z.enum(["transferencia", "cheque", "efectivo"]).optional(),
+      observaciones: z.string().optional(), fechaPago: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const salarioBase = Number(input.salarioBase || 0);
+      const horasExtra = Number(input.horasExtra || 0);
+      const montoHorasExtra = Number(input.montoHorasExtra || 0);
+      const comisiones = Number(input.comisiones || 0);
+      const aguinaldo = Number(input.aguinaldo || 0);
+      const vacaciones = Number(input.vacaciones || 0);
+      const ccss = Number(input.ccss || 0);
+      const renta = Number(input.renta || 0);
+      const adelantos = Number(input.adelantos || 0);
+      const ausencias = Number(input.ausencias || 0);
+      const otrasDeducciones = Number(input.otrasDeducciones || 0);
+
+      const totalIngresos = salarioBase + montoHorasExtra + comisiones + aguinaldo + vacaciones;
+      const totalDeducciones = ccss + renta + adelantos + ausencias + otrasDeducciones;
+      const netoPagar = totalIngresos - totalDeducciones;
+
+      const result = await db.insert(payrollPayments).values({
+        ...input,
+        horasExtra: String(horasExtra), montoHorasExtra: String(montoHorasExtra),
+        comisiones: String(comisiones), aguinaldo: String(aguinaldo), vacaciones: String(vacaciones),
+        ccss: String(ccss), renta: String(renta), adelantos: String(adelantos),
+        ausencias: String(ausencias), otrasDeducciones: String(otrasDeducciones),
+        totalIngresos: String(totalIngresos), totalDeducciones: String(totalDeducciones),
+        netoPagar: String(netoPagar),
+        formaPago: input.formaPago || "transferencia",
+        estado: "pendiente",
+      });
+      return { id: Number(result[0].insertId) };
+    }),
+
+  updatePayrollPayment: publicQuery
+    .input(z.object({
+      id: z.number(), salarioBase: z.string().optional(), horasExtra: z.string().optional(),
+      montoHorasExtra: z.string().optional(), comisiones: z.string().optional(),
+      aguinaldo: z.string().optional(), vacaciones: z.string().optional(),
+      ccss: z.string().optional(), renta: z.string().optional(), adelantos: z.string().optional(),
+      ausencias: z.string().optional(), otrasDeducciones: z.string().optional(),
+      formaPago: z.enum(["transferencia", "cheque", "efectivo"]).optional(),
+      estado: z.enum(["pendiente", "pagado", "anulado"]).optional(),
+      observaciones: z.string().optional(), fechaPago: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const { id, ...data } = input;
+
+      // If any amount field changed, recalculate totals
+      const existingRows = await db.select().from(payrollPayments).where(eq(payrollPayments.id, id)).limit(1);
+      if (existingRows.length === 0) throw new Error("Pago no encontrado");
+      const existing = existingRows[0];
+
+      const salarioBase = data.salarioBase !== undefined ? Number(data.salarioBase) : Number(existing.salarioBase);
+      const montoHorasExtra = data.montoHorasExtra !== undefined ? Number(data.montoHorasExtra) : Number(existing.montoHorasExtra || 0);
+      const comisiones = data.comisiones !== undefined ? Number(data.comisiones) : Number(existing.comisiones || 0);
+      const aguinaldo = data.aguinaldo !== undefined ? Number(data.aguinaldo) : Number(existing.aguinaldo || 0);
+      const vacaciones = data.vacaciones !== undefined ? Number(data.vacaciones) : Number(existing.vacaciones || 0);
+      const ccss = data.ccss !== undefined ? Number(data.ccss) : Number(existing.ccss || 0);
+      const renta = data.renta !== undefined ? Number(data.renta) : Number(existing.renta || 0);
+      const adelantos = data.adelantos !== undefined ? Number(data.adelantos) : Number(existing.adelantos || 0);
+      const ausencias = data.ausencias !== undefined ? Number(data.ausencias) : Number(existing.ausencias || 0);
+      const otrasDeducciones = data.otrasDeducciones !== undefined ? Number(data.otrasDeducciones) : Number(existing.otrasDeducciones || 0);
+
+      const totalIngresos = salarioBase + montoHorasExtra + comisiones + aguinaldo + vacaciones;
+      const totalDeducciones = ccss + renta + adelantos + ausencias + otrasDeducciones;
+      const netoPagar = totalIngresos - totalDeducciones;
+
+      await db.update(payrollPayments).set({
+        ...data,
+        totalIngresos: String(totalIngresos),
+        totalDeducciones: String(totalDeducciones),
+        netoPagar: String(netoPagar),
+      }).where(eq(payrollPayments.id, id));
+      return { success: true };
+    }),
+
+  deletePayrollPayment: publicQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.update(payrollPayments).set({ estado: "anulado" }).where(eq(payrollPayments.id, input.id));
+      return { success: true };
+    }),
+
+  // -- Payroll Report --
+  payrollReportByPeriod: publicQuery
+    .input(z.object({ periodId: z.number() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const payments = await db.select().from(payrollPayments).where(eq(payrollPayments.periodId, input.periodId));
+      const totalNeto = payments.reduce((s, p) => s + Number(p.netoPagar || 0), 0);
+      const totalIngresos = payments.reduce((s, p) => s + Number(p.totalIngresos || 0), 0);
+      const totalDeducciones = payments.reduce((s, p) => s + Number(p.totalDeducciones || 0), 0);
+      const totalPagados = payments.filter(p => p.estado === "pagado").length;
+      const totalPendientes = payments.filter(p => p.estado === "pendiente").length;
+      return {
+        totalPagos: payments.length,
+        totalNeto,
+        totalIngresos,
+        totalDeducciones,
+        totalPagados,
+        totalPendientes,
+        payments,
       };
     }),
 });

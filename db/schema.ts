@@ -346,3 +346,73 @@ export const transferItems = mysqlTable("transferItems", {
 });
 
 export type TransferItem = typeof transferItems.$inferInsert;
+
+// ============================================
+// PAYROLL (Planilla / Nómina)
+// ============================================
+
+export const payrollEmployees = mysqlTable("payrollEmployees", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  cedula: varchar("cedula", { length: 50 }).notNull(),
+  nombre: varchar("nombre", { length: 255 }).notNull(),
+  apellidos: varchar("apellidos", { length: 255 }).notNull(),
+  puesto: varchar("puesto", { length: 100 }).notNull(),
+  salarioBase: decimal("salarioBase", { precision: 12, scale: 2 }).notNull(),
+  tipoSalario: mysqlEnum("tipoSalario", ["quincenal", "mensual", "hora"]).default("quincenal").notNull(),
+  fechaIngreso: varchar("fechaIngreso", { length: 20 }).notNull(),
+  telefono: varchar("telefono", { length: 50 }),
+  correo: varchar("correo", { length: 255 }),
+  cuentaBancaria: varchar("cuentaBancaria", { length: 100 }),
+  banco: varchar("banco", { length: 50 }),
+  estado: mysqlEnum("estado", ["activo", "inactivo", "suspendido"]).default("activo").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type PayrollEmployee = typeof payrollEmployees.$inferSelect;
+export type InsertPayrollEmployee = typeof payrollEmployees.$inferInsert;
+
+export const payrollPeriods = mysqlTable("payrollPeriods", {
+  id: serial("id").primaryKey(),
+  nombre: varchar("nombre", { length: 100 }).notNull(),
+  tipo: mysqlEnum("tipo", ["quincenal", "mensual", "semanal"]).default("quincenal").notNull(),
+  fechaInicio: varchar("fechaInicio", { length: 20 }).notNull(),
+  fechaFin: varchar("fechaFin", { length: 20 }).notNull(),
+  estado: mysqlEnum("estado", ["abierto", "cerrado", "procesando"]).default("abierto").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PayrollPeriod = typeof payrollPeriods.$inferSelect;
+export type InsertPayrollPeriod = typeof payrollPeriods.$inferInsert;
+
+export const payrollPayments = mysqlTable("payrollPayments", {
+  id: serial("id").primaryKey(),
+  employeeId: bigint("employeeId", { mode: "number", unsigned: true }).notNull(),
+  periodId: bigint("periodId", { mode: "number", unsigned: true }).notNull(),
+  salarioBase: decimal("salarioBase", { precision: 12, scale: 2 }).notNull(),
+  horasExtra: decimal("horasExtra", { precision: 10, scale: 2 }).default("0"),
+  montoHorasExtra: decimal("montoHorasExtra", { precision: 12, scale: 2 }).default("0"),
+  comisiones: decimal("comisiones", { precision: 12, scale: 2 }).default("0"),
+  aguinaldo: decimal("aguinaldo", { precision: 12, scale: 2 }).default("0"),
+  vacaciones: decimal("vacaciones", { precision: 12, scale: 2 }).default("0"),
+  totalIngresos: decimal("totalIngresos", { precision: 12, scale: 2 }).notNull(),
+  ccss: decimal("ccss", { precision: 12, scale: 2 }).default("0"),
+  renta: decimal("renta", { precision: 12, scale: 2 }).default("0"),
+  adelantos: decimal("adelantos", { precision: 12, scale: 2 }).default("0"),
+  ausencias: decimal("ausencias", { precision: 12, scale: 2 }).default("0"),
+  otrasDeducciones: decimal("otrasDeducciones", { precision: 12, scale: 2 }).default("0"),
+  totalDeducciones: decimal("totalDeducciones", { precision: 12, scale: 2 }).notNull(),
+  netoPagar: decimal("netoPagar", { precision: 12, scale: 2 }).notNull(),
+  formaPago: mysqlEnum("formaPago", ["transferencia", "cheque", "efectivo"]).default("transferencia").notNull(),
+  estado: mysqlEnum("estado", ["pendiente", "pagado", "anulado"]).default("pendiente").notNull(),
+  observaciones: text("observaciones"),
+  fechaPago: varchar("fechaPago", { length: 20 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type PayrollPayment = typeof payrollPayments.$inferSelect;
+export type InsertPayrollPayment = typeof payrollPayments.$inferInsert;

@@ -12,11 +12,11 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  ShoppingBag,
   Database,
   Tag,
   Printer,
   ArrowLeftRight,
+  Banknote,
 } from "lucide-react";
 
 const menuItems = [
@@ -28,6 +28,7 @@ const menuItems = [
   { path: "/catalog", label: "Catalogo", icon: Database, roles: ["admin", "manager"] },
   { path: "/labels", label: "Etiquetas", icon: Tag, roles: ["admin", "manager", "employee"] },
   { path: "/label-config", label: "Config. Etiquetas", icon: Printer, roles: ["admin", "manager"] },
+  { path: "/payroll", label: "Planilla", icon: Banknote, roles: ["admin", "manager"] },
   { path: "/settings", label: "Configuracion", icon: Settings, roles: ["admin"] },
 ];
 

@@ -13,6 +13,7 @@ import SettingsPage from "@/pages/Settings";
 import CatalogPage from "@/pages/Catalog";
 import LabelsPage from "@/pages/Labels";
 import LabelConfigPage from "@/pages/LabelConfig";
+import PayrollPage from "@/pages/Payroll";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { useState } from "react";
@@ -69,6 +70,7 @@ function App() {
         <Route path="/label-config" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><LabelConfigPage /></ProtectedRoute>} />
         <Route path="/catalog" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><CatalogPage /></ProtectedRoute>} />
         <Route path="/labels" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><LabelsPage /></ProtectedRoute>} />
+        <Route path="/payroll" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><PayrollPage /></ProtectedRoute>} />
         <Route path="*" element={<ProtectedRoute><NotFoundPage /></ProtectedRoute>} />
       </Routes>
     </TRPCProvider>
