@@ -113,26 +113,14 @@ export const inventoryRouter = createRouter({
       const db = getDb();
       const fecha = input.fecha || new Date().toISOString().split("T")[0];
       const costo = input.costo || "0";
-      try {
-        const result: any = await db.execute(sql`
-          INSERT INTO pallets (storeId, palletId, description, fecha, costo, isActive)
-          VALUES (${input.storeId}, ${input.palletId}, ${input.description}, ${fecha}, ${costo}, 1)
-        `);
-        const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
-        return { id: Number(insertResult?.insertId || 0) };
-      } catch (e: any) {
-        // Fallback: try without fecha/costo if columns don't exist
-        try {
-          const result2: any = await db.execute(sql`
-            INSERT INTO pallets (storeId, palletId, description, isActive)
-            VALUES (${input.storeId}, ${input.palletId}, ${input.description}, 1)
-          `);
-          const insertResult2 = Array.isArray(result2) ? result2[0] : (result2.rows || result2);
-          return { id: Number(insertResult2?.insertId || 0) };
-        } catch (fallbackError: any) {
-          throw fallbackError;
-        }
-      }
+
+      // Single clean INSERT — let the real error surface if something fails
+      const result: any = await db.execute(sql`
+        INSERT INTO pallets (storeId, palletId, description, fecha, costo)
+        VALUES (${input.storeId}, ${input.palletId}, ${input.description}, ${fecha}, ${costo})
+      `);
+      const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
+      return { id: Number(insertResult?.insertId || 0) };
     }),
 
   updatePallet: publicQuery
