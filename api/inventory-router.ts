@@ -111,8 +111,28 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number(), palletId: z.string(), description: z.string(), fecha: z.string().optional(), costo: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const result = await db.insert(pallets).values({ storeId: input.storeId, palletId: input.palletId, description: input.description, fecha: input.fecha, costo: input.costo || "0" });
-      return { id: Number(result[0].insertId) };
+      const fecha = input.fecha || new Date().toISOString().split("T")[0];
+      const costo = input.costo || "0";
+      try {
+        const result: any = await db.execute(sql`
+          INSERT INTO pallets (storeId, palletId, description, fecha, costo, isActive)
+          VALUES (${input.storeId}, ${input.palletId}, ${input.description}, ${fecha}, ${costo}, 1)
+        `);
+        const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
+        return { id: Number(insertResult?.insertId || 0) };
+      } catch (e: any) {
+        // Fallback: try without fecha/costo if columns don't exist
+        try {
+          const result2: any = await db.execute(sql`
+            INSERT INTO pallets (storeId, palletId, description, isActive)
+            VALUES (${input.storeId}, ${input.palletId}, ${input.description}, 1)
+          `);
+          const insertResult2 = Array.isArray(result2) ? result2[0] : (result2.rows || result2);
+          return { id: Number(insertResult2?.insertId || 0) };
+        } catch (fallbackError: any) {
+          throw fallbackError;
+        }
+      }
     }),
 
   updatePallet: publicQuery

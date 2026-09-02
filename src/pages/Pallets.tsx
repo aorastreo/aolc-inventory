@@ -29,6 +29,7 @@ export default function PalletsPage() {
       utils.inventory.palletsWithStats.invalidate();
       utils.inventory.pallets.invalidate();
     },
+    onError: (err) => alert("Error al crear contenedor: " + err.message),
   });
 
   const updatePallet = trpc.inventory.updatePallet.useMutation({
