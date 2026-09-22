@@ -91,12 +91,20 @@ export default function TransfersPage() {
     setToStoreId(null);
   };
 
+  const csvField = (val: string | number) => {
+    const str = String(val ?? "");
+    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
   // Export QUPOS format
   const exportQupos = () => {
     if (!transferDetail || transferDetail.length === 0) return;
     let csv = "CODIGO ARTICULO,DESCRIPCION,CATEGORIA,SUBCATEGORIA,ESTADO,CANTIDAD,PRECIO\n";
     transferDetail.forEach(item => {
-      csv += `${item.codigoBarras || ""},${item.nombre},2,FNCQ,Nuevo,${item.cantidad},${item.precio}\n`;
+      csv += `${csvField(item.codigoBarras)},${csvField(item.nombre)},2,FNCQ,Nuevo,${csvField(item.cantidad)},${csvField(item.precio)}\n`;
     });
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);

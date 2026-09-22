@@ -126,11 +126,19 @@ export default function AdjustmentsPage() {
 
   const formatCurrency = (value: string) => Number(value || 0).toLocaleString("es-CR", { style: "currency", currency: "CRC" });
 
+  const csvField = (val: string | number) => {
+    const str = String(val ?? "");
+    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
   const exportToCSV = () => {
     if (!adjItems || adjItems.length === 0 || !adjDetail) return;
     let csv = "CODIGO ARTICULO,DESCRIPCION,CATEGORIA,SUBCATEGORIA,ESTADO,CANTIDAD,PRECIO\n";
     adjItems.forEach(item => {
-      csv += `${item.codigoBarras || ""},${item.nombre},2,FNCQ,Nuevo,${item.cantidad},${item.precio}\n`;
+      csv += `${csvField(item.codigoBarras)},${csvField(item.nombre)},2,FNCQ,Nuevo,${csvField(item.cantidad)},${csvField(item.precio)}\n`;
     });
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
