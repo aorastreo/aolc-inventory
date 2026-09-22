@@ -234,11 +234,33 @@ export default function LabelsPage() {
       <!DOCTYPE html>
       <html>
       <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Etiquetas</title>
         <style>
-          @page { size: 50mm 25mm; margin: 0; }
-          body { margin: 0; padding: 0; background: white; }
-          .label-page { page-break-after: always; }
+          /* NOTE: Do NOT use @page size here — macOS + Zebra thermal printers
+             ignore CSS page sizes. The paper size must be set in the Mac printer
+             settings (System Settings > Printers > Zebra ZD411 > Paper Size). */
+          @page { margin: 0; }
+          * { box-sizing: border-box; }
+          html, body {
+            margin: 0;
+            padding: 0;
+            width: 50mm;
+            height: 25mm;
+            background: white;
+            overflow: hidden;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .label-page {
+            width: 50mm;
+            height: 25mm;
+            position: relative;
+            overflow: hidden;
+            page-break-after: always;
+            background: white;
+          }
           .label-page:last-child { page-break-after: auto; }
         </style>
       </head>
