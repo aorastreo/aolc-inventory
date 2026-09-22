@@ -242,7 +242,7 @@ export default function LabelsPage() {
         <meta charset="utf-8">
         <title>Etiquetas</title>
         <style>
-          @page { margin: 0; size: 2in 1in; }
+          @page { margin: 0; }
           * { box-sizing: border-box; }
           html, body {
             margin: 0;
@@ -251,26 +251,21 @@ export default function LabelsPage() {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-          /* Each label is a fixed-size page */
           .label-page {
             width: 2in;
             height: 1in;
             position: relative;
             overflow: hidden;
             background: white;
-            page-break-after: always;
+            border-bottom: 1px dashed #ddd;
           }
           .label-page:last-child {
-            page-break-after: auto;
+            border-bottom: none;
           }
-          /* Inner wrapper: rotated 180° so the Zebra ZD411 prints it right-side-up.
-             We apply this ALWAYS (not just @media print) so Safari shows it in the
-             print preview instead of a blank page. */
           .label-inner {
             width: 100%;
             height: 100%;
             position: relative;
-            transform: rotate(180deg);
           }
           /* Hide instructions when printing */
           .print-instructions {
@@ -283,6 +278,8 @@ export default function LabelsPage() {
           }
           @media print {
             .print-instructions { display: none !important; }
+            .label-page { border-bottom: none !important; page-break-after: always; }
+            .label-page:last-child { page-break-after: auto; }
           }
         </style>
       </head>
