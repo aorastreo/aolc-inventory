@@ -249,7 +249,7 @@ export default function LabelsPage() {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-          /* Continuous strip layout — each label is a fixed block, no page breaks */
+          /* On screen: normal vertical flow for preview */
           .label-page {
             width: 2in;
             height: 1in;
@@ -257,8 +257,6 @@ export default function LabelsPage() {
             overflow: hidden;
             background: white;
             border-bottom: 1px dashed #ddd;
-            /* Zebra ZD411 on macOS prints upside-down; rotate 180° to compensate */
-            transform: rotate(180deg);
           }
           .label-page:last-child {
             border-bottom: none;
@@ -274,7 +272,13 @@ export default function LabelsPage() {
           }
           @media print {
             .print-instructions { display: none !important; }
-            .label-page { border-bottom: none !important; }
+            .label-page { border-bottom: none !important; page-break-after: always; }
+            .label-page:last-child { page-break-after: auto; }
+            /* Zebra ZD411 on macOS prints upside-down — rotate everything 180° */
+            body {
+              transform: rotate(180deg);
+              transform-origin: center center;
+            }
           }
         </style>
       </head>
