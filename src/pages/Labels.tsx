@@ -257,6 +257,8 @@ export default function LabelsPage() {
             overflow: hidden;
             background: white;
             border-bottom: 1px dashed #ddd;
+            /* Zebra ZD411 on macOS prints upside-down; rotate 180° to compensate */
+            transform: rotate(180deg);
           }
           .label-page:last-child {
             border-bottom: none;
@@ -279,10 +281,10 @@ export default function LabelsPage() {
       <body>
         <div class="print-instructions">
           <strong>Instrucciones para imprimir en Zebra ZD411 (Mac):</strong><br>
-          1. En el dialogo de impresion, seleccione <strong>Orientacion VERTICAL</strong> (NO horizontal)<br>
-          2. Asegurese que el tamano de papel sea <strong>Etiquetas 2x1</strong> (51 x 25 mm)<br>
-          3. Escala: <strong>100%</strong> (NO "Ajustar a pagina")<br>
-          4. Click en <strong>Imprimir</strong>
+          1. Tamano de papel: <strong>Etiquetas 2x1</strong> (51 x 25 mm)<br>
+          2. Escala: <strong>100%</strong> (NO "Ajustar a pagina")<br>
+          3. Click en <strong>Imprimir</strong><br>
+          <em>La orientacion se ajusta automaticamente.</em>
         </div>
         ${labelsHtml}
         <script>
