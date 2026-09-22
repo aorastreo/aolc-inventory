@@ -215,18 +215,20 @@ export default function LabelsPage() {
       const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
       return `
         <div class="label-page">
-          <div style="position:absolute;top:${labelCfg?.nameTop || "0.3mm"};left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "8pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
-          ${(labelCfg?.showPrice ?? true) ? `
-          <div style="position:absolute;top:${labelCfg?.priceTop || "6mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
-            <span style="font-size:${labelCfg?.priceFontSize || "26pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
-            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "9pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
-          </div>` : ""}
-          ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:${labelCfg?.barcodeTop || "11mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "8mm"};">${barcodeSvg}</div>` : ""}
-          ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "17.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "10pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
-          ${(labelCfg?.showFooter ?? true) ? `
-          <div style="position:absolute;top:${labelCfg?.footerTop || "20.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
+          <div class="label-inner">
+            <div style="position:absolute;top:${labelCfg?.nameTop || "0.3mm"};left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "8pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
+            ${(labelCfg?.showPrice ?? true) ? `
+            <div style="position:absolute;top:${labelCfg?.priceTop || "6mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
+              <span style="font-size:${labelCfg?.priceFontSize || "26pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
+              ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "9pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
+            </div>` : ""}
+            ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
+            <div style="position:absolute;top:${labelCfg?.barcodeTop || "11mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "8mm"};">${barcodeSvg}</div>` : ""}
+            ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
+            <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "17.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "10pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
+            ${(labelCfg?.showFooter ?? true) ? `
+            <div style="position:absolute;top:${labelCfg?.footerTop || "20.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
+          </div>
         </div>
       `;
     }).join("");
@@ -240,7 +242,7 @@ export default function LabelsPage() {
         <meta charset="utf-8">
         <title>Etiquetas</title>
         <style>
-          @page { margin: 0; }
+          @page { margin: 0; size: 2in 1in; }
           * { box-sizing: border-box; }
           html, body {
             margin: 0;
@@ -249,17 +251,29 @@ export default function LabelsPage() {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-          /* On screen: normal vertical flow for preview */
+          /* Each label is a fixed-size page */
           .label-page {
             width: 2in;
             height: 1in;
             position: relative;
             overflow: hidden;
             background: white;
-            border-bottom: 1px dashed #ddd;
+            page-break-after: always;
           }
           .label-page:last-child {
-            border-bottom: none;
+            page-break-after: auto;
+          }
+          /* Inner wrapper: we rotate THIS instead of the whole body so Safari
+             keeps correct page-break positions for multiple labels */
+          .label-inner {
+            width: 100%;
+            height: 100%;
+            position: relative;
+          }
+          @media print {
+            .label-inner {
+              transform: rotate(180deg);
+            }
           }
           /* Hide instructions when printing */
           .print-instructions {
@@ -272,13 +286,6 @@ export default function LabelsPage() {
           }
           @media print {
             .print-instructions { display: none !important; }
-            .label-page { border-bottom: none !important; page-break-after: always; }
-            .label-page:last-child { page-break-after: auto; }
-            /* Zebra ZD411 on macOS prints upside-down — rotate everything 180° */
-            body {
-              transform: rotate(180deg);
-              transform-origin: center center;
-            }
           }
         </style>
       </head>
