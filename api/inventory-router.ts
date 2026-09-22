@@ -151,7 +151,7 @@ export const inventoryRouter = createRouter({
       const db = getDb();
       const palletList = await db.select().from(pallets)
         .where(and(eq(pallets.storeId, input.storeId), eq(pallets.isActive, true)))
-        .orderBy(desc(pallets.id));
+        .orderBy(desc(pallets.createdAt));
 
       // Count products per pallet
       const productCounts = await db.select({
