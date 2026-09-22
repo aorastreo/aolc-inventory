@@ -263,17 +263,14 @@ export default function LabelsPage() {
           .label-page:last-child {
             page-break-after: auto;
           }
-          /* Inner wrapper: we rotate THIS instead of the whole body so Safari
-             keeps correct page-break positions for multiple labels */
+          /* Inner wrapper: rotated 180° so the Zebra ZD411 prints it right-side-up.
+             We apply this ALWAYS (not just @media print) so Safari shows it in the
+             print preview instead of a blank page. */
           .label-inner {
             width: 100%;
             height: 100%;
             position: relative;
-          }
-          @media print {
-            .label-inner {
-              transform: rotate(180deg);
-            }
+            transform: rotate(180deg);
           }
           /* Hide instructions when printing */
           .print-instructions {
