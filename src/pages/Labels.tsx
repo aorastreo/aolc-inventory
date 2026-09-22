@@ -124,6 +124,7 @@ export default function LabelsPage() {
   const [rangeEnd, setRangeEnd] = useState("");
   const [labelSize, setLabelSize] = useState("50x25");
   const [showPrice, setShowPrice] = useState("si");
+  const [rotateLabel, setRotateLabel] = useState(false);
   // Editable quantities and names per product
   const [labelQuantities, setLabelQuantities] = useState<Record<number, number>>({});
   const [labelNames, setLabelNames] = useState<Record<number, string>>({});
@@ -210,8 +211,7 @@ export default function LabelsPage() {
     // Build label HTML for popup
     const labelsHtml = expandedItems.map((item) => {
       const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
-      return `
-        <div class="label-page" style="width:50mm;height:25mm;position:relative;overflow:hidden;background:white;page-break-after:always;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
+      const inner = `
           <div style="position:absolute;top:${labelCfg?.nameTop || "0.3mm"};left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "8pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
           ${(labelCfg?.showPrice ?? true) ? `
           <div style="position:absolute;top:${labelCfg?.priceTop || "6mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
@@ -224,8 +224,10 @@ export default function LabelsPage() {
           <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "17.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "10pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
           ${(labelCfg?.showFooter ?? true) ? `
           <div style="position:absolute;top:${labelCfg?.footerTop || "20.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
-        </div>
       `;
+      return rotateLabel
+        ? `<div class="label-page rotated"><div class="label-inner">${inner}</div></div>`
+        : `<div class="label-page"><div class="label-inner">${inner}</div></div>`;
     }).join("");
 
     const popup = window.open("", "_blank", "width=400,height=250");
@@ -237,34 +239,48 @@ export default function LabelsPage() {
         <meta charset="utf-8">
         <title>Etiquetas</title>
         <style>
-          /* Zebra ZD411 on macOS: use exact inches to match 2\" x 1\" label stock.
-             The printer driver on Mac must also be set to 2\" x 1\" (or 50.8 x 25.4 mm). */
-          @page { margin: 0; size: 2in 1in; }
+          @page { margin: 0; }
           * { box-sizing: border-box; }
           html, body {
             margin: 0;
             padding: 0;
-            width: 2in;
-            height: 1in;
             background: white;
             overflow: hidden;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-          .label-page {
+          /* Normal orientation (portrait) */
+          html, body, .label-page {
             width: 2in;
             height: 1in;
+          }
+          .label-page {
             position: relative;
             overflow: hidden;
             page-break-after: always;
             background: white;
           }
           .label-page:last-child { page-break-after: auto; }
+          .label-inner {
+            width: 100%;
+            height: 100%;
+            position: relative;
+          }
+          /* Rotated 90° for Zebra ZD411 on macOS */
+          .label-page.rotated {
+            width: 1in;
+            height: 2in;
+          }
+          .label-page.rotated .label-inner {
+            width: 2in;
+            height: 1in;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-90deg);
+          }
           @media print {
-            html, body, .label-page {
-              width: 2in !important;
-              height: 1in !important;
-            }
+            @page { size: auto; }
           }
         </style>
       </head>
@@ -366,6 +382,19 @@ export default function LabelsPage() {
                     <option value="si">Si</option>
                     <option value="no">No</option>
                   </select>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    id="rotateLabel"
+                    type="checkbox"
+                    checked={rotateLabel}
+                    onChange={(e) => setRotateLabel(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <Label htmlFor="rotateLabel" className="text-sm font-medium cursor-pointer">
+                    Rotar etiqueta 90° (para Zebra en Mac)
+                  </Label>
                 </div>
               </div>
             </CardContent>
