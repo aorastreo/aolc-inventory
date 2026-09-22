@@ -267,6 +267,11 @@ export default function LabelsPage() {
             height: 100%;
             position: relative;
           }
+          @media print {
+            .label-inner {
+              transform: rotate(180deg);
+            }
+          }
           /* Hide instructions when printing */
           .print-instructions {
             display: block;
