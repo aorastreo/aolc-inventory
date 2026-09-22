@@ -191,6 +191,7 @@ export const inventoryRouter = createRouter({
           fecha: p.fecha,
           description: p.description,
           costo: p.costo,
+          createdAt: p.createdAt,
           articulos: countMap.get(p.id) || 0,
           unidades: unitsMap.get(p.id) || 0,
           ventas,

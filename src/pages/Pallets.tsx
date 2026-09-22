@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type SortField = "palletId" | "fecha" | "description" | "costo" | "articulos";
+type SortField = "createdAt" | "palletId" | "fecha" | "description" | "costo" | "articulos";
 type SortDirection = "asc" | "desc";
 
 const BRAND_RED = "#B22234";
@@ -66,8 +66,8 @@ export default function PalletsPage() {
 
   const [newPallet, setNewPallet] = useState({ palletId: "", description: "", costo: "" });
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [sortField, setSortField] = useState<SortField>("palletId");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [sortField, setSortField] = useState<SortField>("createdAt");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -86,6 +86,7 @@ export default function PalletsPage() {
   const sortedPallets = [...(pallets || [])].sort((a, b) => {
     let comparison = 0;
     switch (sortField) {
+      case "createdAt": comparison = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(); break;
       case "palletId": comparison = a.palletId.localeCompare(b.palletId); break;
       case "fecha": comparison = (a.fecha || "").localeCompare(b.fecha || ""); break;
       case "description": comparison = a.description.localeCompare(b.description); break;
