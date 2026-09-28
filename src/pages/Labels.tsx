@@ -226,7 +226,7 @@ export default function LabelsPage() {
         <meta charset="utf-8">
         <title>Etiquetas</title>
         <style>
-          @page { margin: 0; }
+          @page { margin: 0; size: 2in 1in; }
           * { box-sizing: border-box; }
           html, body {
             margin: 0;
@@ -240,6 +240,7 @@ export default function LabelsPage() {
             height: 1in;
             background: white;
             page-break-after: always;
+            overflow: hidden;
           }
           .label-page:last-child {
             page-break-after: auto;
@@ -248,6 +249,8 @@ export default function LabelsPage() {
             width: 2in;
             height: 1in;
             display: block;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
           }
           .print-instructions {
             padding: 12px;
@@ -258,6 +261,7 @@ export default function LabelsPage() {
           }
           @media print {
             .print-instructions { display: none !important; }
+            html, body { background: white !important; }
           }
         </style>
       </head>
@@ -272,8 +276,8 @@ export default function LabelsPage() {
       </body>
       </html>
     `);
-    pDoc.close();
-
+    // NOTE: do NOT close the document yet — we need to inject canvases into the DOM first.
+    // Closing early can cause Safari to ignore dynamically-added elements during print.
     const container = pDoc.getElementById("labels-container")!;
 
     // Helpers
@@ -319,11 +323,11 @@ export default function LabelsPage() {
         }
       }
 
-      // BARCODE
+      // BARCODE — create barcode canvas IN the popup document to avoid cross-origin taint
       if ((labelCfg?.showBarcode ?? true) && item.codigoBarras) {
         const barcodeTop = mmPx(labelCfg?.barcodeTop || "11mm");
         const barcodeHeight = mmPx(labelCfg?.barcodeHeight || "8mm");
-        const bcCanvas = document.createElement("canvas");
+        const bcCanvas = pDoc.createElement("canvas");
         JsBarcode(bcCanvas, item.codigoBarras, { format: "CODE128", width: 2, height: 40, displayValue: false, margin: 0 });
         const scale = Math.min((W - 20) / bcCanvas.width, barcodeHeight / bcCanvas.height);
         const bcW = bcCanvas.width * scale;
@@ -365,7 +369,17 @@ export default function LabelsPage() {
       container.appendChild(wrapper);
     });
 
-    setTimeout(() => popup.print(), 400);
+    // Close the document stream now that all canvases are in the DOM
+    pDoc.close();
+
+    // Force layout reflow so Safari sees the canvases before print
+    container.offsetHeight;
+
+    // Give Safari time to rasterize canvases, then print
+    setTimeout(() => {
+      container.offsetHeight; // second reflow
+      popup.print();
+    }, 800);
   };
 
 
