@@ -208,11 +208,10 @@ export default function LabelsPage() {
     if (!targetId) return;
     markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
 
-    // Build PDF with jsPDF — avoids Safari CSS transform bugs in print media
+    // Build popup with canvas images — NO CSS transforms (Safari can't handle them in print media).
+    // We rotate each label by software on a canvas, then embed as <img>.
     const items = expandedItems;
     if (items.length === 0) return;
-
-    const doc = new jsPDF({ unit: "in", format: [2, 1] });
 
     // Helper: draw one label onto a rotated canvas
     function drawLabelCanvas(item: LabelItem): HTMLCanvasElement {
@@ -295,14 +294,76 @@ export default function LabelsPage() {
       return rotated;
     }
 
-    items.forEach((item, i) => {
-      if (i > 0) doc.addPage([2, 1]);
-      const canvas = drawLabelCanvas(item);
-      doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 2, 1);
+    const labelImages = items.map(item => {
+      const c = drawLabelCanvas(item);
+      return c.toDataURL("image/png");
     });
 
-    const pdfUrl = doc.output("bloburl");
-    window.open(pdfUrl, "_blank");
+    const popup = window.open("", "_blank", "width=420,height=600");
+    if (!popup) return;
+    popup.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Etiquetas</title>
+        <style>
+          @page { margin: 0; }
+          * { box-sizing: border-box; }
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: white;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .label-page {
+            width: 2in;
+            height: 1in;
+            position: relative;
+            overflow: hidden;
+            background: white;
+            page-break-after: always;
+          }
+          .label-page:last-child {
+            page-break-after: auto;
+          }
+          .label-page img {
+            width: 100%;
+            height: 100%;
+            display: block;
+          }
+          .print-instructions {
+            display: block;
+            padding: 12px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 13px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          @media print {
+            .print-instructions { display: none !important; }
+            .label-page { page-break-after: always; border: none; }
+            .label-page:last-child { page-break-after: auto; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="print-instructions">
+          <strong>Instrucciones para imprimir en Zebra ZD411 (Mac):</strong><br>
+          1. Tamano de papel: <strong>Etiquetas 2x1</strong> (51 x 25 mm)<br>
+          2. Escala: <strong>100%</strong> (NO "Ajustar a pagina")<br>
+          3. Click en <strong>Imprimir</strong><br>
+          <em>La orientacion se ajusta automaticamente.</em>
+        </div>
+        ${labelImages.map(src => `<div class="label-page"><img src="${src}"></div>`).join("")}
+        <script>
+          setTimeout(function() { window.print(); }, 300);
+        <\/script>
+      </body>
+      </html>
+    `);
+    popup.document.close();
   };
 
 
