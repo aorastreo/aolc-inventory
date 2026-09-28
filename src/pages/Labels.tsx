@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import JsBarcode from "jsbarcode";
+import { jsPDF } from "jspdf";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
@@ -207,104 +208,104 @@ export default function LabelsPage() {
     if (!targetId) return;
     markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
 
-    // Build label HTML for popup
-    // IMPORTANT: Thermal printers (Zebra ZD411) work with a continuous strip.
-    // We create a SINGLE vertical flow — NO page breaks — because Safari sends
-    // each "page" as a separate job, causing overlap on thermal printers.
-    const labelsHtml = expandedItems.map((item) => {
-      const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
-      return `
-        <div class="label-page">
-          <div class="label-inner">
-            <div style="position:absolute;top:${labelCfg?.nameTop || "0.3mm"};left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "8pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
-            ${(labelCfg?.showPrice ?? true) ? `
-            <div style="position:absolute;top:${labelCfg?.priceTop || "6mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
-              <span style="font-size:${labelCfg?.priceFontSize || "26pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
-              ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "9pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
-            </div>` : ""}
-            ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
-            <div style="position:absolute;top:${labelCfg?.barcodeTop || "11mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "8mm"};">${barcodeSvg}</div>` : ""}
-            ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
-            <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "17.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "10pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
-            ${(labelCfg?.showFooter ?? true) ? `
-            <div style="position:absolute;top:${labelCfg?.footerTop || "20.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
-          </div>
-        </div>
-      `;
-    }).join("");
+    // Build PDF with jsPDF — avoids Safari CSS transform bugs in print media
+    const items = expandedItems;
+    if (items.length === 0) return;
 
-    const popup = window.open("", "_blank", "width=420,height=600");
-    if (!popup) return;
-    popup.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Etiquetas</title>
-        <style>
-          @page { margin: 0; }
-          * { box-sizing: border-box; }
-          html, body {
-            margin: 0;
-            padding: 0;
-            background: white;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          .label-page {
-            width: 2in;
-            height: 1in;
-            position: relative;
-            overflow: hidden;
-            background: white;
-            border-bottom: 1px dashed #ddd;
-          }
-          .label-page:last-child {
-            border-bottom: none;
-          }
-          .label-inner {
-            width: 100%;
-            height: 100%;
-            position: relative;
-          }
-          @media print {
-            .label-inner {
-              transform: rotate(180deg);
-            }
-          }
-          /* Hide instructions when printing */
-          .print-instructions {
-            display: block;
-            padding: 12px;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            font-size: 13px;
-            background: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
-          }
-          @media print {
-            .print-instructions { display: none !important; }
-            .label-page { border-bottom: none !important; page-break-after: always; }
-            .label-page:last-child { page-break-after: auto; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="print-instructions">
-          <strong>Instrucciones para imprimir en Zebra ZD411 (Mac):</strong><br>
-          1. Tamano de papel: <strong>Etiquetas 2x1</strong> (51 x 25 mm)<br>
-          2. Escala: <strong>100%</strong> (NO "Ajustar a pagina")<br>
-          3. Click en <strong>Imprimir</strong><br>
-          <em>La orientacion se ajusta automaticamente.</em>
-        </div>
-        ${labelsHtml}
-        <script>
-          setTimeout(function() { window.print(); }, 300);
-        </script>
-      </body>
-      </html>
-    `);
-    popup.document.close();
+    const doc = new jsPDF({ unit: "in", format: [2, 1] });
+
+    // Helper: draw one label onto a rotated canvas
+    function drawLabelCanvas(item: LabelItem): HTMLCanvasElement {
+      const W = 406; // 2" @ 203 DPI
+      const H = 203; // 1" @ 203 DPI
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d")!;
+
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, W, H);
+
+      const mmPx = (v: string) => (parseFloat(v) || 0) * 7.992;
+      const ptPx = (v: string) => (parseFloat(v) || 0) * 2.819;
+
+      // NAME
+      const nameTop = mmPx(labelCfg?.nameTop || "0.3mm");
+      const nameSize = ptPx(labelCfg?.nameFontSize || "8pt");
+      ctx.fillStyle = "black";
+      ctx.font = `bold ${nameSize}px ${labelCfg?.nameFontFamily || "Arial Narrow"}, Arial, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      let name = item.nombre.toUpperCase();
+      while (ctx.measureText(name).width > W - 16 && name.length > 3) name = name.slice(0, -1);
+      ctx.fillText(name, W / 2, nameTop);
+
+      // PRICE
+      if (labelCfg?.showPrice ?? true) {
+        const priceTop = mmPx(labelCfg?.priceTop || "6mm");
+        const priceSize = ptPx(labelCfg?.priceFontSize || "26pt");
+        ctx.font = `bold ${priceSize}px ${labelCfg?.priceFontFamily || "Arial Narrow"}, Arial, sans-serif`;
+        const priceText = Math.round(Number(item.precio)).toString();
+        ctx.fillText(priceText, W / 2, priceTop);
+        if (labelCfg?.showIva ?? true) {
+          const ivaSize = ptPx(labelCfg?.ivaFontSize || "9pt");
+          ctx.font = `bold ${ivaSize}px Arial, sans-serif`;
+          const priceW = ctx.measureText(priceText).width;
+          ctx.fillText("IVA", W / 2 + priceW / 2 + 6, priceTop + priceSize * 0.25);
+        }
+      }
+
+      // BARCODE
+      if ((labelCfg?.showBarcode ?? true) && item.codigoBarras) {
+        const barcodeTop = mmPx(labelCfg?.barcodeTop || "11mm");
+        const barcodeHeight = mmPx(labelCfg?.barcodeHeight || "8mm");
+        const bcCanvas = document.createElement("canvas");
+        JsBarcode(bcCanvas, item.codigoBarras, { format: "CODE128", width: 2, height: 40, displayValue: false, margin: 0 });
+        const scale = Math.min((W - 20) / bcCanvas.width, barcodeHeight / bcCanvas.height);
+        const bcW = bcCanvas.width * scale;
+        const bcH = bcCanvas.height * scale;
+        ctx.drawImage(bcCanvas, (W - bcW) / 2, barcodeTop, bcW, bcH);
+      }
+
+      // BARCODE NUMBER
+      if ((labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras) {
+        const numTop = mmPx(labelCfg?.barcodeNumberTop || "17.5mm");
+        const numSize = ptPx(labelCfg?.barcodeNumberFontSize || "10pt");
+        ctx.font = `bold ${numSize}px ${labelCfg?.barcodeNumberFontFamily || "Courier New"}, monospace`;
+        ctx.fillText(item.codigoBarras, W / 2, numTop);
+      }
+
+      // FOOTER
+      if (labelCfg?.showFooter ?? true) {
+        const footerTop = mmPx(labelCfg?.footerTop || "20.5mm");
+        const footerSize = ptPx(labelCfg?.footerFontSize || "6pt");
+        ctx.font = `${footerSize}px ${labelCfg?.footerFontFamily || "Arial Narrow"}, Arial, sans-serif`;
+        const footerText = `${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}`;
+        ctx.fillText(footerText, W / 2, footerTop);
+      }
+
+      // ROTATE 180°
+      const rotated = document.createElement("canvas");
+      rotated.width = W;
+      rotated.height = H;
+      const rctx = rotated.getContext("2d")!;
+      rctx.translate(W, H);
+      rctx.rotate(Math.PI);
+      rctx.drawImage(canvas, 0, 0);
+      return rotated;
+    }
+
+    items.forEach((item, i) => {
+      if (i > 0) doc.addPage([2, 1]);
+      const canvas = drawLabelCanvas(item);
+      doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 2, 1);
+    });
+
+    const pdfUrl = doc.output("bloburl");
+    window.open(pdfUrl, "_blank");
   };
+
+
 
   const filtered = products?.filter(p =>
     p.nombre.toLowerCase().includes(search.toLowerCase()) ||
