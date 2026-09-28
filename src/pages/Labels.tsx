@@ -208,25 +208,90 @@ export default function LabelsPage() {
     if (!targetId) return;
     markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
 
-    // Build popup with canvas images — NO CSS transforms (Safari can't handle them in print media).
-    // We rotate each label by software on a canvas, then embed as <img>.
     const items = expandedItems;
     if (items.length === 0) return;
 
-    // Helper: draw one label onto a rotated canvas
-    function drawLabelCanvas(item: LabelItem): HTMLCanvasElement {
-      const W = 406; // 2" @ 203 DPI
-      const H = 203; // 1" @ 203 DPI
-      const canvas = document.createElement("canvas");
+    // Open popup with empty container, then inject real canvas elements via DOM.
+    // Safari cannot print data-URL <img> tags inside page-break elements,
+    // so we create the canvases directly in the popup document instead.
+    const popup = window.open("", "_blank", "width=420,height=600");
+    if (!popup) return;
+
+    const pDoc = popup.document;
+    pDoc.open();
+    pDoc.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Etiquetas</title>
+        <style>
+          @page { margin: 0; }
+          * { box-sizing: border-box; }
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: white;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .label-page {
+            width: 2in;
+            height: 1in;
+            background: white;
+            page-break-after: always;
+          }
+          .label-page:last-child {
+            page-break-after: auto;
+          }
+          .label-page canvas {
+            width: 2in;
+            height: 1in;
+            display: block;
+          }
+          .print-instructions {
+            padding: 12px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 13px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          @media print {
+            .print-instructions { display: none !important; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="print-instructions">
+          <strong>Instrucciones para imprimir en Zebra ZD411 (Mac):</strong><br>
+          1. Tamano de papel: <strong>Etiquetas 2x1</strong> (51 x 25 mm)<br>
+          2. Escala: <strong>100%</strong> (NO "Ajustar a pagina")<br>
+          3. Click en <strong>Imprimir</strong>
+        </div>
+        <div id="labels-container"></div>
+      </body>
+      </html>
+    `);
+    pDoc.close();
+
+    const container = pDoc.getElementById("labels-container")!;
+
+    // Helpers
+    const mmPx = (v: string) => (parseFloat(v) || 0) * 7.992;
+    const ptPx = (v: string) => (parseFloat(v) || 0) * 2.819;
+
+    items.forEach((item, idx) => {
+      const W = 406;
+      const H = 203;
+
+      // Create canvases inside the popup document
+      const canvas = pDoc.createElement("canvas");
       canvas.width = W;
       canvas.height = H;
       const ctx = canvas.getContext("2d")!;
 
       ctx.fillStyle = "white";
       ctx.fillRect(0, 0, W, H);
-
-      const mmPx = (v: string) => (parseFloat(v) || 0) * 7.992;
-      const ptPx = (v: string) => (parseFloat(v) || 0) * 2.819;
 
       // NAME
       const nameTop = mmPx(labelCfg?.nameTop || "0.3mm");
@@ -284,86 +349,23 @@ export default function LabelsPage() {
       }
 
       // ROTATE 180°
-      const rotated = document.createElement("canvas");
+      const rotated = pDoc.createElement("canvas");
       rotated.width = W;
       rotated.height = H;
       const rctx = rotated.getContext("2d")!;
       rctx.translate(W, H);
       rctx.rotate(Math.PI);
       rctx.drawImage(canvas, 0, 0);
-      return rotated;
-    }
 
-    const labelImages = items.map(item => {
-      const c = drawLabelCanvas(item);
-      return c.toDataURL("image/png");
+      // Append to popup
+      const wrapper = pDoc.createElement("div");
+      wrapper.className = "label-page";
+      if (idx === items.length - 1) wrapper.style.pageBreakAfter = "auto";
+      wrapper.appendChild(rotated);
+      container.appendChild(wrapper);
     });
 
-    const popup = window.open("", "_blank", "width=420,height=600");
-    if (!popup) return;
-    popup.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Etiquetas</title>
-        <style>
-          @page { margin: 0; }
-          * { box-sizing: border-box; }
-          html, body {
-            margin: 0;
-            padding: 0;
-            background: white;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          .label-page {
-            width: 2in;
-            height: 1in;
-            position: relative;
-            overflow: hidden;
-            background: white;
-            page-break-after: always;
-          }
-          .label-page:last-child {
-            page-break-after: auto;
-          }
-          .label-page img {
-            width: 100%;
-            height: 100%;
-            display: block;
-          }
-          .print-instructions {
-            display: block;
-            padding: 12px;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            font-size: 13px;
-            background: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
-          }
-          @media print {
-            .print-instructions { display: none !important; }
-            .label-page { page-break-after: always; border: none; }
-            .label-page:last-child { page-break-after: auto; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="print-instructions">
-          <strong>Instrucciones para imprimir en Zebra ZD411 (Mac):</strong><br>
-          1. Tamano de papel: <strong>Etiquetas 2x1</strong> (51 x 25 mm)<br>
-          2. Escala: <strong>100%</strong> (NO "Ajustar a pagina")<br>
-          3. Click en <strong>Imprimir</strong><br>
-          <em>La orientacion se ajusta automaticamente.</em>
-        </div>
-        ${labelImages.map(src => `<div class="label-page"><img src="${src}"></div>`).join("")}
-        <script>
-          setTimeout(function() { window.print(); }, 300);
-        <\/script>
-      </body>
-      </html>
-    `);
-    popup.document.close();
+    setTimeout(() => popup.print(), 400);
   };
 
 
