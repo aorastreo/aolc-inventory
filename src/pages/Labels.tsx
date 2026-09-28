@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import JsBarcode from "jsbarcode";
-import { jsPDF } from "jspdf";
+
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
@@ -27,6 +27,14 @@ interface LabelItem {
 }
 
 // Get today's date in YYYY-MM-DD using local timezone
+function escapeXml(str: string): string {
+  return str.replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&apos;");
+}
+
 function getLocalDateString() {
   const now = new Date();
   const y = now.getFullYear();
@@ -211,15 +219,83 @@ export default function LabelsPage() {
     const items = expandedItems;
     if (items.length === 0) return;
 
-    // Open popup with empty container, then inject real canvas elements via DOM.
-    // Safari cannot print data-URL <img> tags inside page-break elements,
-    // so we create the canvases directly in the popup document instead.
+    // Use SVG instead of canvas — Safari prints SVGs reliably, canvases are blank in print preview.
+    const W = 406; // 2" @ 203 DPI
+    const H = 203; // 1" @ 203 DPI
+    const mmPx = (v: string) => (parseFloat(v) || 0) * 7.992;
+    const ptPx = (v: string) => (parseFloat(v) || 0) * 2.819;
+
+    const labelsHtml = items.map((item) => {
+      // Generate barcode SVG string
+      let barcodeSvgContent = "";
+      if ((labelCfg?.showBarcode ?? true) && item.codigoBarras) {
+        const bcDiv = document.createElement("div");
+        JsBarcode(bcDiv, item.codigoBarras, { format: "CODE128", width: 2, height: 40, displayValue: false, margin: 0 });
+        const bcSvg = bcDiv.querySelector("svg");
+        if (bcSvg) {
+          const barcodeTop = mmPx(labelCfg?.barcodeTop || "11mm");
+          const barcodeHeight = mmPx(labelCfg?.barcodeHeight || "8mm");
+          const rawW = parseFloat(bcSvg.getAttribute("width") || "100");
+          const rawH = parseFloat(bcSvg.getAttribute("height") || "40");
+          const scale = Math.min((W - 20) / rawW, barcodeHeight / rawH);
+          const bcW = rawW * scale;
+          const bcH = rawH * scale;
+          const x = (W - bcW) / 2;
+          barcodeSvgContent = `<g transform="translate(${x}, ${barcodeTop}) scale(${scale})">${bcSvg.innerHTML}</g>`;
+        }
+      }
+
+      // Build label SVG
+      const nameTop = mmPx(labelCfg?.nameTop || "0.3mm");
+      const nameSize = ptPx(labelCfg?.nameFontSize || "8pt");
+      const priceTop = mmPx(labelCfg?.priceTop || "6mm");
+      const priceSize = ptPx(labelCfg?.priceFontSize || "26pt");
+      const ivaSize = ptPx(labelCfg?.ivaFontSize || "9pt");
+      const numTop = mmPx(labelCfg?.barcodeNumberTop || "17.5mm");
+      const numSize = ptPx(labelCfg?.barcodeNumberFontSize || "10pt");
+      const footerTop = mmPx(labelCfg?.footerTop || "20.5mm");
+      const footerSize = ptPx(labelCfg?.footerFontSize || "6pt");
+
+      const name = item.nombre.toUpperCase();
+      const priceText = Math.round(Number(item.precio)).toString();
+      const footerText = `${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}`;
+
+      // IVA text width estimation for positioning
+      const ivaX = W / 2 + (priceText.length * priceSize * 0.35) / 2 + 8;
+
+      let svgContent = "";
+
+      // Name
+      svgContent += `<text x="${W / 2}" y="${nameTop + nameSize * 0.8}" font-size="${nameSize}" font-weight="bold" font-family="${labelCfg?.nameFontFamily || "Arial Narrow"}, Arial, sans-serif" fill="black" text-anchor="middle">${escapeXml(name)}</text>`;
+
+      // Price
+      if (labelCfg?.showPrice ?? true) {
+        svgContent += `<text x="${W / 2}" y="${priceTop + priceSize * 0.85}" font-size="${priceSize}" font-weight="bold" font-family="${labelCfg?.priceFontFamily || "Arial Narrow"}, Arial, sans-serif" fill="black" text-anchor="middle">${priceText}</text>`;
+        if (labelCfg?.showIva ?? true) {
+          svgContent += `<text x="${ivaX}" y="${priceTop + priceSize * 0.6}" font-size="${ivaSize}" font-weight="bold" font-family="Arial, sans-serif" fill="black">IVA</text>`;
+        }
+      }
+
+      // Barcode
+      svgContent += barcodeSvgContent;
+
+      // Barcode number
+      if ((labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras) {
+        svgContent += `<text x="${W / 2}" y="${numTop + numSize * 0.8}" font-size="${numSize}" font-weight="bold" font-family="${labelCfg?.barcodeNumberFontFamily || "Courier New"}, monospace" fill="black" text-anchor="middle" letter-spacing="0.5">${item.codigoBarras}</text>`;
+      }
+
+      // Footer
+      if (labelCfg?.showFooter ?? true) {
+        svgContent += `<text x="${W / 2}" y="${footerTop + footerSize * 0.8}" font-size="${footerSize}" font-family="${labelCfg?.footerFontFamily || "Arial Narrow"}, Arial, sans-serif" fill="black" text-anchor="middle">${escapeXml(footerText)}</text>`;
+      }
+
+      // Full label SVG rotated 180° for Zebra ZD411
+      return `<div class="label-page"><svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(180, ${W / 2}, ${H / 2})">${svgContent}</g></svg></div>`;
+    }).join("");
+
     const popup = window.open("", "_blank", "width=420,height=600");
     if (!popup) return;
-
-    const pDoc = popup.document;
-    pDoc.open();
-    pDoc.write(`
+    popup.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
@@ -245,14 +321,8 @@ export default function LabelsPage() {
           .label-page:last-child {
             page-break-after: auto;
           }
-          .label-page canvas {
-            width: 2in;
-            height: 1in;
-            display: block;
-            image-rendering: -webkit-optimize-contrast;
-            image-rendering: crisp-edges;
-          }
           .print-instructions {
+            display: block;
             padding: 12px;
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             font-size: 13px;
@@ -261,7 +331,6 @@ export default function LabelsPage() {
           }
           @media print {
             .print-instructions { display: none !important; }
-            html, body { background: white !important; }
           }
         </style>
       </head>
@@ -272,114 +341,14 @@ export default function LabelsPage() {
           2. Escala: <strong>100%</strong> (NO "Ajustar a pagina")<br>
           3. Click en <strong>Imprimir</strong>
         </div>
-        <div id="labels-container"></div>
+        ${labelsHtml}
+        <script>
+          setTimeout(function() { window.print(); }, 400);
+        <\/script>
       </body>
       </html>
     `);
-    // NOTE: do NOT close the document yet — we need to inject canvases into the DOM first.
-    // Closing early can cause Safari to ignore dynamically-added elements during print.
-    const container = pDoc.getElementById("labels-container")!;
-
-    // Helpers
-    const mmPx = (v: string) => (parseFloat(v) || 0) * 7.992;
-    const ptPx = (v: string) => (parseFloat(v) || 0) * 2.819;
-
-    items.forEach((item, idx) => {
-      const W = 406;
-      const H = 203;
-
-      // Create canvases inside the popup document
-      const canvas = pDoc.createElement("canvas");
-      canvas.width = W;
-      canvas.height = H;
-      const ctx = canvas.getContext("2d")!;
-
-      ctx.fillStyle = "white";
-      ctx.fillRect(0, 0, W, H);
-
-      // NAME
-      const nameTop = mmPx(labelCfg?.nameTop || "0.3mm");
-      const nameSize = ptPx(labelCfg?.nameFontSize || "8pt");
-      ctx.fillStyle = "black";
-      ctx.font = `bold ${nameSize}px ${labelCfg?.nameFontFamily || "Arial Narrow"}, Arial, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      let name = item.nombre.toUpperCase();
-      while (ctx.measureText(name).width > W - 16 && name.length > 3) name = name.slice(0, -1);
-      ctx.fillText(name, W / 2, nameTop);
-
-      // PRICE
-      if (labelCfg?.showPrice ?? true) {
-        const priceTop = mmPx(labelCfg?.priceTop || "6mm");
-        const priceSize = ptPx(labelCfg?.priceFontSize || "26pt");
-        ctx.font = `bold ${priceSize}px ${labelCfg?.priceFontFamily || "Arial Narrow"}, Arial, sans-serif`;
-        const priceText = Math.round(Number(item.precio)).toString();
-        ctx.fillText(priceText, W / 2, priceTop);
-        if (labelCfg?.showIva ?? true) {
-          const ivaSize = ptPx(labelCfg?.ivaFontSize || "9pt");
-          ctx.font = `bold ${ivaSize}px Arial, sans-serif`;
-          const priceW = ctx.measureText(priceText).width;
-          ctx.fillText("IVA", W / 2 + priceW / 2 + 6, priceTop + priceSize * 0.25);
-        }
-      }
-
-      // BARCODE — create barcode canvas IN the popup document to avoid cross-origin taint
-      if ((labelCfg?.showBarcode ?? true) && item.codigoBarras) {
-        const barcodeTop = mmPx(labelCfg?.barcodeTop || "11mm");
-        const barcodeHeight = mmPx(labelCfg?.barcodeHeight || "8mm");
-        const bcCanvas = pDoc.createElement("canvas");
-        JsBarcode(bcCanvas, item.codigoBarras, { format: "CODE128", width: 2, height: 40, displayValue: false, margin: 0 });
-        const scale = Math.min((W - 20) / bcCanvas.width, barcodeHeight / bcCanvas.height);
-        const bcW = bcCanvas.width * scale;
-        const bcH = bcCanvas.height * scale;
-        ctx.drawImage(bcCanvas, (W - bcW) / 2, barcodeTop, bcW, bcH);
-      }
-
-      // BARCODE NUMBER
-      if ((labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras) {
-        const numTop = mmPx(labelCfg?.barcodeNumberTop || "17.5mm");
-        const numSize = ptPx(labelCfg?.barcodeNumberFontSize || "10pt");
-        ctx.font = `bold ${numSize}px ${labelCfg?.barcodeNumberFontFamily || "Courier New"}, monospace`;
-        ctx.fillText(item.codigoBarras, W / 2, numTop);
-      }
-
-      // FOOTER
-      if (labelCfg?.showFooter ?? true) {
-        const footerTop = mmPx(labelCfg?.footerTop || "20.5mm");
-        const footerSize = ptPx(labelCfg?.footerFontSize || "6pt");
-        ctx.font = `${footerSize}px ${labelCfg?.footerFontFamily || "Arial Narrow"}, Arial, sans-serif`;
-        const footerText = `${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}`;
-        ctx.fillText(footerText, W / 2, footerTop);
-      }
-
-      // ROTATE 180°
-      const rotated = pDoc.createElement("canvas");
-      rotated.width = W;
-      rotated.height = H;
-      const rctx = rotated.getContext("2d")!;
-      rctx.translate(W, H);
-      rctx.rotate(Math.PI);
-      rctx.drawImage(canvas, 0, 0);
-
-      // Append to popup
-      const wrapper = pDoc.createElement("div");
-      wrapper.className = "label-page";
-      if (idx === items.length - 1) wrapper.style.pageBreakAfter = "auto";
-      wrapper.appendChild(rotated);
-      container.appendChild(wrapper);
-    });
-
-    // Close the document stream now that all canvases are in the DOM
-    pDoc.close();
-
-    // Force layout reflow so Safari sees the canvases before print
-    container.offsetHeight;
-
-    // Give Safari time to rasterize canvases, then print
-    setTimeout(() => {
-      container.offsetHeight; // second reflow
-      popup.print();
-    }, 800);
+    popup.document.close();
   };
 
 
