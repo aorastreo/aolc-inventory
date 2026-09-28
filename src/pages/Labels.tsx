@@ -211,144 +211,160 @@ export default function LabelsPage() {
   };
 
   const handlePrint = () => {
-    if (selectedProducts.size === 0) return;
-    const targetId = adjustmentIdNum || palletIdNum;
-    if (!targetId) return;
-    markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
+    try {
+      if (selectedProducts.size === 0) return;
+      const targetId = adjustmentIdNum || palletIdNum;
+      if (!targetId) return;
+      markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
 
-    const items = expandedItems;
-    if (items.length === 0) return;
+      const items = expandedItems;
+      if (items.length === 0) return;
 
-    // Use SVG instead of canvas — Safari prints SVGs reliably, canvases are blank in print preview.
-    const W = 406; // 2" @ 203 DPI
-    const H = 203; // 1" @ 203 DPI
-    const mmPx = (v: string) => (parseFloat(v) || 0) * 7.992;
-    const ptPx = (v: string) => (parseFloat(v) || 0) * 2.819;
+      // Use SVG instead of canvas — Safari prints SVGs reliably, canvases are blank in print preview.
+      const W = 406; // 2" @ 203 DPI
+      const H = 203; // 1" @ 203 DPI
+      const mmPx = (v: string) => (parseFloat(v) || 0) * 7.992;
+      const ptPx = (v: string) => (parseFloat(v) || 0) * 2.819;
 
-    const labelsHtml = items.map((item) => {
-      // Generate barcode SVG string
-      let barcodeSvgContent = "";
-      if ((labelCfg?.showBarcode ?? true) && item.codigoBarras) {
-        const bcDiv = document.createElement("div");
-        JsBarcode(bcDiv, item.codigoBarras, { format: "CODE128", width: 2, height: 40, displayValue: false, margin: 0 });
-        const bcSvg = bcDiv.querySelector("svg");
-        if (bcSvg) {
-          const barcodeTop = mmPx(labelCfg?.barcodeTop || "11mm");
-          const barcodeHeight = mmPx(labelCfg?.barcodeHeight || "8mm");
-          const rawW = parseFloat(bcSvg.getAttribute("width") || "100");
-          const rawH = parseFloat(bcSvg.getAttribute("height") || "40");
-          const scale = Math.min((W - 20) / rawW, barcodeHeight / rawH);
-          const bcW = rawW * scale;
-          const bcH = rawH * scale;
-          const x = (W - bcW) / 2;
-          barcodeSvgContent = `<g transform="translate(${x}, ${barcodeTop}) scale(${scale})">${bcSvg.innerHTML}</g>`;
+      const labelsHtml = items.map((item) => {
+        // Generate barcode SVG string
+        let barcodeSvgContent = "";
+        if ((labelCfg?.showBarcode ?? true) && item.codigoBarras) {
+          try {
+            const bcDiv = document.createElement("div");
+            bcDiv.style.position = "absolute";
+            bcDiv.style.visibility = "hidden";
+            document.body.appendChild(bcDiv);
+            JsBarcode(bcDiv, item.codigoBarras, { format: "CODE128", width: 2, height: 40, displayValue: false, margin: 0 });
+            const bcSvg = bcDiv.querySelector("svg");
+            if (bcSvg) {
+              const barcodeTop = mmPx(labelCfg?.barcodeTop || "11mm");
+              const barcodeHeight = mmPx(labelCfg?.barcodeHeight || "8mm");
+              const rawW = parseFloat(bcSvg.getAttribute("width") || "100");
+              const rawH = parseFloat(bcSvg.getAttribute("height") || "40");
+              const scale = Math.min((W - 20) / rawW, barcodeHeight / rawH);
+              const bcW = rawW * scale;
+              const bcH = rawH * scale;
+              const x = (W - bcW) / 2;
+              barcodeSvgContent = `<g transform="translate(${x}, ${barcodeTop}) scale(${scale})">${bcSvg.innerHTML}</g>`;
+            }
+            document.body.removeChild(bcDiv);
+          } catch (e) {
+            console.error("Barcode error:", e);
+          }
         }
-      }
 
-      // Build label SVG
-      const nameTop = mmPx(labelCfg?.nameTop || "0.3mm");
-      const nameSize = ptPx(labelCfg?.nameFontSize || "8pt");
-      const priceTop = mmPx(labelCfg?.priceTop || "6mm");
-      const priceSize = ptPx(labelCfg?.priceFontSize || "26pt");
-      const ivaSize = ptPx(labelCfg?.ivaFontSize || "9pt");
-      const numTop = mmPx(labelCfg?.barcodeNumberTop || "17.5mm");
-      const numSize = ptPx(labelCfg?.barcodeNumberFontSize || "10pt");
-      const footerTop = mmPx(labelCfg?.footerTop || "20.5mm");
-      const footerSize = ptPx(labelCfg?.footerFontSize || "6pt");
+        // Build label SVG
+        const nameTop = mmPx(labelCfg?.nameTop || "0.3mm");
+        const nameSize = ptPx(labelCfg?.nameFontSize || "8pt");
+        const priceTop = mmPx(labelCfg?.priceTop || "6mm");
+        const priceSize = ptPx(labelCfg?.priceFontSize || "26pt");
+        const ivaSize = ptPx(labelCfg?.ivaFontSize || "9pt");
+        const numTop = mmPx(labelCfg?.barcodeNumberTop || "17.5mm");
+        const numSize = ptPx(labelCfg?.barcodeNumberFontSize || "10pt");
+        const footerTop = mmPx(labelCfg?.footerTop || "20.5mm");
+        const footerSize = ptPx(labelCfg?.footerFontSize || "6pt");
 
-      const name = item.nombre.toUpperCase();
-      const priceText = Math.round(Number(item.precio)).toString();
-      const footerText = `${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}`;
+        const name = item.nombre.toUpperCase();
+        const priceText = Math.round(Number(item.precio)).toString();
+        const footerText = `${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}`;
 
-      // IVA text width estimation for positioning
-      const ivaX = W / 2 + (priceText.length * priceSize * 0.35) / 2 + 8;
+        // IVA text width estimation for positioning
+        const ivaX = W / 2 + (priceText.length * priceSize * 0.35) / 2 + 8;
 
-      let svgContent = "";
+        let svgContent = "";
 
-      // Name
-      svgContent += `<text x="${W / 2}" y="${nameTop + nameSize * 0.8}" font-size="${nameSize}" font-weight="bold" font-family="${labelCfg?.nameFontFamily || "Arial Narrow"}, Arial, sans-serif" fill="black" text-anchor="middle">${escapeXml(name)}</text>`;
+        // Name
+        svgContent += `<text x="${W / 2}" y="${nameTop + nameSize * 0.8}" font-size="${nameSize}" font-weight="bold" font-family="${labelCfg?.nameFontFamily || "Arial Narrow"}, Arial, sans-serif" fill="black" text-anchor="middle">${escapeXml(name)}</text>`;
 
-      // Price
-      if (labelCfg?.showPrice ?? true) {
-        svgContent += `<text x="${W / 2}" y="${priceTop + priceSize * 0.85}" font-size="${priceSize}" font-weight="bold" font-family="${labelCfg?.priceFontFamily || "Arial Narrow"}, Arial, sans-serif" fill="black" text-anchor="middle">${priceText}</text>`;
-        if (labelCfg?.showIva ?? true) {
-          svgContent += `<text x="${ivaX}" y="${priceTop + priceSize * 0.6}" font-size="${ivaSize}" font-weight="bold" font-family="Arial, sans-serif" fill="black">IVA</text>`;
+        // Price
+        if (labelCfg?.showPrice ?? true) {
+          svgContent += `<text x="${W / 2}" y="${priceTop + priceSize * 0.85}" font-size="${priceSize}" font-weight="bold" font-family="${labelCfg?.priceFontFamily || "Arial Narrow"}, Arial, sans-serif" fill="black" text-anchor="middle">${priceText}</text>`;
+          if (labelCfg?.showIva ?? true) {
+            svgContent += `<text x="${ivaX}" y="${priceTop + priceSize * 0.6}" font-size="${ivaSize}" font-weight="bold" font-family="Arial, sans-serif" fill="black">IVA</text>`;
+          }
         }
+
+        // Barcode
+        svgContent += barcodeSvgContent;
+
+        // Barcode number
+        if ((labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras) {
+          svgContent += `<text x="${W / 2}" y="${numTop + numSize * 0.8}" font-size="${numSize}" font-weight="bold" font-family="${labelCfg?.barcodeNumberFontFamily || "Courier New"}, monospace" fill="black" text-anchor="middle" letter-spacing="0.5">${item.codigoBarras}</text>`;
+        }
+
+        // Footer
+        if (labelCfg?.showFooter ?? true) {
+          svgContent += `<text x="${W / 2}" y="${footerTop + footerSize * 0.8}" font-size="${footerSize}" font-family="${labelCfg?.footerFontFamily || "Arial Narrow"}, Arial, sans-serif" fill="black" text-anchor="middle">${escapeXml(footerText)}</text>`;
+        }
+
+        // Full label SVG rotated 180° for Zebra ZD411
+        return `<div class="label-page"><svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(180, ${W / 2}, ${H / 2})">${svgContent}</g></svg></div>`;
+      }).join("");
+
+      const popup = window.open("", "_blank", "width=420,height=600");
+      if (!popup) {
+        alert("Permite popups para imprimir etiquetas.");
+        return;
       }
-
-      // Barcode
-      svgContent += barcodeSvgContent;
-
-      // Barcode number
-      if ((labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras) {
-        svgContent += `<text x="${W / 2}" y="${numTop + numSize * 0.8}" font-size="${numSize}" font-weight="bold" font-family="${labelCfg?.barcodeNumberFontFamily || "Courier New"}, monospace" fill="black" text-anchor="middle" letter-spacing="0.5">${item.codigoBarras}</text>`;
-      }
-
-      // Footer
-      if (labelCfg?.showFooter ?? true) {
-        svgContent += `<text x="${W / 2}" y="${footerTop + footerSize * 0.8}" font-size="${footerSize}" font-family="${labelCfg?.footerFontFamily || "Arial Narrow"}, Arial, sans-serif" fill="black" text-anchor="middle">${escapeXml(footerText)}</text>`;
-      }
-
-      // Full label SVG rotated 180° for Zebra ZD411
-      return `<div class="label-page"><svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(180, ${W / 2}, ${H / 2})">${svgContent}</g></svg></div>`;
-    }).join("");
-
-    const popup = window.open("", "_blank", "width=420,height=600");
-    if (!popup) return;
-    popup.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Etiquetas</title>
-        <style>
-          @page { margin: 0; size: 2in 1in; }
-          * { box-sizing: border-box; }
-          html, body {
-            margin: 0;
-            padding: 0;
-            background: white;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          .label-page {
-            width: 2in;
-            height: 1in;
-            background: white;
-            page-break-after: always;
-            overflow: hidden;
-          }
-          .label-page:last-child {
-            page-break-after: auto;
-          }
-          .print-instructions {
-            display: block;
-            padding: 12px;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            font-size: 13px;
-            background: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
-          }
-          @media print {
-            .print-instructions { display: none !important; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="print-instructions">
-          <strong>Instrucciones para imprimir en Zebra ZD411 (Mac):</strong><br>
-          1. Tamano de papel: <strong>Etiquetas 2x1</strong> (51 x 25 mm)<br>
-          2. Escala: <strong>100%</strong> (NO "Ajustar a pagina")<br>
-          3. Click en <strong>Imprimir</strong>
-        </div>
-        ${labelsHtml}
-        <script>
-          setTimeout(function() { window.print(); }, 400);
-        <\/script>
-      </body>
-      </html>
-    `);
-    popup.document.close();
+      popup.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Etiquetas</title>
+          <style>
+            @page { margin: 0; size: 2in 1in; }
+            * { box-sizing: border-box; }
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: white;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .label-page {
+              width: 2in;
+              height: 1in;
+              background: white;
+              page-break-after: always;
+              overflow: hidden;
+            }
+            .label-page:last-child {
+              page-break-after: auto;
+            }
+            .print-instructions {
+              display: block;
+              padding: 12px;
+              font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+              font-size: 13px;
+              background: #f8fafc;
+              border-bottom: 1px solid #e2e8f0;
+            }
+            @media print {
+              .print-instructions { display: none !important; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-instructions">
+            <strong>Instrucciones para imprimir en Zebra ZD411 (Mac):</strong><br>
+            1. Tamano de papel: <strong>Etiquetas 2x1</strong> (51 x 25 mm)<br>
+            2. Escala: <strong>100%</strong> (NO "Ajustar a pagina")<br>
+            3. Click en <strong>Imprimir</strong>
+          </div>
+          ${labelsHtml}
+          <script>
+            setTimeout(function() { window.print(); }, 400);
+          <\/script>
+        </body>
+        </html>
+      `);
+      popup.document.close();
+    } catch (err) {
+      console.error("Print error:", err);
+      alert("Error al imprimir: " + (err instanceof Error ? err.message : String(err)));
+    }
   };
 
 
