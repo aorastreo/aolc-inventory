@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import JsBarcode from "jsbarcode";
-import { jsPDF } from "jspdf";
+
 
 
 const BRAND_RED = "#B22234";
@@ -209,107 +209,53 @@ export default function LabelsPage() {
     if (!targetId) return;
     markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
 
-    const items = expandedItems;
-    if (items.length === 0) return;
+    const labelsHtml = expandedItems.map((item, idx) => {
+      const isLast = idx === expandedItems.length - 1;
+      const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
+      const pageBreak = isLast ? "" : "page-break-after:always;break-after:page;";
+      return `
+        <div class="label-page" style="${pageBreak}width:2in;height:1in;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
+          <div style="position:absolute;top:${labelCfg?.nameTop || "0.3mm"};left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "8pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
+          ${(labelCfg?.showPrice ?? true) ? `
+          <div style="position:absolute;top:${labelCfg?.priceTop || "6mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
+            <span style="font-size:${labelCfg?.priceFontSize || "26pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
+            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "9pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
+          </div>` : ""}
+          ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
+          <div style="position:absolute;top:${labelCfg?.barcodeTop || "11mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "8mm"};">${barcodeSvg}</div>` : ""}
+          ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
+          <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "17.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "10pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
+          ${(labelCfg?.showFooter ?? true) ? `
+          <div style="position:absolute;top:${labelCfg?.footerTop || "20.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
+        </div>
+      `;
+    }).join("");
 
-    const W = 406; // 2" @ 203 DPI
-    const H = 203; // 1" @ 203 DPI
-    const mmPx = (v: string) => (parseFloat(v) || 0) * 7.992;
-    const ptPx = (v: string) => (parseFloat(v) || 0) * 2.819;
-
-    // Draw one label onto a canvas
-    function drawLabelCanvas(item: LabelItem): HTMLCanvasElement {
-      const canvas = document.createElement("canvas");
-      canvas.width = W;
-      canvas.height = H;
-      const ctx = canvas.getContext("2d")!;
-
-      ctx.fillStyle = "white";
-      ctx.fillRect(0, 0, W, H);
-
-      // NAME
-      const nameTop = mmPx(labelCfg?.nameTop || "0.3mm");
-      const nameSize = ptPx(labelCfg?.nameFontSize || "8pt");
-      ctx.fillStyle = "black";
-      ctx.font = `bold ${nameSize}px ${labelCfg?.nameFontFamily || "Arial Narrow"}, Arial, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      let name = item.nombre.toUpperCase();
-      while (ctx.measureText(name).width > W - 16 && name.length > 3) name = name.slice(0, -1);
-      ctx.fillText(name, W / 2, nameTop);
-
-      // PRICE
-      if (labelCfg?.showPrice ?? true) {
-        const priceTop = mmPx(labelCfg?.priceTop || "6mm");
-        const priceSize = ptPx(labelCfg?.priceFontSize || "26pt");
-        ctx.font = `bold ${priceSize}px ${labelCfg?.priceFontFamily || "Arial Narrow"}, Arial, sans-serif`;
-        ctx.textBaseline = "top";
-        const priceText = Math.round(Number(item.precio)).toString();
-        ctx.fillText(priceText, W / 2, priceTop);
-        if (labelCfg?.showIva ?? true) {
-          const ivaSize = ptPx(labelCfg?.ivaFontSize || "9pt");
-          ctx.font = `bold ${ivaSize}px Arial, sans-serif`;
-          ctx.textBaseline = "top";
-          const priceW = ctx.measureText(priceText).width;
-          ctx.fillText("IVA", W / 2 + priceW / 2 + 6, priceTop + priceSize * 0.25);
-        }
-      }
-
-      // BARCODE
-      if ((labelCfg?.showBarcode ?? true) && item.codigoBarras) {
-        const barcodeTop = mmPx(labelCfg?.barcodeTop || "11mm");
-        const barcodeHeight = mmPx(labelCfg?.barcodeHeight || "8mm");
-        const bcCanvas = document.createElement("canvas");
-        JsBarcode(bcCanvas, item.codigoBarras, { format: "CODE128", width: 2, height: 40, displayValue: false, margin: 0 });
-        const scale = Math.min((W - 20) / bcCanvas.width, barcodeHeight / bcCanvas.height);
-        const bcW = bcCanvas.width * scale;
-        const bcH = bcCanvas.height * scale;
-        ctx.drawImage(bcCanvas, (W - bcW) / 2, barcodeTop, bcW, bcH);
-      }
-
-      // BARCODE NUMBER
-      if ((labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras) {
-        const numTop = mmPx(labelCfg?.barcodeNumberTop || "17.5mm");
-        const numSize = ptPx(labelCfg?.barcodeNumberFontSize || "10pt");
-        ctx.font = `bold ${numSize}px ${labelCfg?.barcodeNumberFontFamily || "Courier New"}, monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        ctx.fillText(item.codigoBarras, W / 2, numTop);
-      }
-
-      // FOOTER
-      if (labelCfg?.showFooter ?? true) {
-        const footerTop = mmPx(labelCfg?.footerTop || "20.5mm");
-        const footerSize = ptPx(labelCfg?.footerFontSize || "6pt");
-        ctx.font = `${footerSize}px ${labelCfg?.footerFontFamily || "Arial Narrow"}, Arial, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        const footerText = `${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}`;
-        ctx.fillText(footerText, W / 2, footerTop);
-      }
-
-      // ROTATE 180° for Zebra ZD411
-      const rotated = document.createElement("canvas");
-      rotated.width = W;
-      rotated.height = H;
-      const rctx = rotated.getContext("2d")!;
-      rctx.translate(W, H);
-      rctx.rotate(Math.PI);
-      rctx.drawImage(canvas, 0, 0);
-
-      return rotated;
-    }
-
-    // Build PDF — one page per label
-    const doc = new jsPDF({ unit: "in", format: [2, 1] });
-    items.forEach((item, i) => {
-      if (i > 0) doc.addPage([2, 1]);
-      const canvas = drawLabelCanvas(item);
-      doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 2, 1);
-    });
-
-    const pdfUrl = doc.output("bloburl");
-    window.open(pdfUrl, "_blank");
+    const popup = window.open("", "_blank", "width=300,height=400");
+    if (!popup) return;
+    popup.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Etiquetas</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          @page { size: 2in 1in; margin: 0; }
+          html, body { background: white; line-height: 1; }
+        </style>
+      </head>
+      <body>
+        ${labelsHtml}
+        <script>
+          setTimeout(function() {
+            window.print();
+            setTimeout(function() { window.close(); }, 1500);
+          }, 800);
+        <\/script>
+      </body>
+      </html>
+    `);
+    popup.document.close();
   };
 
 
