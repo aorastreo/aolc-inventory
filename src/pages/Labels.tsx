@@ -229,15 +229,11 @@ export default function LabelsPage() {
       `;
     }).join("");
 
-    // Popup must be tall enough for Safari to render all labels.
-    // Safari lazy-renders content below the fold; if the viewport is
-    // too small only the first label gets captured by window.print().
-    const pxPerLabel = 110;                       // ~25mm + margin in px
-    const popupHeight = Math.max(600, expandedItems.length * pxPerLabel + 200);
-    const popup = window.open("", "_blank", `width=400,height=${popupHeight}`);
+    // Popup large enough for preview; actual pagination is controlled by CSS.
+    const popup = window.open("", "_blank", "width=400,height=600");
     if (!popup) return;
 
-    const totalHeightMm = expandedItems.length * 25;
+    const labelCount = expandedItems.length;
 
     popup.document.write(`
       <!DOCTYPE html>
@@ -245,19 +241,12 @@ export default function LabelsPage() {
       <head>
         <title>Etiquetas</title>
         <style>
-          @page { margin: 0; }
+          @page { size: 50mm 25mm; margin: 0; }
           html, body {
             margin: 0;
             padding: 0;
             background: white;
-            width: 50mm;
           }
-          body {
-            min-height: ${totalHeightMm}mm;
-          }
-          /* Continuous strip — NO page breaks. The Zebra ZD411 driver
-             inserts an extra label feed between "pages". By printing as
-             one long strip the printer only feeds once per label. */
           .label-page {
             width: 50mm;
             height: 25mm;
@@ -267,21 +256,23 @@ export default function LabelsPage() {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            display: block;
+            page-break-after: always;
+            break-after: page;
+          }
+          /* Last label: no page break after */
+          .label-page:last-of-type {
+            page-break-after: auto;
+            break-after: auto;
           }
         </style>
       </head>
       <body>
         ${labelsHtml}
         <script>
-          // Give Safari enough time to render SVG barcodes before printing
           setTimeout(function() {
-            window.scrollTo(0, document.body.scrollHeight);
-            setTimeout(function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 1500);
-            }, 500);
-          }, 1000);
+            window.print();
+            setTimeout(function() { window.close(); }, 1500);
+          }, 800);
         <\/script>
       </body>
       </html>
