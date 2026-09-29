@@ -282,15 +282,7 @@ export default function LabelsPage() {
         ctx.fillText(footerText, W / 2, footerTop);
       }
 
-      // ROTATE 180° for Zebra ZD411
-      const rotated = document.createElement("canvas");
-      rotated.width = W;
-      rotated.height = H;
-      const rctx = rotated.getContext("2d")!;
-      rctx.translate(W, H);
-      rctx.rotate(Math.PI);
-      rctx.drawImage(canvas, 0, 0);
-      return rotated;
+      return canvas;
     }
 
     // Build PDF — one page per label
