@@ -212,7 +212,7 @@ export default function LabelsPage() {
     const labelsHtml = expandedItems.map((item) => {
       const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
       return `
-        <div class="label-page" style="width:50mm;height:25mm;position:relative;overflow:hidden;background:white;page-break-after:always;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
+        <div class="label-page" style="width:50mm;height:25mm;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
           <div style="position:absolute;top:${labelCfg?.nameTop || "0.3mm"};left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "8pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
           ${(labelCfg?.showPrice ?? true) ? `
           <div style="position:absolute;top:${labelCfg?.priceTop || "6mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
@@ -237,10 +237,25 @@ export default function LabelsPage() {
       <head>
         <title>Etiquetas</title>
         <style>
-          @page { size: 50mm 25mm; margin: 0; }
-          body { margin: 0; padding: 0; background: white; }
-          .label-page { page-break-after: always; }
-          .label-page:last-child { page-break-after: auto; }
+          @page { margin: 0; }
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: white;
+          }
+          /* Continuous strip — NO page breaks. The Zebra ZD411 driver
+             inserts an extra label feed between "pages". By printing as
+             one long strip the printer only feeds once per label. */
+          .label-page {
+            width: 50mm;
+            height: 25mm;
+            position: relative;
+            overflow: hidden;
+            background: white;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
         </style>
       </head>
       <body>
