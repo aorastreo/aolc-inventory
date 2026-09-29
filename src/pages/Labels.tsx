@@ -217,7 +217,7 @@ export default function LabelsPage() {
     const mmPx = (v: string) => (parseFloat(v) || 0) * 7.992;
     const ptPx = (v: string) => (parseFloat(v) || 0) * 2.819;
 
-    // Draw one label onto a canvas rotated 180°
+    // Draw one label onto a canvas
     function drawLabelCanvas(item: LabelItem): HTMLCanvasElement {
       const canvas = document.createElement("canvas");
       canvas.width = W;
@@ -243,11 +243,13 @@ export default function LabelsPage() {
         const priceTop = mmPx(labelCfg?.priceTop || "6mm");
         const priceSize = ptPx(labelCfg?.priceFontSize || "26pt");
         ctx.font = `bold ${priceSize}px ${labelCfg?.priceFontFamily || "Arial Narrow"}, Arial, sans-serif`;
+        ctx.textBaseline = "top";
         const priceText = Math.round(Number(item.precio)).toString();
         ctx.fillText(priceText, W / 2, priceTop);
         if (labelCfg?.showIva ?? true) {
           const ivaSize = ptPx(labelCfg?.ivaFontSize || "9pt");
           ctx.font = `bold ${ivaSize}px Arial, sans-serif`;
+          ctx.textBaseline = "top";
           const priceW = ctx.measureText(priceText).width;
           ctx.fillText("IVA", W / 2 + priceW / 2 + 6, priceTop + priceSize * 0.25);
         }
@@ -270,6 +272,8 @@ export default function LabelsPage() {
         const numTop = mmPx(labelCfg?.barcodeNumberTop || "17.5mm");
         const numSize = ptPx(labelCfg?.barcodeNumberFontSize || "10pt");
         ctx.font = `bold ${numSize}px ${labelCfg?.barcodeNumberFontFamily || "Courier New"}, monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
         ctx.fillText(item.codigoBarras, W / 2, numTop);
       }
 
@@ -278,11 +282,22 @@ export default function LabelsPage() {
         const footerTop = mmPx(labelCfg?.footerTop || "20.5mm");
         const footerSize = ptPx(labelCfg?.footerFontSize || "6pt");
         ctx.font = `${footerSize}px ${labelCfg?.footerFontFamily || "Arial Narrow"}, Arial, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
         const footerText = `${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}`;
         ctx.fillText(footerText, W / 2, footerTop);
       }
 
-      return canvas;
+      // ROTATE 180° for Zebra ZD411
+      const rotated = document.createElement("canvas");
+      rotated.width = W;
+      rotated.height = H;
+      const rctx = rotated.getContext("2d")!;
+      rctx.translate(W, H);
+      rctx.rotate(Math.PI);
+      rctx.drawImage(canvas, 0, 0);
+
+      return rotated;
     }
 
     // Build PDF — one page per label
