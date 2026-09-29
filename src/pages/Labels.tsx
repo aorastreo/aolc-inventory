@@ -241,7 +241,7 @@ export default function LabelsPage() {
       <head>
         <title>Etiquetas</title>
         <style>
-          @page { size: 50mm 25mm; margin: 0; }
+          @page { margin: 0; }
           html, body {
             margin: 0;
             padding: 0;
@@ -256,13 +256,7 @@ export default function LabelsPage() {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            page-break-after: always;
-            break-after: page;
-          }
-          /* Last label: no page break after */
-          .label-page:last-of-type {
-            page-break-after: auto;
-            break-after: auto;
+            /* NO page-break-after — thermal printers insert an extra feed between pages */
           }
         </style>
       </head>
