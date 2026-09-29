@@ -212,10 +212,10 @@ export default function LabelsPage() {
     const items = expandedItems;
     if (items.length === 0) return;
 
-    const W = 406; // 2" @ 203 DPI
-    const H = 203; // 1" @ 203 DPI
-    const mmPx = (v: string) => (parseFloat(v) || 0) * 7.992;
-    const ptPx = (v: string) => (parseFloat(v) || 0) * 2.819;
+    const W = 812; // 2" @ 406 DPI (double for print quality)
+    const H = 406; // 1" @ 406 DPI
+    const mmPx = (v: string) => (parseFloat(v) || 0) * 15.984;
+    const ptPx = (v: string) => (parseFloat(v) || 0) * 5.638;
 
     function drawRotatedLabel(item: LabelItem): string {
       const canvas = document.createElement("canvas");
@@ -235,7 +235,7 @@ export default function LabelsPage() {
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       let name = item.nombre.toUpperCase();
-      while (ctx.measureText(name).width > W - 16 && name.length > 3) name = name.slice(0, -1);
+      while (ctx.measureText(name).width > W - 32 && name.length > 3) name = name.slice(0, -1);
       ctx.fillText(name, W / 2, nameTop);
 
       // PRICE
@@ -251,7 +251,7 @@ export default function LabelsPage() {
           ctx.font = `bold ${ivaSize}px Arial, sans-serif`;
           ctx.textBaseline = "top";
           const priceW = ctx.measureText(priceText).width;
-          ctx.fillText("IVA", W / 2 + priceW / 2 + 6, priceTop + priceSize * 0.25);
+          ctx.fillText("IVA", W / 2 + priceW / 2 + 16, priceTop + priceSize * 0.05);
         }
       }
 
@@ -260,8 +260,8 @@ export default function LabelsPage() {
         const barcodeTop = mmPx(labelCfg?.barcodeTop || "11mm");
         const barcodeHeight = mmPx(labelCfg?.barcodeHeight || "8mm");
         const bcCanvas = document.createElement("canvas");
-        JsBarcode(bcCanvas, item.codigoBarras, { format: "CODE128", width: 2, height: 40, displayValue: false, margin: 0 });
-        const scale = Math.min((W - 20) / bcCanvas.width, barcodeHeight / bcCanvas.height);
+        JsBarcode(bcCanvas, item.codigoBarras, { format: "CODE128", width: 4, height: 80, displayValue: false, margin: 0 });
+        const scale = Math.min((W - 40) / bcCanvas.width, barcodeHeight / bcCanvas.height);
         const bcW = bcCanvas.width * scale;
         const bcH = bcCanvas.height * scale;
         ctx.drawImage(bcCanvas, (W - bcW) / 2, barcodeTop, bcW, bcH);
