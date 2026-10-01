@@ -185,6 +185,23 @@ export default function LabelsPage() {
     });
   };
 
+  const generateBarcodeSVG = (code: string): string => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("style", "width:100%;height:100%;");
+    try {
+      JsBarcode(svg, code, {
+        format: "CODE128",
+        width: 2,
+        height: 50,
+        displayValue: false,
+        margin: 2,
+      });
+      return svg.outerHTML;
+    } catch {
+      return `<div style="font-size:8pt;text-align:center">${code}</div>`;
+    }
+  };
+
   const handlePrint = () => {
     if (selectedProducts.size === 0) return;
     const targetId = adjustmentIdNum || palletIdNum;
