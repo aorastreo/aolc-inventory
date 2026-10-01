@@ -185,116 +185,35 @@ export default function LabelsPage() {
     });
   };
 
-  // Generate barcode SVG using JsBarcode
-  // Generate barcode SVG as a standalone string for embedding
-  const generateBarcodeSVGString = (code: string): string => {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("style", "width:100%;height:100%;display:block;");
-    try {
-      JsBarcode(svg, code, {
-        format: "CODE128",
-        width: 2,
-        height: 50,
-        displayValue: false,
-        margin: 0,
-      });
-      return svg.outerHTML;
-    } catch {
-      return `<div style="font-size:8pt;text-align:center">${code}</div>`;
-    }
-  };
-
-  // Generate a complete label as an SVG of exactly 50mm x 25mm
-  // Using SVG ensures vector-quality printing and reliable rotation
-  function generateLabelSVG(item: LabelItem, rotation: number): string {
-    const priceText = Math.round(Number(item.precio)).toString();
-    const dateStr = getLocalDateString();
-    const footerText = `${dateStr} - ${labelCfg?.footerText || "American Outlet"}`;
-    const name = item.nombre.toUpperCase();
-
-    // Truncate name if too long (SVG text doesn't auto-wrap)
-    const maxNameChars = 24;
-    const displayName = name.length > maxNameChars ? name.slice(0, maxNameChars) : name;
-
-    const barcodeSvgStr = item.codigoBarras ? generateBarcodeSVGString(item.codigoBarras) : "";
-    // Encode the barcode SVG for use in foreignObject
-    const barcodeEncoded = barcodeSvgStr
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-
-    const rotationTransform = rotation !== 0
-      ? `transform="rotate(${rotation}, 25, 12.5)"`
-      : '';
-
-    const showPrice = labelCfg?.showPrice ?? true;
-    const showIva = labelCfg?.showIva ?? true;
-    const showBarcode = (labelCfg?.showBarcode ?? true) && item.codigoBarras;
-    const showBarcodeNumber = (labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras;
-    const showFooter = labelCfg?.showFooter ?? true;
-    const showDate = labelCfg?.showDate ?? true;
-
-    // Build the SVG content
-    let svgContent = '';
-
-    // White background
-    svgContent += '<rect width="50" height="25" fill="white"/>';
-
-    // Rotated group
-    svgContent += `<g ${rotationTransform}>`;
-
-    // Product Name
-    svgContent += `<text x="25" y="3.5" text-anchor="middle" font-family="Arial Narrow, Arial, sans-serif" font-size="3" font-weight="bold" fill="black" letter-spacing="0.1">${displayName}</text>`;
-
-    // Price + IVA
-    if (showPrice) {
-      const priceX = showIva ? 20 : 25;
-      const priceAnchor = showIva ? "end" : "middle";
-      svgContent += `<text x="${priceX}" y="10" text-anchor="${priceAnchor}" font-family="Arial Narrow, Arial, sans-serif" font-size="10" font-weight="bold" fill="black" letter-spacing="0.5">${priceText}</text>`;
-      if (showIva) {
-        svgContent += `<text x="22" y="10" text-anchor="start" font-family="Arial, sans-serif" font-size="3" font-weight="bold" fill="black">IVA</text>`;
-      }
-    }
-
-    // Barcode via foreignObject (allows JsBarcode SVG to render inside)
-    if (showBarcode) {
-      svgContent += `<foreignObject x="7.5" y="12" width="35" height="8">`;
-      svgContent += `<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;">${barcodeSvgStr}</div>`;
-      svgContent += `</foreignObject>`;
-    }
-
-    // Barcode Number
-    if (showBarcodeNumber) {
-      svgContent += `<text x="25" y="22.5" text-anchor="middle" font-family="Courier New, monospace" font-size="3" font-weight="bold" fill="black" letter-spacing="0.2">${item.codigoBarras}</text>`;
-    }
-
-    // Footer
-    if (showFooter && showDate) {
-      svgContent += `<text x="25" y="24" text-anchor="middle" font-family="Arial Narrow, Arial, sans-serif" font-size="2" fill="black" letter-spacing="0.1">${footerText}</text>`;
-    }
-
-    svgContent += '</g>';
-
-    return `<svg width="2in" height="1in" viewBox="0 0 50 25" xmlns="http://www.w3.org/2000/svg">${svgContent}</svg>`;
-  }
-
   const handlePrint = () => {
     if (selectedProducts.size === 0) return;
     const targetId = adjustmentIdNum || palletIdNum;
     if (!targetId) return;
     markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
 
-    const items = expandedItems;
-    if (items.length === 0) return;
-
-    const labelsHtml = items.map((item, idx) => {
-      const isLast = idx === items.length - 1;
-      const breakStyle = isLast ? "" : "page-break-after:always;";
-      return `<div style="${breakStyle}width:2in;height:1in;overflow:hidden;">${generateLabelSVG(item, 0)}</div>`;
+    const labelsHtml = expandedItems.map((item, idx) => {
+      const isLast = idx === expandedItems.length - 1;
+      const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
+      const pageBreak = isLast ? "" : "page-break-after:always;";
+      return `
+        <div class="label-page" style="${pageBreak}width:50mm;height:25mm;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
+          <div style="position:absolute;top:${labelCfg?.nameTop || "0.3mm"};left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "8pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
+          ${(labelCfg?.showPrice ?? true) ? `
+          <div style="position:absolute;top:${labelCfg?.priceTop || "6mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
+            <span style="font-size:${labelCfg?.priceFontSize || "26pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
+            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "9pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
+          </div>` : ""}
+          ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
+          <div style="position:absolute;top:${labelCfg?.barcodeTop || "11mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "8mm"};">${barcodeSvg}</div>` : ""}
+          ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
+          <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "17.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "10pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
+          ${(labelCfg?.showFooter ?? true) ? `
+          <div style="position:absolute;top:${labelCfg?.footerTop || "20.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
+        </div>
+      `;
     }).join("");
 
-    const popup = window.open("", "_blank", "width=320,height=500");
+    const popup = window.open("", "_blank", "width=300,height=400");
     if (!popup) return;
     popup.document.write(`
       <!DOCTYPE html>
@@ -304,29 +223,27 @@ export default function LabelsPage() {
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           @page { margin: 0; }
-          html, body { margin: 0; padding: 0; background: white; width: 2in; }
-          svg { display: block; }
-          .label { width: 2in; height: 1in; overflow: hidden; }
-          .instructions { font-family: Arial, sans-serif; font-size: 11px; padding: 8px; background: #fff3cd; border: 1px solid #ffc107; color: #856404; margin-bottom: 8px; line-height: 1.4; }
-          .instructions strong { color: #000; }
-          @media print { .no-print { display: none !important; } body { width: auto; } }
+          html, body { margin: 0; padding: 0; background: white; }
+          .label-page {
+            width: 50mm; height: 25mm; position: relative;
+            overflow: hidden; background: white;
+            margin: 0; padding: 0; box-sizing: border-box;
+            page-break-after: always;
+            break-after: page;
+          }
+          .label-page:last-of-type {
+            page-break-after: auto;
+            break-after: auto;
+          }
         </style>
       </head>
       <body>
-        <div class="instructions no-print">
-          <strong>Configuracion para Chrome:</strong><br>
-          1. Selecciona "Zebra ZD411"<br>
-          2. Tamaño de papel: <strong>2 x 1 in</strong> (o 50.8 x 25.4mm)<br>
-          3. Escala: <strong>100%</strong> (NO "Ajustar")<br>
-          4. Margenes: <strong>Ninguno</strong><br>
-          5. Luego presiona Imprimir
-        </div>
         ${labelsHtml}
         <script>
           setTimeout(function() {
             window.print();
-            setTimeout(function() { window.close(); }, 2000);
-          }, 500);
+            setTimeout(function() { window.close(); }, 1500);
+          }, 300);
         <\/script>
       </body>
       </html>
