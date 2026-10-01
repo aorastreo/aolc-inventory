@@ -209,22 +209,27 @@ export default function LabelsPage() {
     if (!targetId) return;
     markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
 
-    const labelsHtml = expandedItems.map((item) => {
+    const items = expandedItems;
+    if (items.length === 0) return;
+
+    const labelsHtml = items.map((item, idx) => {
+      const isLast = idx === items.length - 1;
       const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
+      const pageBreak = isLast ? "" : "page-break-after:always;break-after:page;";
       return `
-        <div style="width:2in;height:1in;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
-          <div style="position:absolute;top:0.02in;left:0.04in;right:0.04in;font-size:11pt;font-weight:bold;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.15;text-align:center;white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
+        <div style="${pageBreak}width:50mm;height:25mm;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
+          <div style="position:absolute;top:0.5mm;left:1mm;right:1mm;font-size:10pt;font-weight:bold;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.2;text-align:center;white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
           ${(labelCfg?.showPrice ?? true) ? `
-          <div style="position:absolute;top:0.22in;left:0.04in;right:0.04in;text-align:center;">
-            <span style="font-size:32pt;font-weight:bold;font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
-            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:11pt;font-weight:bold;color:#000;margin-left:0.05in;">IVA</span>` : ""}
+          <div style="position:absolute;top:5mm;left:1mm;right:1mm;text-align:center;">
+            <span style="font-size:30pt;font-weight:bold;font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
+            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:10pt;font-weight:bold;color:#000;margin-left:1.5mm;">IVA</span>` : ""}
           </div>` : ""}
           ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:0.42in;left:0.08in;right:0.08in;text-align:center;height:0.38in;">${barcodeSvg}</div>` : ""}
+          <div style="position:absolute;top:10mm;left:2mm;right:2mm;text-align:center;height:8mm;">${barcodeSvg}</div>` : ""}
           ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:0.63in;left:0.04in;right:0.04in;font-size:11pt;font-weight:bold;font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:0.5px;text-align:center;white-space:nowrap;">${item.codigoBarras}</div>` : ""}
+          <div style="position:absolute;top:17.5mm;left:1mm;right:1mm;font-size:10pt;font-weight:bold;font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:0.5px;text-align:center;white-space:nowrap;">${item.codigoBarras}</div>` : ""}
           ${(labelCfg?.showFooter ?? true) ? `
-          <div style="position:absolute;top:0.84in;left:0.04in;right:0.04in;font-size:7.5pt;font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:center;white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
+          <div style="position:absolute;top:21.5mm;left:1mm;right:1mm;font-size:7pt;font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:center;white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
         </div>
       `;
     }).join("");
@@ -238,7 +243,7 @@ export default function LabelsPage() {
         <title>Etiquetas</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          @page { size: 2in 1in; margin: 0; }
+          @page { margin: 0; }
           html, body { margin: 0; padding: 0; background: white; }
         </style>
       </head>
@@ -247,8 +252,7 @@ export default function LabelsPage() {
         <script>
           setTimeout(function() {
             window.print();
-            setTimeout(function() { window.close(); }, 1500);
-          }, 800);
+          }, 1500);
         <\/script>
       </body>
       </html>
