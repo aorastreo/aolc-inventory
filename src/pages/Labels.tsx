@@ -276,7 +276,7 @@ export default function LabelsPage() {
 
     svgContent += '</g>';
 
-    return `<svg width="50mm" height="25mm" viewBox="0 0 50 25" xmlns="http://www.w3.org/2000/svg">${svgContent}</svg>`;
+    return `<svg width="2in" height="1in" viewBox="0 0 50 25" xmlns="http://www.w3.org/2000/svg">${svgContent}</svg>`;
   }
 
   const handlePrint = () => {
@@ -291,7 +291,7 @@ export default function LabelsPage() {
     const labelsHtml = items.map((item, idx) => {
       const isLast = idx === items.length - 1;
       const breakStyle = isLast ? "" : "page-break-after:always;";
-      return `<div style="${breakStyle}width:50mm;height:25mm;overflow:hidden;">${generateLabelSVG(item, 0)}</div>`;
+      return `<div style="${breakStyle}width:2in;height:1in;overflow:hidden;">${generateLabelSVG(item, 0)}</div>`;
     }).join("");
 
     const popup = window.open("", "_blank", "width=320,height=500");
@@ -303,12 +303,24 @@ export default function LabelsPage() {
         <title>Etiquetas</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          @page { size: 50mm 25mm; margin: 0; }
-          html, body { margin: 0; padding: 0; background: white; }
+          @page { margin: 0; }
+          html, body { margin: 0; padding: 0; background: white; width: 2in; }
           svg { display: block; }
+          .label { width: 2in; height: 1in; overflow: hidden; }
+          .instructions { font-family: Arial, sans-serif; font-size: 11px; padding: 8px; background: #fff3cd; border: 1px solid #ffc107; color: #856404; margin-bottom: 8px; line-height: 1.4; }
+          .instructions strong { color: #000; }
+          @media print { .no-print { display: none !important; } body { width: auto; } }
         </style>
       </head>
       <body>
+        <div class="instructions no-print">
+          <strong>Configuracion para Chrome:</strong><br>
+          1. Selecciona "Zebra ZD411"<br>
+          2. Tamaño de papel: <strong>2 x 1 in</strong> (o 50.8 x 25.4mm)<br>
+          3. Escala: <strong>100%</strong> (NO "Ajustar")<br>
+          4. Margenes: <strong>Ninguno</strong><br>
+          5. Luego presiona Imprimir
+        </div>
         ${labelsHtml}
         <script>
           setTimeout(function() {
