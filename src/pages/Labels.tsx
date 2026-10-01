@@ -186,22 +186,98 @@ export default function LabelsPage() {
   };
 
   // Generate barcode SVG using JsBarcode
-  const generateBarcodeSVG = (code: string): string => {
+  // Generate barcode SVG as a standalone string for embedding
+  const generateBarcodeSVGString = (code: string): string => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("style", "width:100%;height:100%;");
+    svg.setAttribute("style", "width:100%;height:100%;display:block;");
     try {
       JsBarcode(svg, code, {
         format: "CODE128",
         width: 2,
         height: 50,
         displayValue: false,
-        margin: 2,
+        margin: 0,
       });
       return svg.outerHTML;
     } catch {
       return `<div style="font-size:8pt;text-align:center">${code}</div>`;
     }
   };
+
+  // Generate a complete label as an SVG of exactly 50mm x 25mm
+  // Using SVG ensures vector-quality printing and reliable rotation
+  function generateLabelSVG(item: LabelItem, rotate180: boolean): string {
+    const priceText = Math.round(Number(item.precio)).toString();
+    const dateStr = getLocalDateString();
+    const footerText = `${dateStr} - ${labelCfg?.footerText || "American Outlet"}`;
+    const name = item.nombre.toUpperCase();
+
+    // Truncate name if too long (SVG text doesn't auto-wrap)
+    const maxNameChars = 24;
+    const displayName = name.length > maxNameChars ? name.slice(0, maxNameChars) : name;
+
+    const barcodeSvgStr = item.codigoBarras ? generateBarcodeSVGString(item.codigoBarras) : "";
+    // Encode the barcode SVG for use in foreignObject
+    const barcodeEncoded = barcodeSvgStr
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
+    const rotationTransform = rotate180
+      ? 'transform="rotate(180, 25, 12.5)"'
+      : '';
+
+    const showPrice = labelCfg?.showPrice ?? true;
+    const showIva = labelCfg?.showIva ?? true;
+    const showBarcode = (labelCfg?.showBarcode ?? true) && item.codigoBarras;
+    const showBarcodeNumber = (labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras;
+    const showFooter = labelCfg?.showFooter ?? true;
+    const showDate = labelCfg?.showDate ?? true;
+
+    // Build the SVG content
+    let svgContent = '';
+
+    // White background
+    svgContent += '<rect width="50" height="25" fill="white"/>';
+
+    // Rotated group
+    svgContent += `<g ${rotationTransform}>`;
+
+    // Product Name
+    svgContent += `<text x="25" y="3.5" text-anchor="middle" font-family="Arial Narrow, Arial, sans-serif" font-size="3" font-weight="bold" fill="black" letter-spacing="0.1">${displayName}</text>`;
+
+    // Price + IVA
+    if (showPrice) {
+      const priceX = showIva ? 20 : 25;
+      const priceAnchor = showIva ? "end" : "middle";
+      svgContent += `<text x="${priceX}" y="10" text-anchor="${priceAnchor}" font-family="Arial Narrow, Arial, sans-serif" font-size="10" font-weight="bold" fill="black" letter-spacing="0.5">${priceText}</text>`;
+      if (showIva) {
+        svgContent += `<text x="22" y="10" text-anchor="start" font-family="Arial, sans-serif" font-size="3" font-weight="bold" fill="black">IVA</text>`;
+      }
+    }
+
+    // Barcode via foreignObject (allows JsBarcode SVG to render inside)
+    if (showBarcode) {
+      svgContent += `<foreignObject x="7.5" y="12" width="35" height="8">`;
+      svgContent += `<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;">${barcodeSvgStr}</div>`;
+      svgContent += `</foreignObject>`;
+    }
+
+    // Barcode Number
+    if (showBarcodeNumber) {
+      svgContent += `<text x="25" y="22.5" text-anchor="middle" font-family="Courier New, monospace" font-size="3" font-weight="bold" fill="black" letter-spacing="0.2">${item.codigoBarras}</text>`;
+    }
+
+    // Footer
+    if (showFooter && showDate) {
+      svgContent += `<text x="25" y="24" text-anchor="middle" font-family="Arial Narrow, Arial, sans-serif" font-size="2" fill="black" letter-spacing="0.1">${footerText}</text>`;
+    }
+
+    svgContent += '</g>';
+
+    return `<svg width="50mm" height="25mm" viewBox="0 0 50 25" xmlns="http://www.w3.org/2000/svg">${svgContent}</svg>`;
+  }
 
   const handlePrint = () => {
     if (selectedProducts.size === 0) return;
@@ -212,29 +288,15 @@ export default function LabelsPage() {
     const items = expandedItems;
     if (items.length === 0) return;
 
-    const labelsHtml = items.map((item, idx) => {
-      const isLast = idx === items.length - 1;
-      const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
-      const pageBreak = isLast ? "" : "page-break-after:always;break-after:page;";
-      return `
-        <div style="${pageBreak}width:50mm;height:25mm;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
-          <div style="position:absolute;top:0.5mm;left:1mm;right:1mm;font-size:10pt;font-weight:bold;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.2;text-align:center;white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
-          ${(labelCfg?.showPrice ?? true) ? `
-          <div style="position:absolute;top:5mm;left:1mm;right:1mm;text-align:center;">
-            <span style="font-size:30pt;font-weight:bold;font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
-            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:10pt;font-weight:bold;color:#000;margin-left:1.5mm;">IVA</span>` : ""}
-          </div>` : ""}
-          ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:10mm;left:2mm;right:2mm;text-align:center;height:8mm;">${barcodeSvg}</div>` : ""}
-          ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:17.5mm;left:1mm;right:1mm;font-size:10pt;font-weight:bold;font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:0.5px;text-align:center;white-space:nowrap;">${item.codigoBarras}</div>` : ""}
-          ${(labelCfg?.showFooter ?? true) ? `
-          <div style="position:absolute;top:21.5mm;left:1mm;right:1mm;font-size:7pt;font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:center;white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
-        </div>
-      `;
+    // Rotation: 0 = normal, 180 = upside-down (for Zebra ZD411)
+    // Default to 180 because the Zebra prints labels rotated
+    const rotate180 = true;
+
+    const labelsHtml = items.map((item) => {
+      return generateLabelSVG(item, rotate180);
     }).join("");
 
-    const popup = window.open("", "_blank", "width=300,height=400");
+    const popup = window.open("", "_blank", "width=320,height=500");
     if (!popup) return;
     popup.document.write(`
       <!DOCTYPE html>
@@ -243,8 +305,9 @@ export default function LabelsPage() {
         <title>Etiquetas</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          @page { margin: 0; }
+          @page { size: 50mm 25mm; margin: 0; }
           html, body { margin: 0; padding: 0; background: white; }
+          svg { display: block; }
         </style>
       </head>
       <body>
@@ -252,7 +315,7 @@ export default function LabelsPage() {
         <script>
           setTimeout(function() {
             window.print();
-          }, 1500);
+          }, 1200);
         <\/script>
       </body>
       </html>
