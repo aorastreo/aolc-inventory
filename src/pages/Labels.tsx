@@ -212,7 +212,7 @@ export default function LabelsPage() {
     const labelsHtml = expandedItems.map((item) => {
       const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
       return `
-        <div style="width:2in;height:1in;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};transform:rotate(180deg);transform-origin:center center;">
+        <div style="width:2in;height:1in;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
           <div style="position:absolute;top:0.02in;left:0.04in;right:0.04in;font-size:11pt;font-weight:bold;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.15;text-align:center;white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
           ${(labelCfg?.showPrice ?? true) ? `
           <div style="position:absolute;top:0.22in;left:0.04in;right:0.04in;text-align:center;">
