@@ -289,8 +289,7 @@ export default function LabelsPage() {
     if (items.length === 0) return;
 
     // Rotation: 0 = normal, 180 = upside-down (for Zebra ZD411)
-    // Default to 180 because the Zebra prints labels rotated
-    const rotate180 = true;
+    const rotate180 = (labelCfg?.rotation ?? 180) === 180;
 
     const labelsHtml = items.map((item) => {
       return generateLabelSVG(item, rotate180);

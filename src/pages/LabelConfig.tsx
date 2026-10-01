@@ -78,6 +78,7 @@ const defaultConfig: Record<string, any> = {
   footerFontSize: "6pt", footerTop: "21.5mm", footerTextAlign: "right", footerFontFamily: "Verdana",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
   footerText: "American Outlet Los Chiles",
+  rotation: 180,
 };
 
 export default function LabelConfigPage() {
@@ -140,6 +141,20 @@ export default function LabelConfigPage() {
             <div className="grid grid-cols-2 gap-3">
               <StepperInput label="Ancho" value={s("labelWidth")} onChange={v => update("labelWidth", v)} step={1} />
               <StepperInput label="Alto" value={s("labelHeight")} onChange={v => update("labelHeight", v)} step={1} />
+            </div>
+            <div className="mt-3">
+              <Label className="text-xs mb-1 block">Rotacion de impresion</Label>
+              <select
+                value={s("rotation")}
+                onChange={e => update("rotation", parseInt(e.target.value))}
+                className="w-full h-8 border rounded px-2 text-sm bg-white"
+              >
+                <option value={0}>0 grados (Normal)</option>
+                <option value={180}>180 grados (Al reves)</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Selecciona 180 si la Zebra imprime al reves.
+              </p>
             </div>
           </div>
 

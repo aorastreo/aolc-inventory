@@ -313,6 +313,7 @@ export const labelConfig = mysqlTable("labelConfig", {
   showFooter: boolean("showFooter").notNull().default(true),
   showDate: boolean("showDate").notNull().default(true),
   footerText: varchar("footerText", { length: 100 }).notNull().default("American Outlet Los Chiles"),
+  rotation: int("rotation").notNull().default(180),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

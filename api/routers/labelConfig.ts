@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createRouter, publicQuery } from "../middleware";
 import mysql from "mysql2/promise";
 
-const D: Record<string, string | boolean> = {
+const D: Record<string, string | boolean | number> = {
   labelWidth: "50mm", labelHeight: "25mm",
   nameFontSize: "7pt", nameTop: "0mm", nameTextAlign: "center", nameFontWeight: "normal", nameFontFamily: "Arial Narrow",
   priceFontSize: "26pt", ivaFontSize: "12pt", priceTop: "2mm", priceTextAlign: "center", priceFontWeight: "bold", priceFontFamily: "Arial",
@@ -11,6 +11,7 @@ const D: Record<string, string | boolean> = {
   footerFontSize: "6pt", footerTop: "21.5mm", footerTextAlign: "right", footerFontFamily: "Verdana",
   showPrice: true, showIva: true, showBarcode: true, showBarcodeNumber: true, showFooter: true, showDate: true,
   footerText: "American Outlet Los Chiles",
+  rotation: 180,
 };
 
 const ALL_FIELDS = Object.keys(D).filter(k => k !== "footerText");
@@ -71,6 +72,7 @@ async function ensureTable() {
     try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN priceFontFamily VARCHAR(30) NOT NULL DEFAULT 'Arial Narrow'`); } catch { /* */ }
     try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN barcodeNumberFontFamily VARCHAR(30) NOT NULL DEFAULT 'Courier New'`); } catch { /* */ }
     try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN footerFontFamily VARCHAR(30) NOT NULL DEFAULT 'Arial Narrow'`); } catch { /* */ }
+    try { await conn.execute(`ALTER TABLE labelConfig ADD COLUMN rotation INT NOT NULL DEFAULT 180`); } catch { /* */ }
     // Remove old unused columns
     try { await conn.execute(`ALTER TABLE labelConfig DROP COLUMN barcodeFontSize`); } catch { /* */ }
     try { await conn.execute(`ALTER TABLE labelConfig DROP COLUMN barcodeModuleWidth`); } catch { /* */ }
@@ -99,7 +101,12 @@ export const labelConfigRouter = createRouter({
   upsert: publicQuery
     .input(z.object({
       storeId: z.number().default(1),
-      ...Object.fromEntries(ALL_FIELDS.map(f => [f, typeof D[f] === "boolean" ? z.boolean().optional() : z.string().optional()])),
+      ...Object.fromEntries(ALL_FIELDS.map(f => {
+        const val = D[f];
+        if (typeof val === "boolean") return [f, z.boolean().optional()];
+        if (typeof val === "number") return [f, z.number().int().optional()];
+        return [f, z.string().optional()];
+      })),
       footerText: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
