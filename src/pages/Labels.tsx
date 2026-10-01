@@ -288,11 +288,10 @@ export default function LabelsPage() {
     const items = expandedItems;
     if (items.length === 0) return;
 
-    // Rotation: 0, 90, 180, 270 degrees (configurable per store)
-    const rotation = labelCfg?.rotation ?? 180;
-
-    const labelsHtml = items.map((item) => {
-      return generateLabelSVG(item, rotation);
+    const labelsHtml = items.map((item, idx) => {
+      const isLast = idx === items.length - 1;
+      const breakStyle = isLast ? "" : "page-break-after:always;";
+      return `<div style="${breakStyle}width:50mm;height:25mm;overflow:hidden;">${generateLabelSVG(item, 0)}</div>`;
     }).join("");
 
     const popup = window.open("", "_blank", "width=320,height=500");
@@ -314,7 +313,8 @@ export default function LabelsPage() {
         <script>
           setTimeout(function() {
             window.print();
-          }, 1200);
+            setTimeout(function() { window.close(); }, 2000);
+          }, 500);
         <\/script>
       </body>
       </html>
