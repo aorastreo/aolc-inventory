@@ -212,7 +212,7 @@ export default function LabelsPage() {
     const labelsHtml = expandedItems.map((item) => {
       const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
       return `
-        <div style="width:50mm;height:25mm;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};transform:rotate(180deg);transform-origin:center center;">
+        <div class="label-page" style="width:50mm;height:25mm;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
           <div style="position:absolute;top:${labelCfg?.nameTop || "0.3mm"};left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "8pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
           ${(labelCfg?.showPrice ?? true) ? `
           <div style="position:absolute;top:${labelCfg?.priceTop || "6mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
@@ -240,6 +240,15 @@ export default function LabelsPage() {
           * { margin: 0; padding: 0; box-sizing: border-box; }
           @page { size: 50mm 25mm; margin: 0; }
           html, body { background: white; line-height: 1; }
+          .label-page {
+            transform: none;
+          }
+          @media print {
+            .label-page {
+              transform: rotate(180deg);
+              transform-origin: center center;
+            }
+          }
         </style>
       </head>
       <body>
