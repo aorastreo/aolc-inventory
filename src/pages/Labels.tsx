@@ -206,7 +206,7 @@ export default function LabelsPage() {
 
   // Generate a complete label as an SVG of exactly 50mm x 25mm
   // Using SVG ensures vector-quality printing and reliable rotation
-  function generateLabelSVG(item: LabelItem, rotate180: boolean): string {
+  function generateLabelSVG(item: LabelItem, rotation: number): string {
     const priceText = Math.round(Number(item.precio)).toString();
     const dateStr = getLocalDateString();
     const footerText = `${dateStr} - ${labelCfg?.footerText || "American Outlet"}`;
@@ -224,8 +224,8 @@ export default function LabelsPage() {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
 
-    const rotationTransform = rotate180
-      ? 'transform="rotate(180, 25, 12.5)"'
+    const rotationTransform = rotation !== 0
+      ? `transform="rotate(${rotation}, 25, 12.5)"`
       : '';
 
     const showPrice = labelCfg?.showPrice ?? true;
@@ -288,11 +288,11 @@ export default function LabelsPage() {
     const items = expandedItems;
     if (items.length === 0) return;
 
-    // Rotation: 0 = normal, 180 = upside-down (for Zebra ZD411)
-    const rotate180 = (labelCfg?.rotation ?? 180) === 180;
+    // Rotation: 0, 90, 180, 270 degrees (configurable per store)
+    const rotation = labelCfg?.rotation ?? 180;
 
     const labelsHtml = items.map((item) => {
-      return generateLabelSVG(item, rotate180);
+      return generateLabelSVG(item, rotation);
     }).join("");
 
     const popup = window.open("", "_blank", "width=320,height=500");

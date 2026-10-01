@@ -150,7 +150,9 @@ export default function LabelConfigPage() {
                 className="w-full h-8 border rounded px-2 text-sm bg-white"
               >
                 <option value={0}>0 grados (Normal)</option>
+                <option value={90}>90 grados (Derecha)</option>
                 <option value={180}>180 grados (Al reves)</option>
+                <option value={270}>270 grados (Izquierda)</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 Selecciona 180 si la Zebra imprime al reves.
