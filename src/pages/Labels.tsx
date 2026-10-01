@@ -210,12 +210,76 @@ export default function LabelsPage() {
     });
   };
 
+  const generateBarcodeSVG = (code: string): string => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("style", "width:100%;height:100%;");
+    try {
+      JsBarcode(svg, code, {
+        format: "CODE128",
+        width: 2,
+        height: 50,
+        displayValue: false,
+        margin: 2,
+      });
+      return svg.outerHTML;
+    } catch {
+      return `<div style="font-size:8pt;text-align:center">${code}</div>`;
+    }
+  };
+
   const handlePrint = () => {
     if (selectedProducts.size === 0) return;
     const targetId = adjustmentIdNum || palletIdNum;
     if (!targetId) return;
     markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
-    window.print();
+
+    const labelsHtml = expandedItems.map((item, idx) => {
+      const isLast = idx === expandedItems.length - 1;
+      const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
+      const pageBreak = isLast ? "" : "page-break-after:always;";
+      return `
+        <div style="${pageBreak}width:50mm;height:25mm;position:relative;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
+          <div style="position:absolute;top:${labelCfg?.nameTop || "0.3mm"};left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "8pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
+          ${(labelCfg?.showPrice ?? true) ? `
+          <div style="position:absolute;top:${labelCfg?.priceTop || "6mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
+            <span style="font-size:${labelCfg?.priceFontSize || "26pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
+            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "9pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
+          </div>` : ""}
+          ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
+          <div style="position:absolute;top:${labelCfg?.barcodeTop || "11mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "8mm"};">${barcodeSvg}</div>` : ""}
+          ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
+          <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "17.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "10pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
+          ${(labelCfg?.showFooter ?? true) ? `
+          <div style="position:absolute;top:${labelCfg?.footerTop || "20.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
+        </div>
+      `;
+    }).join("");
+
+    const popup = window.open("", "_blank", "width=320,height=500");
+    if (!popup) return;
+    popup.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Etiquetas</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          @page { margin: 0; }
+          html, body { margin: 0; padding: 0; background: white; }
+        </style>
+      </head>
+      <body>
+        ${labelsHtml}
+        <script>
+          setTimeout(function() {
+            window.print();
+            setTimeout(function() { window.close(); }, 2000);
+          }, 2000);
+        <\/script>
+      </body>
+      </html>
+    `);
+    popup.document.close();
   };
 
   const filtered = products?.filter(p =>
