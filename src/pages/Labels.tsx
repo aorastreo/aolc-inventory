@@ -215,18 +215,18 @@ export default function LabelsPage() {
       const pageBreak = isLast ? "" : "page-break-after:always;";
       return `
         <div class="label-page" style="${pageBreak}width:50mm;height:25mm;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
-          <div style="position:absolute;top:${labelCfg?.nameTop || "0.3mm"};left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "8pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
+          <div style="position:absolute;top:${labelCfg?.nameTop || "0.5mm"};left:0.5mm;right:0.5mm;font-size:${labelCfg?.nameFontSize || "10pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.2;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
           ${(labelCfg?.showPrice ?? true) ? `
-          <div style="position:absolute;top:${labelCfg?.priceTop || "6mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
-            <span style="font-size:${labelCfg?.priceFontSize || "26pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
-            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "9pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
+          <div style="position:absolute;top:${labelCfg?.priceTop || "5mm"};left:0.5mm;right:0.5mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
+            <span style="font-size:${labelCfg?.priceFontSize || "30pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
+            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "10pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
           </div>` : ""}
           ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:${labelCfg?.barcodeTop || "11mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "8mm"};">${barcodeSvg}</div>` : ""}
+          <div style="position:absolute;top:${labelCfg?.barcodeTop || "10mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "10mm"};">${barcodeSvg}</div>` : ""}
           ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "17.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "10pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
+          <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "16mm"};left:0.5mm;right:0.5mm;font-size:${labelCfg?.barcodeNumberFontSize || "11pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
           ${(labelCfg?.showFooter ?? true) ? `
-          <div style="position:absolute;top:${labelCfg?.footerTop || "20.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
+          <div style="position:absolute;top:${labelCfg?.footerTop || "22mm"};left:0.5mm;right:0.5mm;font-size:${labelCfg?.footerFontSize || "7pt"};font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
         </div>
       `;
     }).join("");
@@ -240,18 +240,12 @@ export default function LabelsPage() {
         <title>Etiquetas</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          @page { margin: 0; }
-          html, body { margin: 0; padding: 0; background: white; }
+          @page { size: 50mm 25mm; margin: 0; }
+          html, body { margin: 0; padding: 0; background: white; width: 50mm; }
           .label-page {
             width: 50mm; height: 25mm; position: relative;
             overflow: hidden; background: white;
             margin: 0; padding: 0; box-sizing: border-box;
-            page-break-after: always;
-            break-after: page;
-          }
-          .label-page:last-of-type {
-            page-break-after: auto;
-            break-after: auto;
           }
         </style>
       </head>
