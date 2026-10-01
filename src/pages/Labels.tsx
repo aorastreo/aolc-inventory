@@ -209,24 +209,22 @@ export default function LabelsPage() {
     if (!targetId) return;
     markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
 
-    const labelsHtml = expandedItems.map((item, idx) => {
-      const isLast = idx === expandedItems.length - 1;
+    const labelsHtml = expandedItems.map((item) => {
       const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
-      const pageBreak = isLast ? "" : "page-break-after:always;";
       return `
-        <div class="label-page" style="${pageBreak}width:50mm;height:25mm;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
-          <div style="position:absolute;top:${labelCfg?.nameTop || "0.5mm"};left:0.5mm;right:0.5mm;font-size:${labelCfg?.nameFontSize || "10pt"};font-weight:${labelCfg?.nameFontWeight || "bold"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.2;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
+        <div style="width:2in;height:1in;position:relative;overflow:hidden;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};transform:rotate(180deg);transform-origin:center center;">
+          <div style="position:absolute;top:0.02in;left:0.04in;right:0.04in;font-size:11pt;font-weight:bold;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.15;text-align:center;white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
           ${(labelCfg?.showPrice ?? true) ? `
-          <div style="position:absolute;top:${labelCfg?.priceTop || "5mm"};left:0.5mm;right:0.5mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
-            <span style="font-size:${labelCfg?.priceFontSize || "30pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
-            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "10pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
+          <div style="position:absolute;top:0.22in;left:0.04in;right:0.04in;text-align:center;">
+            <span style="font-size:32pt;font-weight:bold;font-family:${labelCfg?.priceFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
+            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:11pt;font-weight:bold;color:#000;margin-left:0.05in;">IVA</span>` : ""}
           </div>` : ""}
           ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:${labelCfg?.barcodeTop || "10mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "10mm"};">${barcodeSvg}</div>` : ""}
+          <div style="position:absolute;top:0.42in;left:0.08in;right:0.08in;text-align:center;height:0.38in;">${barcodeSvg}</div>` : ""}
           ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "16mm"};left:0.5mm;right:0.5mm;font-size:${labelCfg?.barcodeNumberFontSize || "11pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
+          <div style="position:absolute;top:0.63in;left:0.04in;right:0.04in;font-size:11pt;font-weight:bold;font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:0.5px;text-align:center;white-space:nowrap;">${item.codigoBarras}</div>` : ""}
           ${(labelCfg?.showFooter ?? true) ? `
-          <div style="position:absolute;top:${labelCfg?.footerTop || "22mm"};left:0.5mm;right:0.5mm;font-size:${labelCfg?.footerFontSize || "7pt"};font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
+          <div style="position:absolute;top:0.84in;left:0.04in;right:0.04in;font-size:7.5pt;font-family:${labelCfg?.footerFontFamily || "Arial Narrow"};color:#000;letter-spacing:0.2px;text-align:center;white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
         </div>
       `;
     }).join("");
@@ -240,13 +238,8 @@ export default function LabelsPage() {
         <title>Etiquetas</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          @page { size: 50mm 25mm; margin: 0; }
-          html, body { margin: 0; padding: 0; background: white; width: 50mm; }
-          .label-page {
-            width: 50mm; height: 25mm; position: relative;
-            overflow: hidden; background: white;
-            margin: 0; padding: 0; box-sizing: border-box;
-          }
+          @page { size: 2in 1in; margin: 0; }
+          html, body { margin: 0; padding: 0; background: white; }
         </style>
       </head>
       <body>
@@ -255,7 +248,7 @@ export default function LabelsPage() {
           setTimeout(function() {
             window.print();
             setTimeout(function() { window.close(); }, 1500);
-          }, 300);
+          }, 800);
         <\/script>
       </body>
       </html>
