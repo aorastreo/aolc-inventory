@@ -11,8 +11,6 @@ import {
 import { useState, useRef, useEffect, useMemo } from "react";
 import JsBarcode from "jsbarcode";
 
-
-
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
 
@@ -185,6 +183,7 @@ export default function LabelsPage() {
     });
   };
 
+  // Generate barcode SVG using JsBarcode
   const generateBarcodeSVG = (code: string): string => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("style", "width:100%;height:100%;");
@@ -208,6 +207,7 @@ export default function LabelsPage() {
     if (!targetId) return;
     markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
 
+    // Build label HTML for popup
     const labelsHtml = expandedItems.map((item) => {
       const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
       return `
@@ -236,7 +236,7 @@ export default function LabelsPage() {
       <head>
         <title>Etiquetas</title>
         <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
+          @page { size: 50mm 25mm; margin: 0; }
           body { margin: 0; padding: 0; background: white; }
           .label-page { page-break-after: always; }
           .label-page:last-child { page-break-after: auto; }
@@ -246,14 +246,12 @@ export default function LabelsPage() {
         ${labelsHtml}
         <script>
           setTimeout(function() { window.print(); setTimeout(function() { window.close(); }, 500); }, 300);
-        <\/script>
+        </script>
       </body>
       </html>
     `);
     popup.document.close();
   };
-
-
 
   const filtered = products?.filter(p =>
     p.nombre.toLowerCase().includes(search.toLowerCase()) ||
@@ -343,7 +341,6 @@ export default function LabelsPage() {
                     <option value="no">No</option>
                   </select>
                 </div>
-
               </div>
             </CardContent>
           </Card>
