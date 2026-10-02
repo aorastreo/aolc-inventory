@@ -237,7 +237,7 @@ export default function LabelsPage() {
         <title>Etiquetas</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          @page { size: 50mm 25mm; margin: 0; }
+          @page { margin: 0; }
           body { margin: 0; padding: 0; background: white; }
           .label-page { page-break-after: always; break-after: page; }
           .label-page:last-child { page-break-after: auto; break-after: auto; }
