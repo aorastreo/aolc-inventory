@@ -61,6 +61,13 @@ export default function UnpackLookup({ value, onChange }: Props) {
     menos20: number;
     unPocoMas: number;
   } | null>(null);
+  const [referencias, setReferencias] = useState<Array<{
+    sitio: string;
+    precioUsd: number | null;
+    url: string | null;
+    nota?: string | null;
+  }>>([]);
+  const [fuentePrincipal, setFuentePrincipal] = useState<string | null>(null);
 
   const applySuggestion = (res: {
     nombre?: string | null;
@@ -72,9 +79,13 @@ export default function UnpackLookup({ value, onChange }: Props) {
     codigoPosible?: string | null;
     note?: string;
     sourceUrl?: string;
+    referencias?: Array<{ sitio: string; precioUsd: number | null; url: string | null; nota?: string | null }>;
+    fuentePrincipal?: string | null;
   }) => {
     setError(null);
     if (res.note) setNote(res.note);
+    setReferencias(res.referencias || []);
+    setFuentePrincipal(res.fuentePrincipal || null);
     if (res.precioMismo != null && res.precioMenos20 != null && res.precioUnPocoMas != null) {
       setBand({
         mismo: res.precioMismo,
@@ -82,13 +93,14 @@ export default function UnpackLookup({ value, onChange }: Props) {
         unPocoMas: res.precioUnPocoMas,
       });
     }
+    const primaryRefUrl = res.referencias?.find((r) => r.url)?.url;
     onChange({
       ...value,
       nombre: res.nombre || value.nombre,
       precio: res.precioSugeridoCrc != null ? String(res.precioSugeridoCrc) : value.precio,
       codigo: res.codigoPosible || value.codigo,
       precioRefUsd: res.usd != null ? String(res.usd) : value.precioRefUsd,
-      sourceUrl: res.sourceUrl || value.sourceUrl,
+      sourceUrl: res.sourceUrl || primaryRefUrl || value.sourceUrl,
     });
   };
 
@@ -375,6 +387,47 @@ export default function UnpackLookup({ value, onChange }: Props) {
           <Button type="button" size="sm" variant="outline" onClick={() => onChange({ ...value, precio: String(band.unPocoMas) })} style={{ borderColor: "hsl(210 20% 88%)", color: BRAND_BLUE }}>
             +10%: ₡{band.unPocoMas.toLocaleString("es-CR")}
           </Button>
+        </div>
+      )}
+
+      {(fuentePrincipal || referencias.length > 0) && (
+        <div className="rounded-md border p-3 space-y-2" style={{ borderColor: "hsl(210 20% 90%)", background: "white" }}>
+          {fuentePrincipal && (
+            <p className="text-xs font-semibold" style={{ color: BRAND_BLUE }}>
+              Fuente de referencia: {fuentePrincipal}
+            </p>
+          )}
+          {referencias.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: "hsl(207 20% 55%)" }}>
+                Sitios para verificar
+              </p>
+              {referencias.map((r) => (
+                <div key={`${r.sitio}-${r.url || ""}`} className="flex items-center justify-between gap-2 text-xs">
+                  <div className="min-w-0">
+                    <span className="font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{r.sitio}</span>
+                    {r.precioUsd != null && (
+                      <span className="ml-2" style={{ color: BRAND_RED }}>${r.precioUsd}</span>
+                    )}
+                    {r.nota && (
+                      <span className="ml-2 truncate" style={{ color: "hsl(207 20% 55%)" }}>{r.nota}</span>
+                    )}
+                  </div>
+                  {r.url && (
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 font-medium underline"
+                      style={{ color: BRAND_BLUE }}
+                    >
+                      Abrir
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -309,6 +309,23 @@ export async function fetchLinkSuggestion(url: string): Promise<{
   };
 }
 
+export type PriceReference = {
+  sitio: string;
+  precioUsd: number | null;
+  url: string | null;
+  nota?: string | null;
+};
+
+function buildSearchRefs(nombre: string | null, codigo: string | null): PriceReference[] {
+  const q = encodeURIComponent([nombre, codigo].filter(Boolean).join(" ").trim() || "product");
+  return [
+    { sitio: "Amazon", precioUsd: null, url: `https://www.amazon.com/s?k=${q}`, nota: "Busqueda por nombre/SKU" },
+    { sitio: "Walmart", precioUsd: null, url: `https://www.walmart.com/search?q=${q}`, nota: "Busqueda por nombre/SKU" },
+    { sitio: "Target", precioUsd: null, url: `https://www.target.com/s?searchTerm=${q}`, nota: "Busqueda por nombre/SKU" },
+    { sitio: "Google Shopping", precioUsd: null, url: `https://www.google.com/search?tbm=shop&q=${q}`, nota: "Comparar precios USA" },
+  ];
+}
+
 export async function suggestFromPhoto(opts: {
   imageBase64: string;
   mimeType?: string;
@@ -316,7 +333,12 @@ export async function suggestFromPhoto(opts: {
   nombre: string | null;
   usd: number | null;
   precioSugeridoCrc: number | null;
+  precioMismo: number | null;
+  precioMenos20: number | null;
+  precioUnPocoMas: number | null;
   codigoPosible: string | null;
+  referencias: PriceReference[];
+  fuentePrincipal: string | null;
   note: string;
 }> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
@@ -345,14 +367,26 @@ export async function suggestFromPhoto(opts: {
         {
           role: "system",
           content:
-            "You identify retail products from photos for a Costa Rica outlet that sources US liquidation (Costway, Target, Amazon, etc.). Return JSON only: {\"nombre\": string|null, \"usd_price_estimate\": number|null, \"codigo_articulo\": string|null, \"confidence\": number}. usd_price_estimate = typical US retail USD if known, else null. codigo_articulo = SKU/model if visible on box.",
+            "You identify retail products from photos for a Costa Rica outlet that sources US liquidation (Costway, Target, Amazon, Walmart, Home Depot, etc.). "
+            + "Return JSON only with this shape: {"
+            + "\"nombre\": string|null, "
+            + "\"usd_price_estimate\": number|null, "
+            + "\"codigo_articulo\": string|null, "
+            + "\"confidence\": number, "
+            + "\"fuente_principal\": string|null, "
+            + "\"referencias\": [{\"sitio\": string, \"precio_usd\": number|null, \"url\": string|null, \"nota\": string|null}]"
+            + "}. "
+            + "usd_price_estimate = best typical US retail USD. "
+            + "fuente_principal = main site you based the estimate on (e.g. Amazon, Costway, Target). "
+            + "referencias = 1-4 sites where this product is commonly sold, with approximate usd if known and a useful search/product URL when possible. "
+            + "codigo_articulo = SKU/model if visible on box.",
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: "Identify this product and estimate typical US retail price in USD.",
+              text: "Identify this product, estimate typical US retail price in USD, and list the reference retailer site(s) you used for that estimate.",
             },
             { type: "image_url", image_url: { url: dataUrl } },
           ],
@@ -375,28 +409,77 @@ export async function suggestFromPhoto(opts: {
     parsed = {};
   }
 
+  const nombre = typeof parsed.nombre === "string" ? parsed.nombre.slice(0, 255) : null;
+  const codigoPosible = typeof parsed.codigo_articulo === "string" ? parsed.codigo_articulo.slice(0, 50) : null;
+  const fuentePrincipal =
+    typeof parsed.fuente_principal === "string" ? parsed.fuente_principal.slice(0, 80) : null;
+
   const usd =
     typeof parsed.usd_price_estimate === "number" && parsed.usd_price_estimate > 0
       ? parsed.usd_price_estimate
       : null;
 
+  const aiRefs: PriceReference[] = Array.isArray(parsed.referencias)
+    ? parsed.referencias
+      .map((r: any): PriceReference | null => {
+        if (!r || typeof r.sitio !== "string") return null;
+        return {
+          sitio: String(r.sitio).slice(0, 60),
+          precioUsd:
+            typeof r.precio_usd === "number" && r.precio_usd > 0 ? r.precio_usd : null,
+          url: typeof r.url === "string" ? r.url.slice(0, 500) : null,
+          nota: typeof r.nota === "string" ? r.nota.slice(0, 160) : null,
+        };
+      })
+      .filter(Boolean) as PriceReference[]
+    : [];
+
+  // Always give clickable search links so the user can verify on real sites
+  const searchRefs = buildSearchRefs(nombre, codigoPosible);
+  const merged: PriceReference[] = [];
+  const seen = new Set<string>();
+  for (const r of [...aiRefs, ...searchRefs]) {
+    const key = r.sitio.toLowerCase();
+    if (seen.has(key)) {
+      // keep AI version if already present; skip duplicate search
+      continue;
+    }
+    seen.add(key);
+    // If AI gave sitio without URL, attach search URL when possible
+    if (!r.url) {
+      const fallback = searchRefs.find((s) => s.sitio.toLowerCase() === key);
+      merged.push({ ...r, url: fallback?.url || null });
+    } else {
+      merged.push(r);
+    }
+  }
+
   if (usd == null) {
     return {
-      nombre: typeof parsed.nombre === "string" ? parsed.nombre.slice(0, 255) : null,
+      nombre,
       usd: null,
       precioSugeridoCrc: null,
       precioMismo: null,
       precioMenos20: null,
       precioUnPocoMas: null,
-      codigoPosible: typeof parsed.codigo_articulo === "string" ? parsed.codigo_articulo.slice(0, 50) : null,
-      note: "No se estimó precio USA; completa manualmente. La foto puede ayudar con el nombre.",
+      codigoPosible,
+      referencias: merged.slice(0, 6),
+      fuentePrincipal,
+      note: fuentePrincipal
+        ? `No se estimó precio firme. Posible fuente: ${fuentePrincipal}. Revisa los links de referencia o pega el $ USA.`
+        : "No se estimó precio USA; usa los links de referencia o pega el $ manualmente.",
     };
   }
 
   const band = buildPriceBandFromUsd(usd);
+  const refLabel = fuentePrincipal
+    || (aiRefs[0]?.sitio ? aiRefs[0].sitio : "estimacion USA");
   return {
-    nombre: typeof parsed.nombre === "string" ? parsed.nombre.slice(0, 255) : null,
+    nombre,
     ...band,
-    codigoPosible: typeof parsed.codigo_articulo === "string" ? parsed.codigo_articulo.slice(0, 50) : null,
+    codigoPosible,
+    referencias: merged.slice(0, 6),
+    fuentePrincipal: fuentePrincipal || refLabel,
+    note: `Ref. principal: ${refLabel}. Estimacion USA $${usd} → ₡${band.precioSugeridoCrc} (confirmar). Abre los links para verificar.`,
   };
 }
