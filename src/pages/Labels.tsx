@@ -212,6 +212,12 @@ export default function LabelsPage() {
   const [labelNames, setLabelNames] = useState<Record<number, string>>({});
   const [printNote, setPrintNote] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
+  /** Shown when Chrome blocks auto-print (e.g. after Zebra Browser Print await). */
+  const [pendingIframePrint, setPendingIframePrint] = useState<{
+    docHtml: string;
+    productIds: number[];
+    copies: number;
+  } | null>(null);
 
   const palletIdNum = selectedPallet ? Number(selectedPallet) : null;
   const adjustmentIdNum = selectedAdjustment ? Number(selectedAdjustment) : null;
@@ -347,14 +353,10 @@ export default function LabelsPage() {
   const labelWidth = String(printCfg.labelWidth || "50mm");
   const labelHeight = String(printCfg.labelHeight || "25mm");
 
-  const openBrowserPrint = (
+  const buildLabelsDocument = (
     items: LabelItem[],
-    productIds: number[],
     cfg: ReturnType<typeof buildPrintCfg>,
-    /** Must be opened in the same click handler (user gesture) or Chrome blocks print() */
-    preOpened?: Window | null,
   ) => {
-    if (!refId) return;
     const barcodeH = Math.max(12, Math.round((parseFloat(String(cfg.barcodeHeight)) / 25.4) * 96)) || 30;
     const labelsHtml = items.map((item) =>
       buildLabelHtml(
@@ -366,133 +368,92 @@ export default function LabelsPage() {
         },
       ),
     ).join("");
+    return buildPrintDocumentHtml(labelsHtml, cfg);
+  };
 
-    const payload = JSON.stringify({
-      type: "aolc-labels-printed",
-      productIds,
-      refId,
-      sourceType,
-      copies: items.length,
-    });
+  /** Print via same-page iframe — no popup blocker. print() must stay in the click gesture (no setTimeout). */
+  const printViaIframe = (docHtml: string, productIds: number[], copies: number) => {
+    if (!refId) return;
 
-    const toolbar = `
-      <div id="print-toolbar" style="position:sticky;top:0;z-index:9999;background:#1B3A5C;color:#fff;padding:12px 14px;font-family:Arial,sans-serif;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
-        <div style="font-size:13px;line-height:1.35;max-width:420px;">
-          <strong>1)</strong> Elige impresora <strong>Zebra ZD411</strong> (no PDF)<br/>
-          <strong>2)</strong> Margenes 0 · escala 100% · sin “ajustar a la pagina”<br/>
-          <strong>3)</strong> Pulsa el boton azul de imprimir
-        </div>
-        <button id="btn-do-print" type="button" style="background:#2563EB;color:#fff;border:0;border-radius:8px;padding:12px 18px;font-size:15px;font-weight:700;cursor:pointer;">
-          Imprimir ahora
-        </button>
-      </div>`;
+    const old = document.getElementById("aolc-label-print-frame");
+    if (old) old.remove();
 
-    const scripts = `
-      <script>
-        var payload = ${payload};
-        var notified = false;
-        function notifyParent() {
-          if (notified) return;
-          notified = true;
-          try { window.opener && window.opener.postMessage(payload, "*"); } catch (e) {}
-        }
-        function hideToolbar() {
-          var t = document.getElementById("print-toolbar");
-          if (t) t.style.display = "none";
-        }
-        function showToolbar() {
-          var t = document.getElementById("print-toolbar");
-          if (t) t.style.display = "flex";
-        }
-        function doPrint() {
-          hideToolbar();
-          setTimeout(function() {
-            try { window.focus(); window.print(); }
-            catch (e) { showToolbar(); alert("No se pudo abrir el dialogo de impresion. Revisa popups / impresora."); }
-          }, 50);
-        }
-        window.onafterprint = function() {
-          showToolbar();
-          notifyParent();
-        };
-        window.addEventListener("load", function() {
-          var btn = document.getElementById("btn-do-print");
-          if (btn) btn.addEventListener("click", doPrint);
-          // Auto-print once; if Chrome blocks it, use the blue button above
-          setTimeout(doPrint, 400);
-        });
-      </script>`;
+    const iframe = document.createElement("iframe");
+    iframe.id = "aolc-label-print-frame";
+    iframe.title = "Impresion etiquetas";
+    iframe.setAttribute("aria-hidden", "true");
+    // Must have real size — Chrome often skips print on 0×0 / display:none iframes
+    iframe.style.cssText = "position:fixed;top:0;left:0;width:800px;height:600px;border:0;opacity:0;pointer-events:none;z-index:-1;";
+    document.body.appendChild(iframe);
 
-    const baseDoc = buildPrintDocumentHtml(labelsHtml, cfg);
-    const doc = baseDoc
-      .replace("<body>", `<body>${toolbar}`)
-      .replace("</body>", `${scripts}</body>`);
-
-    const popup = preOpened && !preOpened.closed ? preOpened : window.open("", "_blank", "width=520,height=640");
-    if (!popup) {
-      setPrintNote("El navegador bloqueo la ventana. Permite ventanas emergentes para este sitio e intenta de nuevo.");
+    const idoc = iframe.contentDocument || iframe.contentWindow?.document;
+    const iwin = iframe.contentWindow;
+    if (!idoc || !iwin) {
+      setPrintNote("No se pudo preparar la impresion. Recarga la pagina (Ctrl+F5) e intenta de nuevo.");
       setPrinting(false);
       return;
     }
 
-    try {
-      popup.document.open();
-      popup.document.write(doc);
-      popup.document.close();
-      popup.focus();
-    } catch {
-      // Fallback: blob URL (still needs gesture for first open)
-      const blob = new Blob([doc], { type: "text/html;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      popup.location.href = url;
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    }
+    idoc.open();
+    idoc.write(docHtml);
+    idoc.close();
 
-    setPrintNote("Ventana de impresion abierta. Si el dialogo no sale, pulsa «Imprimir ahora» (azul) ahi. Elige Zebra ZD411, no PDF.");
+    const notifyDone = () => {
+      window.postMessage(
+        {
+          type: "aolc-labels-printed",
+          productIds,
+          refId,
+          sourceType,
+          copies,
+        },
+        window.location.origin,
+      );
+    };
+
+    iwin.onafterprint = () => {
+      notifyDone();
+      setTimeout(() => iframe.remove(), 300);
+    };
+
+    try {
+      iwin.focus();
+      iwin.print(); // sync — Chrome blocks print() after await/setTimeout
+      setPrintNote("Dialogo de impresion abierto. Elige Zebra ZD411 · margenes 0 · sin ajustar a la pagina.");
+    } catch {
+      setPendingIframePrint({ docHtml, productIds, copies });
+      setPrintNote("Chrome bloqueo el auto-print. Pulsa el boton azul «Imprimir ahora» abajo.");
+    }
     setPrinting(false);
   };
 
-  const handlePrint = async (preferZebraDirect: boolean) => {
+  const handlePendingPrintClick = () => {
+    if (!pendingIframePrint || !refId) return;
+    const { docHtml, productIds, copies } = pendingIframePrint;
+    setPendingIframePrint(null);
+    printViaIframe(docHtml, productIds, copies);
+  };
+
+  const handlePrint = (preferZebraDirect: boolean) => {
     if (selectedProducts.size === 0 || !refId) return;
     setPrinting(true);
     setPrintNote(null);
+    setPendingIframePrint(null);
 
-    // Open popup IMMEDIATELY in the click gesture — awaiting fetch first makes Chrome block print()
-    const preOpened = !preferZebraDirect
-      ? window.open("", "_blank", "width=520,height=640")
-      : null;
-    if (!preferZebraDirect && !preOpened) {
-      setPrintNote("Permite ventanas emergentes para este sitio (icono a la derecha de la URL) y vuelve a intentar.");
-      setPrinting(false);
-      return;
-    }
-    if (preOpened) {
-      try {
-        preOpened.document.write("<!DOCTYPE html><html><body style='font-family:Arial;padding:24px'>Preparando etiquetas…</body></html>");
-        preOpened.document.close();
-      } catch { /* ignore */ }
-    }
-
-    // Fresh config (after opening window)
-    let freshRaw: Record<string, unknown> | null = labelCfg as Record<string, unknown> | null;
-    try {
-      const res = await refetchLabelCfg();
-      if (res.data) freshRaw = res.data as Record<string, unknown>;
-    } catch {
-      // keep cached
-    }
-    const cfg = buildPrintCfg(freshRaw);
+    // Use cached config NOW (awaiting refetch kills the Chrome print gesture)
+    void refetchLabelCfg();
+    const cfg = buildPrintCfg(labelCfg as Record<string, unknown> | null);
 
     const selectedItemsList = sorted.filter(p => selectedProducts.has(p.id));
     const expanded = expandItems(selectedItemsList, labelQuantities, labelNames);
     if (expanded.length === 0) {
-      preOpened?.close();
       setPrintNote("Cantidad de etiquetas en 0. Sube la cantidad antes de imprimir.");
       setPrinting(false);
       return;
     }
 
     const productIds = Array.from(selectedProducts);
+    const docHtml = buildLabelsDocument(expanded, cfg);
     const widthMm = parseInt(String(cfg.labelWidth), 10) || 50;
     const heightMm = parseInt(String(cfg.labelHeight), 10) || 25;
 
@@ -505,27 +466,31 @@ export default function LabelsPage() {
         showDate: !!cfg.showDate,
         rotation: Number(cfg.rotation) || 0,
       });
-      const result = await tryZebraBrowserPrint(zpl);
-      if (result.ok) {
-        markPrinted.mutate({
-          storeId,
-          refId,
-          sourceType,
-          productIds,
-          copies: expanded.length,
-        });
-        setPrintNote(result.message);
+      // Browser Print is async — keep a one-click fallback ready if it fails
+      setPendingIframePrint({ docHtml, productIds, copies: expanded.length });
+      void (async () => {
+        const result = await tryZebraBrowserPrint(zpl);
+        if (result.ok) {
+          setPendingIframePrint(null);
+          markPrinted.mutate({
+            storeId,
+            refId,
+            sourceType,
+            productIds,
+            copies: expanded.length,
+          });
+          setPrintNote(result.message);
+          setPrinting(false);
+          return;
+        }
+        setPrintNote(result.message + " Pulsa «Imprimir ahora» (azul) para el dialogo del sistema.");
         setPrinting(false);
-        return;
-      }
-      setPrintNote(result.message + " Abriendo dialogo del sistema…");
-      // Fall through to system dialog — open now (may need second click if gesture lost)
-      const fallback = window.open("", "_blank", "width=520,height=640");
-      openBrowserPrint(expanded, productIds, cfg, fallback);
+      })();
       return;
     }
 
-    openBrowserPrint(expanded, productIds, cfg, preOpened);
+    // System dialog: print immediately in this click (no await)
+    printViaIframe(docHtml, productIds, expanded.length);
   };
 
   const filtered = useMemo(() => {
@@ -910,6 +875,18 @@ export default function LabelsPage() {
               <div className="p-3 rounded-lg border text-xs" style={{ background: "rgba(27,58,92,0.06)", borderColor: "hsl(210 20% 88%)", color: BRAND_BLUE }}>
                 {printNote}
               </div>
+            )}
+
+            {pendingIframePrint && (
+              <Button
+                type="button"
+                className="w-full h-12 font-bold text-base"
+                style={{ background: "#2563EB" }}
+                onClick={handlePendingPrintClick}
+              >
+                <Printer className="w-5 h-5 mr-2" />
+                Imprimir ahora (dialogo del sistema)
+              </Button>
             )}
 
             <div className="p-4 rounded-lg border text-xs space-y-2" style={{ background: "hsl(0 0% 98%)", borderColor: "hsl(210 20% 92%)" }}>

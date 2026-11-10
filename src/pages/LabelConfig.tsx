@@ -124,19 +124,31 @@ export default function LabelConfigPage() {
       buildLabelHtml(PREVIEW_ITEM, config, { barcodeSvg: generateBarcodeSVG(PREVIEW_ITEM.codigoBarras, h) }),
       config,
     );
-    const popup = window.open("", "_blank", "width=420,height=560");
-    if (!popup) {
-      toast.error("Permite popups para probar la impresion");
+    // iframe + sync print() — Chrome blocks print after setTimeout / popup await
+    const old = document.getElementById("aolc-label-test-print-frame");
+    if (old) old.remove();
+    const iframe = document.createElement("iframe");
+    iframe.id = "aolc-label-test-print-frame";
+    iframe.title = "Prueba impresion";
+    iframe.style.cssText = "position:fixed;top:0;left:0;width:800px;height:600px;border:0;opacity:0;pointer-events:none;z-index:-1;";
+    document.body.appendChild(iframe);
+    const idoc = iframe.contentDocument || iframe.contentWindow?.document;
+    const iwin = iframe.contentWindow;
+    if (!idoc || !iwin) {
+      toast.error("No se pudo preparar la impresion de prueba");
       return;
     }
-    popup.document.write(html.replace(
-      "</body>",
-      `<script>
-        setTimeout(function(){ window.print(); setTimeout(function(){ window.close(); }, 500); }, 400);
-      </script></body>`,
-    ));
-    popup.document.close();
-    toast.info("Prueba: elige Zebra ZD411 · 50×25 mm (2×1 in) · sin margenes");
+    idoc.open();
+    idoc.write(html);
+    idoc.close();
+    iwin.onafterprint = () => setTimeout(() => iframe.remove(), 300);
+    try {
+      iwin.focus();
+      iwin.print();
+      toast.info("Prueba: elige Zebra ZD411 · 50×25 mm (2×1 in) · sin margenes");
+    } catch {
+      toast.error("Chrome bloqueo el dialogo. Intenta de nuevo.");
+    }
   };
 
   if (queryError) {
