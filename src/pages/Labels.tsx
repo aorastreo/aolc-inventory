@@ -351,6 +351,8 @@ export default function LabelsPage() {
     items: LabelItem[],
     productIds: number[],
     cfg: ReturnType<typeof buildPrintCfg>,
+    /** Must be opened in the same click handler (user gesture) or Chrome blocks print() */
+    preOpened?: Window | null,
   ) => {
     if (!refId) return;
     const barcodeH = Math.max(12, Math.round((parseFloat(String(cfg.barcodeHeight)) / 25.4) * 96)) || 30;
@@ -373,32 +375,81 @@ export default function LabelsPage() {
       copies: items.length,
     });
 
-    const popup = window.open("", "_blank", "width=420,height=560");
+    const toolbar = `
+      <div id="print-toolbar" style="position:sticky;top:0;z-index:9999;background:#1B3A5C;color:#fff;padding:12px 14px;font-family:Arial,sans-serif;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
+        <div style="font-size:13px;line-height:1.35;max-width:420px;">
+          <strong>1)</strong> Elige impresora <strong>Zebra ZD411</strong> (no PDF)<br/>
+          <strong>2)</strong> Margenes 0 · escala 100% · sin “ajustar a la pagina”<br/>
+          <strong>3)</strong> Pulsa el boton azul de imprimir
+        </div>
+        <button id="btn-do-print" type="button" style="background:#2563EB;color:#fff;border:0;border-radius:8px;padding:12px 18px;font-size:15px;font-weight:700;cursor:pointer;">
+          Imprimir ahora
+        </button>
+      </div>`;
+
+    const scripts = `
+      <script>
+        var payload = ${payload};
+        var notified = false;
+        function notifyParent() {
+          if (notified) return;
+          notified = true;
+          try { window.opener && window.opener.postMessage(payload, "*"); } catch (e) {}
+        }
+        function hideToolbar() {
+          var t = document.getElementById("print-toolbar");
+          if (t) t.style.display = "none";
+        }
+        function showToolbar() {
+          var t = document.getElementById("print-toolbar");
+          if (t) t.style.display = "flex";
+        }
+        function doPrint() {
+          hideToolbar();
+          setTimeout(function() {
+            try { window.focus(); window.print(); }
+            catch (e) { showToolbar(); alert("No se pudo abrir el dialogo de impresion. Revisa popups / impresora."); }
+          }, 50);
+        }
+        window.onafterprint = function() {
+          showToolbar();
+          notifyParent();
+        };
+        window.addEventListener("load", function() {
+          var btn = document.getElementById("btn-do-print");
+          if (btn) btn.addEventListener("click", doPrint);
+          // Auto-print once; if Chrome blocks it, use the blue button above
+          setTimeout(doPrint, 400);
+        });
+      </script>`;
+
+    const baseDoc = buildPrintDocumentHtml(labelsHtml, cfg);
+    const doc = baseDoc
+      .replace("<body>", `<body>${toolbar}`)
+      .replace("</body>", `${scripts}</body>`);
+
+    const popup = preOpened && !preOpened.closed ? preOpened : window.open("", "_blank", "width=520,height=640");
     if (!popup) {
-      setPrintNote("El navegador bloqueo la ventana de impresion. Permite popups e intenta de nuevo.");
+      setPrintNote("El navegador bloqueo la ventana. Permite ventanas emergentes para este sitio e intenta de nuevo.");
       setPrinting(false);
       return;
     }
-    const doc = buildPrintDocumentHtml(labelsHtml, cfg);
-    popup.document.write(doc.replace(
-      "</body>",
-      `<script>
-          var payload = ${payload};
-          var notified = false;
-          function notifyParent() {
-            if (notified) return;
-            notified = true;
-            try { window.opener && window.opener.postMessage(payload, window.location.origin); } catch (e) {}
-          }
-          window.onafterprint = function() {
-            notifyParent();
-            setTimeout(function() { window.close(); }, 400);
-          };
-          setTimeout(function() { window.print(); }, 500);
-          setTimeout(function() { notifyParent(); }, 8000);
-        </script></body>`,
-    ));
-    popup.document.close();
+
+    try {
+      popup.document.open();
+      popup.document.write(doc);
+      popup.document.close();
+      popup.focus();
+    } catch {
+      // Fallback: blob URL (still needs gesture for first open)
+      const blob = new Blob([doc], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      popup.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
+
+    setPrintNote("Ventana de impresion abierta. Si el dialogo no sale, pulsa «Imprimir ahora» (azul) ahi. Elige Zebra ZD411, no PDF.");
+    setPrinting(false);
   };
 
   const handlePrint = async (preferZebraDirect: boolean) => {
@@ -406,7 +457,23 @@ export default function LabelsPage() {
     setPrinting(true);
     setPrintNote(null);
 
-    // Fresh config from DB so print matches Configuracion de Etiquetas
+    // Open popup IMMEDIATELY in the click gesture — awaiting fetch first makes Chrome block print()
+    const preOpened = !preferZebraDirect
+      ? window.open("", "_blank", "width=520,height=640")
+      : null;
+    if (!preferZebraDirect && !preOpened) {
+      setPrintNote("Permite ventanas emergentes para este sitio (icono a la derecha de la URL) y vuelve a intentar.");
+      setPrinting(false);
+      return;
+    }
+    if (preOpened) {
+      try {
+        preOpened.document.write("<!DOCTYPE html><html><body style='font-family:Arial;padding:24px'>Preparando etiquetas…</body></html>");
+        preOpened.document.close();
+      } catch { /* ignore */ }
+    }
+
+    // Fresh config (after opening window)
     let freshRaw: Record<string, unknown> | null = labelCfg as Record<string, unknown> | null;
     try {
       const res = await refetchLabelCfg();
@@ -419,6 +486,7 @@ export default function LabelsPage() {
     const selectedItemsList = sorted.filter(p => selectedProducts.has(p.id));
     const expanded = expandItems(selectedItemsList, labelQuantities, labelNames);
     if (expanded.length === 0) {
+      preOpened?.close();
       setPrintNote("Cantidad de etiquetas en 0. Sube la cantidad antes de imprimir.");
       setPrinting(false);
       return;
@@ -450,10 +518,14 @@ export default function LabelsPage() {
         setPrinting(false);
         return;
       }
-      setPrintNote(result.message);
+      setPrintNote(result.message + " Abriendo dialogo del sistema…");
+      // Fall through to system dialog — open now (may need second click if gesture lost)
+      const fallback = window.open("", "_blank", "width=520,height=640");
+      openBrowserPrint(expanded, productIds, cfg, fallback);
+      return;
     }
 
-    openBrowserPrint(expanded, productIds, cfg);
+    openBrowserPrint(expanded, productIds, cfg, preOpened);
   };
 
   const filtered = useMemo(() => {

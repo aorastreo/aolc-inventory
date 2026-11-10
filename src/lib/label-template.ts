@@ -248,6 +248,7 @@ export function buildPrintDocumentHtml(labelsHtml: string, cfg: LabelConfigValue
         padding: 0 !important;
         width: ${pageW} !important;
       }
+      #print-toolbar { display: none !important; }
       .label-sheet, .label-page {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
