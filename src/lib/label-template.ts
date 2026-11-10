@@ -220,39 +220,31 @@ function wrapLabelsForSwappedPage(labelsHtml: string): string {
   return parts.map((p) => `<div class="label-sheet">${p}</div>`).join("\n");
 }
 
-export function buildPrintDocumentHtml(labelsHtml: string, cfg: LabelConfigValues): string {
+/** CSS + body fragment for label sheets (shared by full HTML doc and in-app print overlay). */
+export function buildPrintParts(labelsHtml: string, cfg: LabelConfigValues): {
+  pageW: string;
+  pageH: string;
+  bodyHtml: string;
+  css: string;
+} {
   const { pageW, pageH, designW, designH, rot } = pageSizeForRotation(cfg);
   const needsSwap = rot === 90 || rot === 270;
-  const body = needsSwap ? wrapLabelsForSwappedPage(labelsHtml) : labelsHtml;
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Etiquetas ZD411</title>
-  <style>
-    html, body {
-      margin: 0 !important;
-      padding: 0 !important;
-      width: ${pageW};
-      background: #fff;
-    }
+  const bodyHtml = needsSwap ? wrapLabelsForSwappedPage(labelsHtml) : labelsHtml;
+  const css = `
     * { box-sizing: border-box; }
     @page {
       size: ${pageW} ${pageH};
       margin: 0 !important;
     }
-    @media print {
-      html, body {
-        margin: 0 !important;
-        padding: 0 !important;
-        width: ${pageW} !important;
-      }
-      #print-toolbar { display: none !important; }
-      .label-sheet, .label-page {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
+    .aolc-print-root {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: ${pageW};
+      background: #fff;
+    }
+    .label-sheet, .label-page {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     ${needsSwap ? `
     .label-sheet {
@@ -288,10 +280,38 @@ export function buildPrintDocumentHtml(labelsHtml: string, cfg: LabelConfigValue
       break-after: auto;
     }
     `}
+  `;
+  return { pageW, pageH, bodyHtml, css };
+}
+
+export function buildPrintDocumentHtml(labelsHtml: string, cfg: LabelConfigValues): string {
+  const { pageW, bodyHtml, css } = buildPrintParts(labelsHtml, cfg);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Etiquetas ZD411</title>
+  <style>
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: ${pageW};
+      background: #fff;
+    }
+    ${css}
+    @media print {
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: ${pageW} !important;
+      }
+      #print-toolbar { display: none !important; }
+    }
   </style>
 </head>
 <body>
-${body}
+${bodyHtml}
 </body>
 </html>`;
 }
