@@ -377,18 +377,10 @@ export default function AdjustmentsPage() {
           </div>
         )}
 
-        {/* Apply completed adjustment to container */}
         {adjDetail.estado === "completado" && (
-          <div className="flex gap-3">
-            <Button
-              onClick={() => { applyToContainer.mutate({ id: viewingAdj }); }}
-              className="font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90"
-              style={{ background: "#16A34A" }}
-            >
-              <Package className="w-4 h-4 mr-2" />
-              Aplicar al Contenedor
-            </Button>
-          </div>
+          <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+            Este ajuste ya fue aplicado al contenedor. Completar un ajuste solo se hace una vez.
+          </p>
         )}
       </div>
     );

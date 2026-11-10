@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Package, ShoppingCart, Receipt, ClipboardList, DollarSign, TrendingUp, Store, MapPin } from "lucide-react";
 
 export default function DashboardPage() {
-  const { storeId } = useActiveStore();
+  const { storeId, storeName, isBodega } = useActiveStore();
   const { data: stats, isLoading } = trpc.inventory.dashboardStats.useQuery({ storeId });
 
   const formatCurrency = (value: number) => {
@@ -115,17 +115,19 @@ export default function DashboardPage() {
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold" style={{ color: "hsl(207 55% 15%)" }}>
-                  American Outlet Los Chiles
+                  {storeName}
                 </h3>
                 <div className="flex items-center gap-1.5 mt-1">
                   <MapPin className="w-3.5 h-3.5" style={{ color: "hsl(207 20% 45%)" }} />
                   <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>
-                    Costado norte del parque municipal
+                    {isBodega ? "Bodega central / inventario principal" : "Tienda American Outlet"}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 mt-3">
                   <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-xs font-medium text-green-600">Tienda activa</span>
+                  <span className="text-xs font-medium text-green-600">
+                    {isBodega ? "Bodega principal" : "Tienda activa"}
+                  </span>
                 </div>
               </div>
               <div className="text-right">
@@ -175,7 +177,7 @@ export default function DashboardPage() {
                 <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate" style={{ color: "hsl(207 55% 15%)" }}>
-                    Los Chiles
+                    {storeName}
                   </p>
                   <p className="text-[10px]" style={{ color: "hsl(207 20% 55%)" }}>En operacion</p>
                 </div>

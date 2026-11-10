@@ -146,7 +146,10 @@ export default function LabelsPage() {
   const isLoading = adjustmentIdNum ? loadingAdj : loadingPallet;
 
   const markPrinted = trpc.inventory.markLabelsPrinted.useMutation({
-    onSuccess: () => utils.inventory.productsForLabels.invalidate(),
+    onSuccess: () => {
+      utils.inventory.productsForLabels.invalidate();
+      utils.inventory.adjustmentItemsForLabels.invalidate();
+    },
   });
 
   // Load label configuration from DB

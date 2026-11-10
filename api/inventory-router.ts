@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, publicQuery, authedQuery, adminQuery, managerQuery } from "./middleware";
+import { createRouter, authedQuery, adminQuery, managerQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   stores, pallets, products, productDatabase,
@@ -69,16 +69,44 @@ async function getNextAutoBarcode(db: any): Promise<string> {
   return String(nextCode);
 }
 
+const BODEGA_STORE_ID = 1;
+
+/** Keep store 1 named Bodega — it is the principal warehouse workspace. */
+async function ensureBodegaStoreName(db: ReturnType<typeof getDb>) {
+  try {
+    await db.execute(sql`
+      UPDATE stores
+      SET name = 'Bodega', slug = 'bodega', description = 'Bodega central / inventario principal'
+      WHERE id = ${BODEGA_STORE_ID}
+        AND (name LIKE ${'%Los Chiles%'} OR slug = ${'los-chiles'} OR name != ${'Bodega'})
+    `);
+  } catch {
+    // Non-fatal: older DBs may lack the row yet
+  }
+}
+
 export const inventoryRouter = createRouter({
   // ========== STORES ==========
   stores: authedQuery.query(async () => {
     const db = getDb();
-    return db.select().from(stores).where(eq(stores.isActive, true));
+    await ensureBodegaStoreName(db);
+    const rows = await db.select().from(stores).where(eq(stores.isActive, true));
+    return rows.sort((a, b) => {
+      if (a.id === BODEGA_STORE_ID) return -1;
+      if (b.id === BODEGA_STORE_ID) return 1;
+      return a.name.localeCompare(b.name, "es");
+    });
   }),
 
-  allStores: publicQuery.query(async () => {
+  allStores: authedQuery.query(async () => {
     const db = getDb();
-    return db.select().from(stores).orderBy(stores.id);
+    await ensureBodegaStoreName(db);
+    const rows = await db.select().from(stores).orderBy(stores.id);
+    return rows.sort((a, b) => {
+      if (a.id === BODEGA_STORE_ID) return -1;
+      if (b.id === BODEGA_STORE_ID) return 1;
+      return 0;
+    });
   }),
 
   createStore: adminQuery
@@ -532,13 +560,19 @@ export const inventoryRouter = createRouter({
 
   forceApplyAdjustment: adminQuery
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
+    .mutation(async ({ input }) => {
       const db = getDb();
       const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id));
-      if (!adj) return { error: "Ajuste no encontrado" };
+      if (!adj) throw new Error("Ajuste no encontrado");
+      if (adj.estado === "completado") {
+        throw new Error("Este ajuste ya fue aplicado. No se puede forzar de nuevo.");
+      }
+      if (adj.estado === "cancelado") {
+        throw new Error("Este ajuste esta cancelado.");
+      }
 
       const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.id));
-      if (items.length === 0) return { error: "Sin articulos" };
+      if (items.length === 0) throw new Error("Sin articulos");
 
       let productsAdded = 0;
       for (const item of items) {
@@ -554,6 +588,7 @@ export const inventoryRouter = createRouter({
         productsAdded++;
       }
 
+      await db.update(adjustments).set({ estado: "completado", completedAt: new Date() }).where(eq(adjustments.id, input.id));
       return { success: true, productsAdded, palletId: adj.palletId };
     }),
 
@@ -658,10 +693,11 @@ export const inventoryRouter = createRouter({
       const dia = data.dia !== undefined ? data.dia : existing.dia;
       const observaciones = data.observaciones !== undefined ? data.observaciones : existing.observaciones;
 
-      // Recalculate total and diferencia
+      // Recalculate total from payment buckets. Keep existing diferencia unless total override is sent.
       const ventas = Number(efectivo || 0) + Number(sinpe || 0) + Number(tarjeta || 0) + Number(sinFactura || 0);
       const totalCalculado = String(ventas);
-      const diferencia = 0; // Since efectivo represents both cash sales and cash counted
+      const totalOverride = data.total !== undefined ? Number(data.total) : ventas;
+      const diferencia = totalOverride - ventas;
 
       // Update using raw SQL for compatibility
       await db.execute(sql`
@@ -1125,35 +1161,44 @@ export const inventoryRouter = createRouter({
 
   // ========== SEARCH PRODUCT BY BARCODE (anywhere) ==========
   searchProductByBarcode: authedQuery
-    .input(z.object({ storeId: z.number(), barcode: z.string() }))
+    .input(z.object({
+      storeId: z.number(),
+      barcode: z.string(),
+      /** When true (transfers), only return real stock rows — never catalog fakes. */
+      productsOnly: z.boolean().optional(),
+    }))
     .query(async ({ input }) => {
       const db = getDb();
 
-      // 1. Search in products (containers)
+      // Prefer real stock: sum active product rows with this barcode
       const prodRows = await db.select()
         .from(products)
-        .where(and(eq(products.storeId, input.storeId), eq(products.codigoBarras, input.barcode), eq(products.isActive, true)))
-        .limit(1);
-      if (prodRows.length > 0) return prodRows[0];
+        .where(and(eq(products.storeId, input.storeId), eq(products.codigoBarras, input.barcode), eq(products.isActive, true)));
+      if (prodRows.length > 0) {
+        const cantidad = prodRows.reduce((sum, row) => sum + Number(row.cantidad || 0), 0);
+        const first = prodRows[0];
+        return { ...first, cantidad, source: "products" as const };
+      }
 
-      // 2. Search in productDatabase (catalog)
+      if (input.productsOnly) return null;
+
+      // Catalog (for name/price autocomplete only — not transferable stock)
       const dbRows = await db.select()
         .from(productDatabase)
         .where(and(eq(productDatabase.storeId, input.storeId), eq(productDatabase.codigoBarras, input.barcode)))
         .limit(1);
       if (dbRows.length > 0) {
         const row = dbRows[0];
-        return { id: row.id, nombre: row.nombre, precio: row.precio, cantidad: 999, codigoBarras: row.codigoBarras };
+        return { id: row.id, nombre: row.nombre, precio: row.precio, cantidad: 0, codigoBarras: row.codigoBarras, source: "catalog" as const };
       }
 
-      // 3. Search in adjustmentItems (recent adjustments)
       const adjRows: any = await db.execute(
         sql`SELECT ai.* FROM adjustmentItems ai JOIN adjustments a ON ai.adjustmentId = a.id WHERE ai.codigoBarras = ${input.barcode} AND a.storeId = ${input.storeId} ORDER BY ai.id DESC LIMIT 1`
       );
       const adjItems = Array.isArray(adjRows) ? adjRows[0] : (adjRows.rows || adjRows);
       if (Array.isArray(adjItems) && adjItems.length > 0) {
         const row = adjItems[0];
-        return { id: row.id, nombre: row.nombre, precio: row.precio, cantidad: 999, codigoBarras: row.codigoBarras };
+        return { id: row.id, nombre: row.nombre, precio: row.precio, cantidad: 0, codigoBarras: row.codigoBarras, source: "adjustment" as const };
       }
 
       return null;
@@ -1191,6 +1236,9 @@ export const inventoryRouter = createRouter({
     .input(z.object({ transferId: z.number(), codigoBarras: z.string().optional(), nombre: z.string(), precio: z.string(), cantidad: z.number().default(1), orden: z.number().default(1) }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      const [transfer] = await db.select().from(transfers).where(eq(transfers.id, input.transferId));
+      if (!transfer) throw new Error("Transferencia no encontrada");
+      if (transfer.estado !== "activo") throw new Error("Solo se pueden agregar articulos a transferencias activas");
       const result = await db.insert(transferItems).values(input);
       return { id: Number(result[0].insertId) };
     }),
@@ -1207,14 +1255,84 @@ export const inventoryRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      const [transfer] = await db.select().from(transfers).where(eq(transfers.id, input.id));
+      if (!transfer) throw new Error("Transferencia no encontrada");
+      if (transfer.estado !== "activo") throw new Error("Esta transferencia ya no esta activa");
+
+      const items = await db.select().from(transferItems).where(eq(transferItems.transferId, input.id));
+      if (items.length === 0) throw new Error("La transferencia no tiene articulos");
+
+      // Destination holding pallet for received stock
+      let [destPallet] = await db.select().from(pallets).where(and(
+        eq(pallets.storeId, transfer.toStoreId),
+        eq(pallets.palletId, "TRANSFERENCIAS"),
+        eq(pallets.isActive, true),
+      )).limit(1);
+      if (!destPallet) {
+        const created = await db.insert(pallets).values({
+          storeId: transfer.toStoreId,
+          palletId: "TRANSFERENCIAS",
+          description: "Recibido por transferencia desde Bodega",
+          fecha: transfer.fecha,
+          costo: "0",
+        });
+        const newId = Number(created[0].insertId);
+        destPallet = { id: newId } as typeof destPallet;
+      }
+
+      for (const item of items) {
+        const barcode = item.codigoBarras?.trim();
+        const needQty = Number(item.cantidad || 0);
+        if (!barcode || needQty <= 0) {
+          throw new Error(`Articulo invalido en transferencia: ${item.nombre}`);
+        }
+
+        const sourceRows = await db.select().from(products).where(and(
+          eq(products.storeId, transfer.fromStoreId),
+          eq(products.codigoBarras, barcode),
+          eq(products.isActive, true),
+        ));
+        const available = sourceRows.reduce((sum, row) => sum + Number(row.cantidad || 0), 0);
+        if (available < needQty) {
+          throw new Error(`Stock insuficiente en Bodega para ${item.nombre} (${barcode}). Hay ${available}, se piden ${needQty}.`);
+        }
+
+        let remaining = needQty;
+        for (const row of sourceRows) {
+          if (remaining <= 0) break;
+          const rowQty = Number(row.cantidad || 0);
+          const take = Math.min(rowQty, remaining);
+          const left = rowQty - take;
+          if (left <= 0) {
+            await db.update(products).set({ cantidad: 0, isActive: false }).where(eq(products.id, row.id));
+          } else {
+            await db.update(products).set({ cantidad: left }).where(eq(products.id, row.id));
+          }
+          remaining -= take;
+        }
+
+        await db.insert(products).values({
+          storeId: transfer.toStoreId,
+          palletId: destPallet.id,
+          nombre: item.nombre,
+          precio: String(item.precio),
+          cantidad: needQty,
+          codigoBarras: barcode,
+          esNuevo: false,
+        });
+      }
+
       await db.update(transfers).set({ estado: "completado" }).where(eq(transfers.id, input.id));
-      return { success: true };
+      return { success: true, itemsMoved: items.length };
     }),
 
   cancelTransfer: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      const [transfer] = await db.select().from(transfers).where(eq(transfers.id, input.id));
+      if (!transfer) throw new Error("Transferencia no encontrada");
+      if (transfer.estado !== "activo") throw new Error("Solo se pueden cancelar transferencias activas");
       await db.update(transfers).set({ estado: "cancelado" }).where(eq(transfers.id, input.id));
       return { success: true };
     }),

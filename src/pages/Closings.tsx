@@ -32,7 +32,7 @@ const paymentConfig = [
 ];
 
 export default function ClosingsPage() {
-  const { isAdmin, isEmployee } = useLocalAuth();
+  const { isAdmin, isEmployee, user } = useLocalAuth();
   const { storeId: effectiveStoreId, setStoreId, canSwitchStore, stores, storeName } = useActiveStore();
   const utils = trpc.useUtils();
 
@@ -149,14 +149,13 @@ export default function ClosingsPage() {
   const handleCreate = () => {
     if (!newClosing.fecha) return;
     setCreateError("");
-    const userName = (document.cookie.match(/local_auth_user=([^;]+)/) || ["", ""])[1];
     createClosing.mutate({
       storeId: effectiveStoreId, fecha: newClosing.fecha, dia: newClosing.dia, hora: newClosing.hora,
       efectivo: newClosing.efectivo || "0", sinpe: newClosing.sinpe || "0",
       tarjeta: newClosing.tarjeta || "0", sinFactura: newClosing.sinFactura || "0",
       total: String(totalCalculado), inicial: montoInicialDefault,
       observaciones: newClosing.observaciones,
-      createdBy: userName ? decodeURIComponent(userName) : undefined,
+      createdBy: user?.name || user?.username || undefined,
       registradoPor: newClosing.registradoPor || undefined,
     });
   };

@@ -190,7 +190,7 @@ export async function initDatabase() {
 
     // Insert Los Chiles store
     await conn.execute(
-      `INSERT INTO stores (id, name, slug, description) VALUES (1, 'American Outlet Los Chiles', 'los-chiles', 'Tienda principal en Los Chiles')`
+      `INSERT INTO stores (id, name, slug, description) VALUES (1, 'Bodega', 'bodega', 'Bodega central / inventario principal')`
     );
     console.log("[DB-INIT] Store created!");
 

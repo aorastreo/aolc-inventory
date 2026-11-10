@@ -1,5 +1,6 @@
 import { trpc } from "@/providers/trpc";
 import { useActiveStore } from "@/hooks/useActiveStore";
+import { BODEGA_STORE_ID } from "@/lib/stores";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,14 +12,11 @@ import { useState, useRef, useEffect } from "react";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
-/** Warehouse origin for outbound transfers */
-const BODEGA_STORE_ID = 1;
 
 export default function TransfersPage() {
   const utils = trpc.useUtils();
-  const { storeId: activeStoreId } = useActiveStore();
+  const { storeId: activeStoreId, stores } = useActiveStore();
   const { data: transfersList, isLoading } = trpc.inventory.getTransfers.useQuery({});
-  const { data: stores } = trpc.inventory.allStores.useQuery();
 
   const createTransfer = trpc.inventory.createTransfer.useMutation({
     onSuccess: () => { utils.inventory.getTransfers.invalidate(); setShowCreate(false); },
@@ -52,9 +50,9 @@ export default function TransfersPage() {
   const [scanQty, setScanQty] = useState(1);
   const barcodeRef = useRef<HTMLInputElement>(null);
 
-  // Search by barcode in Bodega (storeId 1) always
+  // Search real Bodega stock only (never catalog placeholders)
   const { data: foundProduct } = trpc.inventory.searchProductByBarcode.useQuery(
-    { storeId: BODEGA_STORE_ID, barcode },
+    { storeId: BODEGA_STORE_ID, barcode, productsOnly: true },
     { enabled: barcode.length >= 5 && !!viewingTransfer && currentTransfer?.estado === "activo" }
   );
 
@@ -62,11 +60,18 @@ export default function TransfersPage() {
     if (foundProduct && barcode.length >= 5) {
       setScannedProduct(foundProduct);
       setScanQty(1);
+    } else if (barcode.length >= 5) {
+      setScannedProduct(null);
     }
-  }, [foundProduct]);
+  }, [foundProduct, barcode]);
 
   const handleAddItem = () => {
     if (!viewingTransfer || !scannedProduct || scanQty < 1) return;
+    const available = Number(scannedProduct.cantidad || 0);
+    if (scanQty > available) {
+      alert(`Solo hay ${available} unidad(es) en Bodega para este codigo.`);
+      return;
+    }
     addItem.mutate({
       transferId: viewingTransfer,
       codigoBarras: scannedProduct.codigoBarras || barcode,

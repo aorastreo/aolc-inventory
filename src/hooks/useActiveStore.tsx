@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocalAuth } from "@/hooks/useLocalAuth";
 import { trpc } from "@/providers/trpc";
+import { BODEGA_STORE_ID, sortStoresBodegaFirst } from "@/lib/stores";
 
 const STORAGE_KEY = "aolc_active_store_id";
 
@@ -10,6 +11,7 @@ type ActiveStoreContextValue = {
   canSwitchStore: boolean;
   stores: { id: number; name: string; slug: string }[];
   storeName: string;
+  isBodega: boolean;
 };
 
 const ActiveStoreContext = createContext<ActiveStoreContextValue | null>(null);
@@ -30,12 +32,14 @@ export function ActiveStoreProvider({ children }: { children: ReactNode }) {
   });
 
   const stores = useMemo(
-    () => (storesData || []).map((s) => ({ id: s.id, name: s.name, slug: s.slug })),
+    () => sortStoresBodegaFirst((storesData || []).map((s) => ({ id: s.id, name: s.name, slug: s.slug }))),
     [storesData],
   );
 
+  // Admin/manager default to Bodega as the principal warehouse workspace.
   const [selectedStoreId, setSelectedStoreId] = useState<number>(() => {
-    return readStoredStoreId() || userStoreId || 1;
+    if (canSwitchStore) return readStoredStoreId() || BODEGA_STORE_ID;
+    return userStoreId || BODEGA_STORE_ID;
   });
 
   useEffect(() => {
@@ -45,20 +49,16 @@ export function ActiveStoreProvider({ children }: { children: ReactNode }) {
       return;
     }
     const stored = readStoredStoreId();
-    if (stored) {
-      setSelectedStoreId(stored);
-    } else if (userStoreId) {
-      setSelectedStoreId(userStoreId);
-    }
+    setSelectedStoreId(stored || BODEGA_STORE_ID);
   }, [user, canSwitchStore, userStoreId]);
 
   useEffect(() => {
     if (stores.length === 0) return;
     if (!stores.some((s) => s.id === selectedStoreId)) {
-      const fallback = canSwitchStore ? stores[0].id : userStoreId || stores[0].id;
-      setSelectedStoreId(fallback);
+      const bodega = stores.find((s) => s.id === BODEGA_STORE_ID);
+      setSelectedStoreId(bodega?.id || stores[0].id);
     }
-  }, [stores, selectedStoreId, canSwitchStore, userStoreId]);
+  }, [stores, selectedStoreId]);
 
   const setStoreId = (id: number) => {
     if (!canSwitchStore) return;
@@ -66,7 +66,7 @@ export function ActiveStoreProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, String(id));
   };
 
-  const storeName = stores.find((s) => s.id === selectedStoreId)?.name || "Tienda";
+  const storeName = stores.find((s) => s.id === selectedStoreId)?.name || "Bodega";
 
   const value: ActiveStoreContextValue = {
     storeId: selectedStoreId,
@@ -74,6 +74,7 @@ export function ActiveStoreProvider({ children }: { children: ReactNode }) {
     canSwitchStore,
     stores,
     storeName,
+    isBodega: selectedStoreId === BODEGA_STORE_ID,
   };
 
   return (
