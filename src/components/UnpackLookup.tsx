@@ -390,44 +390,34 @@ export default function UnpackLookup({ value, onChange }: Props) {
         </div>
       )}
 
-      {(fuentePrincipal || referencias.length > 0) && (
+      {referencias.filter((r) => !!r.url).length > 0 && (
         <div className="rounded-md border p-3 space-y-2" style={{ borderColor: "hsl(210 20% 90%)", background: "white" }}>
-          {fuentePrincipal && (
-            <p className="text-xs font-semibold" style={{ color: BRAND_BLUE }}>
-              Fuente de referencia: {fuentePrincipal}
-            </p>
-          )}
-          {referencias.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: "hsl(207 20% 55%)" }}>
-                Sitios para verificar
-              </p>
-              {referencias.map((r) => (
-                <div key={`${r.sitio}-${r.url || ""}`} className="flex items-center justify-between gap-2 text-xs">
-                  <div className="min-w-0">
-                    <span className="font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{r.sitio}</span>
-                    {r.precioUsd != null && (
-                      <span className="ml-2" style={{ color: BRAND_RED }}>${r.precioUsd}</span>
-                    )}
-                    {r.nota && (
-                      <span className="ml-2 truncate" style={{ color: "hsl(207 20% 55%)" }}>{r.nota}</span>
-                    )}
-                  </div>
-                  {r.url && (
-                    <a
-                      href={r.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 font-medium underline"
-                      style={{ color: BRAND_BLUE }}
-                    >
-                      Abrir
-                    </a>
+          <p className="text-xs font-semibold" style={{ color: BRAND_BLUE }}>
+            Links para revisar el precio
+            {fuentePrincipal ? ` (${fuentePrincipal})` : ""}
+          </p>
+          <div className="space-y-2">
+            {referencias.filter((r) => !!r.url).map((r) => (
+              <a
+                key={`${r.sitio}-${r.url}`}
+                href={r.url!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-md border px-3 py-2 hover:bg-gray-50 transition-colors"
+                style={{ borderColor: "hsl(210 20% 90%)" }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold" style={{ color: BRAND_RED }}>{r.sitio}</span>
+                  {r.precioUsd != null && (
+                    <span className="text-xs font-bold" style={{ color: BRAND_BLUE }}>~${r.precioUsd}</span>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
+                <p className="text-[11px] mt-1 break-all underline" style={{ color: BRAND_BLUE }}>
+                  {r.url}
+                </p>
+              </a>
+            ))}
+          </div>
         </div>
       )}
 

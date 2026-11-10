@@ -378,7 +378,8 @@ export async function suggestFromPhoto(opts: {
             + "}. "
             + "usd_price_estimate = best typical US retail USD. "
             + "fuente_principal = main site you based the estimate on (e.g. Amazon, Costway, Target). "
-            + "referencias = 1-4 sites where this product is commonly sold, with approximate usd if known and a useful search/product URL when possible. "
+            + "referencias MUST include clickable https URLs (product page if known, otherwise retailer search URL). "
+            + "Prefer Amazon, Costway, Target, Walmart, Home Depot when relevant. Include usd if known. "
             + "codigo_articulo = SKU/model if visible on box.",
         },
         {
@@ -386,7 +387,7 @@ export async function suggestFromPhoto(opts: {
           content: [
             {
               type: "text",
-              text: "Identify this product, estimate typical US retail price in USD, and list the reference retailer site(s) you used for that estimate.",
+              text: "Identify this product, estimate typical US retail USD, and return real https links I can open to verify the price on Amazon/Costway/Target/etc.",
             },
             { type: "image_url", image_url: { url: dataUrl } },
           ],
