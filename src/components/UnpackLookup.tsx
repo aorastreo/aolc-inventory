@@ -68,6 +68,7 @@ export default function UnpackLookup({ value, onChange }: Props) {
     nota?: string | null;
   }>>([]);
   const [fuentePrincipal, setFuentePrincipal] = useState<string | null>(null);
+  const [needsManualUsd, setNeedsManualUsd] = useState(false);
 
   const applySuggestion = (res: {
     nombre?: string | null;
@@ -81,22 +82,27 @@ export default function UnpackLookup({ value, onChange }: Props) {
     sourceUrl?: string;
     referencias?: Array<{ sitio: string; precioUsd: number | null; url: string | null; nota?: string | null }>;
     fuentePrincipal?: string | null;
+    needsManualUsd?: boolean;
   }) => {
     setError(null);
     if (res.note) setNote(res.note);
     setReferencias(res.referencias || []);
     setFuentePrincipal(res.fuentePrincipal || null);
+    setNeedsManualUsd(!!res.needsManualUsd || res.precioSugeridoCrc == null);
     if (res.precioMismo != null && res.precioMenos20 != null && res.precioUnPocoMas != null) {
       setBand({
         mismo: res.precioMismo,
         menos20: res.precioMenos20,
         unPocoMas: res.precioUnPocoMas,
       });
+    } else {
+      setBand(null);
     }
     const primaryRefUrl = res.referencias?.find((r) => r.url)?.url;
     onChange({
       ...value,
       nombre: res.nombre || value.nombre,
+      // Only fill price when we have a real suggestion (printed on box / converted USD)
       precio: res.precioSugeridoCrc != null ? String(res.precioSugeridoCrc) : value.precio,
       codigo: res.codigoPosible || value.codigo,
       precioRefUsd: res.usd != null ? String(res.usd) : value.precioRefUsd,
@@ -348,8 +354,32 @@ export default function UnpackLookup({ value, onChange }: Props) {
             </div>
           )}
           <p className="text-[10px]" style={{ color: "hsl(207 20% 55%)" }}>
-            En el celular: “Tomar foto” abre la cámara; “Cargar foto” abre la galería. Confirma siempre el precio.
+            La foto lee marca/modelo/SKU de la caja y te da links de busqueda exactos. No inventa precio de Amazon: abre el link, mira el $ y pegalo abajo.
           </p>
+          {(needsManualUsd || mode === "foto") && (
+            <div className="rounded-md border p-3 space-y-2" style={{ borderColor: "hsl(210 20% 90%)", background: "white" }}>
+              <p className="text-[11px] font-medium" style={{ color: BRAND_BLUE }}>
+                Despues de abrir un link, pega aqui el precio USA ($)
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={usdManual}
+                  placeholder="Ej: 29.99"
+                  onChange={(e) => setUsdManual(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  disabled={busy || !Number(usdManual)}
+                  onClick={() => suggestUsd.mutate({ usd: Number(usdManual) })}
+                  style={{ background: BRAND_RED }}
+                >
+                  Convertir
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

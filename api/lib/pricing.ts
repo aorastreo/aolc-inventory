@@ -316,13 +316,41 @@ export type PriceReference = {
   nota?: string | null;
 };
 
-function buildSearchRefs(nombre: string | null, codigo: string | null): PriceReference[] {
-  const q = encodeURIComponent([nombre, codigo].filter(Boolean).join(" ").trim() || "product");
+/** Same photo → same result (avoids random price swings). */
+const photoCache = new Map<string, any>();
+
+function hashImageKey(base64: string): string {
+  // Short stable key from length + samples (enough for identical re-uploads)
+  const s = base64.length > 8000 ? base64.slice(0, 4000) + base64.slice(-4000) : base64;
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i += Math.max(1, Math.floor(s.length / 400))) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return `${base64.length}_${(h >>> 0).toString(16)}`;
+}
+
+/** Only real search URLs built from extracted brand/model/SKU — never AI-invented product pages. */
+function buildSearchRefs(parts: {
+  marca?: string | null;
+  modelo?: string | null;
+  codigo?: string | null;
+  upc?: string | null;
+  nombre?: string | null;
+}): PriceReference[] {
+  const exact = [parts.marca, parts.modelo, parts.codigo, parts.upc]
+    .map((x) => (x || "").trim())
+    .filter(Boolean);
+  const qRaw = (exact.length > 0 ? exact.join(" ") : (parts.nombre || "").trim());
+  if (!qRaw) return [];
+  const q = encodeURIComponent(qRaw);
+  const label = exact.length > 0 ? `Busqueda: ${qRaw}` : `Busqueda por nombre: ${qRaw}`;
   return [
-    { sitio: "Amazon", precioUsd: null, url: `https://www.amazon.com/s?k=${q}`, nota: "Busqueda por nombre/SKU" },
-    { sitio: "Walmart", precioUsd: null, url: `https://www.walmart.com/search?q=${q}`, nota: "Busqueda por nombre/SKU" },
-    { sitio: "Target", precioUsd: null, url: `https://www.target.com/s?searchTerm=${q}`, nota: "Busqueda por nombre/SKU" },
-    { sitio: "Google Shopping", precioUsd: null, url: `https://www.google.com/search?tbm=shop&q=${q}`, nota: "Comparar precios USA" },
+    { sitio: "Amazon", precioUsd: null, url: `https://www.amazon.com/s?k=${q}`, nota: label },
+    { sitio: "Walmart", precioUsd: null, url: `https://www.walmart.com/search?q=${q}`, nota: label },
+    { sitio: "Target", precioUsd: null, url: `https://www.target.com/s?searchTerm=${q}`, nota: label },
+    { sitio: "Costway", precioUsd: null, url: `https://www.costway.com/catalogsearch/result/?q=${q}`, nota: label },
+    { sitio: "Google Shopping", precioUsd: null, url: `https://www.google.com/search?tbm=shop&q=${q}`, nota: label },
   ];
 }
 
@@ -340,6 +368,7 @@ export async function suggestFromPhoto(opts: {
   referencias: PriceReference[];
   fuentePrincipal: string | null;
   note: string;
+  needsManualUsd: boolean;
 }> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
@@ -347,6 +376,13 @@ export async function suggestFromPhoto(opts: {
       "Falta OPENAI_API_KEY en Railway para sugerir precio por foto. Puedes usar link, codigo o nombre mientras tanto.",
     );
   }
+
+  const rawB64 = opts.imageBase64.startsWith("data:")
+    ? opts.imageBase64.split(",")[1] || opts.imageBase64
+    : opts.imageBase64;
+  const cacheKey = hashImageKey(rawB64);
+  const cached = photoCache.get(cacheKey);
+  if (cached) return cached;
 
   const mime = opts.mimeType || "image/jpeg";
   const dataUrl = opts.imageBase64.startsWith("data:")
@@ -361,33 +397,34 @@ export async function suggestFromPhoto(opts: {
     },
     body: JSON.stringify({
       model: process.env.OPENAI_VISION_MODEL || "gpt-4o-mini",
-      temperature: 0.2,
+      temperature: 0,
+      seed: 7,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
           content:
-            "You identify retail products from photos for a Costa Rica outlet that sources US liquidation (Costway, Target, Amazon, Walmart, Home Depot, etc.). "
-            + "Return JSON only with this shape: {"
+            "You are an OCR + product ID assistant for US liquidation boxes (Costway, Target, Amazon, etc.). "
+            + "Read ONLY what is visible on the photo. Do NOT invent model numbers or market prices. "
+            + "Return JSON: {"
             + "\"nombre\": string|null, "
-            + "\"usd_price_estimate\": number|null, "
+            + "\"marca\": string|null, "
+            + "\"modelo\": string|null, "
             + "\"codigo_articulo\": string|null, "
-            + "\"confidence\": number, "
-            + "\"fuente_principal\": string|null, "
-            + "\"referencias\": [{\"sitio\": string, \"precio_usd\": number|null, \"url\": string|null, \"nota\": string|null}]"
+            + "\"upc_ean\": string|null, "
+            + "\"precio_impreso_usd\": number|null, "
+            + "\"texto_caja\": string|null, "
+            + "\"confidence\": number"
             + "}. "
-            + "usd_price_estimate = best typical US retail USD. "
-            + "fuente_principal = main site you based the estimate on (e.g. Amazon, Costway, Target). "
-            + "referencias MUST include clickable https URLs (product page if known, otherwise retailer search URL). "
-            + "Prefer Amazon, Costway, Target, Walmart, Home Depot when relevant. Include usd if known. "
-            + "codigo_articulo = SKU/model if visible on box.",
+            + "precio_impreso_usd = ONLY if a dollar price is literally printed/visible on the box/tag in the image; otherwise null. "
+            + "Never guess amazon/street price. codigo_articulo/modelo = SKU/item#/model printed on box if readable.",
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: "Identify this product, estimate typical US retail USD, and return real https links I can open to verify the price on Amazon/Costway/Target/etc.",
+              text: "Read brand, model/SKU/UPC from this product photo. Do not invent prices. Only return precio_impreso_usd if you can see $ on the package.",
             },
             { type: "image_url", image_url: { url: dataUrl } },
           ],
@@ -410,53 +447,32 @@ export async function suggestFromPhoto(opts: {
     parsed = {};
   }
 
-  const nombre = typeof parsed.nombre === "string" ? parsed.nombre.slice(0, 255) : null;
-  const codigoPosible = typeof parsed.codigo_articulo === "string" ? parsed.codigo_articulo.slice(0, 50) : null;
-  const fuentePrincipal =
-    typeof parsed.fuente_principal === "string" ? parsed.fuente_principal.slice(0, 80) : null;
+  const marca = typeof parsed.marca === "string" ? parsed.marca.trim().slice(0, 80) : null;
+  const modelo = typeof parsed.modelo === "string" ? parsed.modelo.trim().slice(0, 80) : null;
+  const codigoPosible =
+    (typeof parsed.codigo_articulo === "string" && parsed.codigo_articulo.trim())
+      ? parsed.codigo_articulo.trim().slice(0, 50)
+      : (modelo || null);
+  const upc = typeof parsed.upc_ean === "string" ? parsed.upc_ean.trim().slice(0, 32) : null;
+  const nombreRaw = typeof parsed.nombre === "string" ? parsed.nombre.trim().slice(0, 255) : null;
+  const nombre = nombreRaw || [marca, modelo || codigoPosible].filter(Boolean).join(" ") || null;
 
-  const usd =
-    typeof parsed.usd_price_estimate === "number" && parsed.usd_price_estimate > 0
-      ? parsed.usd_price_estimate
+  // Only accept price if printed on the package — never hallucinated market price
+  const printedUsd =
+    typeof parsed.precio_impreso_usd === "number" && parsed.precio_impreso_usd > 0
+      ? parsed.precio_impreso_usd
       : null;
 
-  const aiRefs: PriceReference[] = Array.isArray(parsed.referencias)
-    ? parsed.referencias
-      .map((r: any): PriceReference | null => {
-        if (!r || typeof r.sitio !== "string") return null;
-        return {
-          sitio: String(r.sitio).slice(0, 60),
-          precioUsd:
-            typeof r.precio_usd === "number" && r.precio_usd > 0 ? r.precio_usd : null,
-          url: typeof r.url === "string" ? r.url.slice(0, 500) : null,
-          nota: typeof r.nota === "string" ? r.nota.slice(0, 160) : null,
-        };
-      })
-      .filter(Boolean) as PriceReference[]
-    : [];
+  const referencias = buildSearchRefs({
+    marca,
+    modelo,
+    codigo: codigoPosible,
+    upc,
+    nombre,
+  });
 
-  // Always give clickable search links so the user can verify on real sites
-  const searchRefs = buildSearchRefs(nombre, codigoPosible);
-  const merged: PriceReference[] = [];
-  const seen = new Set<string>();
-  for (const r of [...aiRefs, ...searchRefs]) {
-    const key = r.sitio.toLowerCase();
-    if (seen.has(key)) {
-      // keep AI version if already present; skip duplicate search
-      continue;
-    }
-    seen.add(key);
-    // If AI gave sitio without URL, attach search URL when possible
-    if (!r.url) {
-      const fallback = searchRefs.find((s) => s.sitio.toLowerCase() === key);
-      merged.push({ ...r, url: fallback?.url || null });
-    } else {
-      merged.push(r);
-    }
-  }
-
-  if (usd == null) {
-    return {
+  if (referencias.length === 0) {
+    const empty = {
       nombre,
       usd: null,
       precioSugeridoCrc: null,
@@ -464,23 +480,49 @@ export async function suggestFromPhoto(opts: {
       precioMenos20: null,
       precioUnPocoMas: null,
       codigoPosible,
-      referencias: merged.slice(0, 6),
-      fuentePrincipal,
-      note: fuentePrincipal
-        ? `No se estimó precio firme. Posible fuente: ${fuentePrincipal}. Revisa los links de referencia o pega el $ USA.`
-        : "No se estimó precio USA; usa los links de referencia o pega el $ manualmente.",
+      referencias: [],
+      fuentePrincipal: null,
+      note: "No se pudo leer marca/modelo en la foto. Toma otra foto de la etiqueta/SKU o busca por codigo manualmente.",
+      needsManualUsd: true,
     };
+    photoCache.set(cacheKey, empty);
+    return empty;
   }
 
-  const band = buildPriceBandFromUsd(usd);
-  const refLabel = fuentePrincipal
-    || (aiRefs[0]?.sitio ? aiRefs[0].sitio : "estimacion USA");
-  return {
+  if (printedUsd != null) {
+    const band = buildPriceBandFromUsd(printedUsd);
+    const result = {
+      nombre,
+      ...band,
+      codigoPosible,
+      referencias,
+      fuentePrincipal: "Precio impreso en la caja/etiqueta",
+      note: `Precio LEIDO en la foto: $${printedUsd}. Abre los links del modelo para confirmar en web, luego elige Mismo/-20%/+10%.`,
+      needsManualUsd: false,
+    };
+    photoCache.set(cacheKey, result);
+    return result;
+  }
+
+  const result = {
     nombre,
-    ...band,
+    usd: null,
+    precioSugeridoCrc: null,
+    precioMismo: null,
+    precioMenos20: null,
+    precioUnPocoMas: null,
     codigoPosible,
-    referencias: merged.slice(0, 6),
-    fuentePrincipal: fuentePrincipal || refLabel,
-    note: `Ref. principal: ${refLabel}. Estimacion USA $${usd} → ₡${band.precioSugeridoCrc} (confirmar). Abre los links para verificar.`,
+    referencias,
+    fuentePrincipal: null,
+    note:
+      `Producto identificado${marca ? ` (${marca})` : ""}${codigoPosible ? ` · cod ${codigoPosible}` : ""}. `
+      + "No inventamos precio: abre los links de busqueda del modelo, mira el $ USA, pegalo abajo y Convierte.",
+    needsManualUsd: true,
   };
+  photoCache.set(cacheKey, result);
+  if (photoCache.size > 200) {
+    const first = photoCache.keys().next().value;
+    if (first) photoCache.delete(first);
+  }
+  return result;
 }
