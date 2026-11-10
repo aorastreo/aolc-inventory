@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "../middleware";
+import { createRouter, authedQuery, managerQuery } from "../middleware";
 import mysql from "mysql2/promise";
 
 const D: Record<string, string | boolean> = {
@@ -79,7 +79,7 @@ async function ensureTable() {
 }
 
 export const labelConfigRouter = createRouter({
-  get: publicQuery
+  get: authedQuery
     .input(z.object({ storeId: z.number().default(1) }))
     .query(async ({ input }) => {
       await ensureTable();
@@ -96,7 +96,7 @@ export const labelConfigRouter = createRouter({
       } finally { await conn.end(); }
     }),
 
-  upsert: publicQuery
+  upsert: managerQuery
     .input(z.object({
       storeId: z.number().default(1),
       ...Object.fromEntries(ALL_FIELDS.map(f => [f, typeof D[f] === "boolean" ? z.boolean().optional() : z.string().optional()])),

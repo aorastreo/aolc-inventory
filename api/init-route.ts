@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { assertInitTablesSecret } from "./lib/auth-secret";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -25,11 +26,21 @@ function loadBackup() {
   };
 }
 
+function requireOpsSecret(c: any) {
+  if (!assertInitTablesSecret(c.req.query("secret"))) {
+    return c.json(
+      { error: "Unauthorized. Pass ?secret= matching INIT_TABLES_SECRET." },
+      401,
+    );
+  }
+  return null;
+}
+
 export function initRoute(app: Hono) {
   // Migrate data (inserts only if empty)
   app.get("/api/init-data", async (c) => {
-    const secret = c.req.query("secret");
-    if (secret !== "aolc-migrate-2024") return c.json({ error: "Unauthorized" }, 401);
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
 
     const conn = await getRawDb();
     const results: string[] = [];
@@ -123,8 +134,8 @@ export function initRoute(app: Hono) {
 
   // RESET data (truncates and re-inserts)
   app.get("/api/reset-data", async (c) => {
-    const secret = c.req.query("secret");
-    if (secret !== "aolc-migrate-2024") return c.json({ error: "Unauthorized" }, 401);
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
 
     const conn = await getRawDb();
     const results: string[] = [];
@@ -225,6 +236,8 @@ export function initRoute(app: Hono) {
 
   // Force apply a completed adjustment to its container (pallet)
   app.get("/api/force-apply-adjustment", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const id = c.req.query("id");
     if (!id) return c.json({ error: "Missing ?id= parameter" }, 400);
 
@@ -259,6 +272,8 @@ export function initRoute(app: Hono) {
 
   // Quick add store
   app.get("/api/add-store", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const name = c.req.query("name");
     const slug = c.req.query("slug");
     if (!name || !slug) return c.json({ error: "Missing ?name= and ?slug= parameters" }, 400);
@@ -279,6 +294,8 @@ export function initRoute(app: Hono) {
 
   // Quick rename store
   app.get("/api/rename-store", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const id = c.req.query("id");
     const name = c.req.query("name");
     const slug = c.req.query("slug");
@@ -301,6 +318,8 @@ export function initRoute(app: Hono) {
 
   // Check all stores in DB
   app.get("/api/check-stores", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const conn = await getRawDb();
     try {
       const [rows]: any = await conn.execute("SELECT id, name, slug, isActive FROM stores ORDER BY id");
@@ -314,6 +333,8 @@ export function initRoute(app: Hono) {
 
   // Migrate closings table - add new columns
   app.get("/api/migrate-closings", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const conn = await getRawDb();
     const results: string[] = [];
     try {
@@ -368,6 +389,8 @@ export function initRoute(app: Hono) {
 
   // Add registradoPor column to closings (simple fix)
   app.get("/api/fix-closings-registradoPor", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const conn = await getRawDb();
     try {
       await conn.execute("ALTER TABLE closings ADD COLUMN registradoPor VARCHAR(255) DEFAULT NULL");
@@ -385,6 +408,8 @@ export function initRoute(app: Hono) {
   // Check closings columns
   // Quick fix - add registradoPor column to closings
   app.get("/api/fix-closings-registradoPor", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const conn = await getRawDb();
     const results: string[] = [];
     try {
@@ -426,6 +451,8 @@ export function initRoute(app: Hono) {
 
   // Check closings columns
   app.get("/api/check-closings-columns", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const conn = await getRawDb();
     try {
       const [rows]: any = await conn.execute("SHOW COLUMNS FROM closings");
@@ -439,6 +466,8 @@ export function initRoute(app: Hono) {
 
   // Migrate closings from Bodega (old Los Chiles) to new Los Chiles store + update German's store
   app.get("/api/migrate-loschiles", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const conn = await getRawDb();
     try {
       // 1. Find the new Los Chiles store (not Bodega = id 1)
@@ -488,6 +517,8 @@ export function initRoute(app: Hono) {
 
   // List active employees
   app.get("/api/list-employees", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const conn = await getRawDb();
     try {
       const [rows]: any = await conn.execute(
@@ -503,6 +534,8 @@ export function initRoute(app: Hono) {
 
   // Fix: move employees from Bodega (storeId 1) to new Los Chiles store
   app.get("/api/fix-loschiles-employees", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const conn = await getRawDb();
     try {
       // Find Los Chiles store (not Bodega = id 1)
@@ -535,6 +568,8 @@ export function initRoute(app: Hono) {
 
   // Reset password by username
   app.get("/api/reset-password", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const username = c.req.query("username");
     const password = c.req.query("password");
     if (!username || !password) return c.json({ error: "Missing ?username= and ?password=" }, 400);
@@ -556,6 +591,8 @@ export function initRoute(app: Hono) {
 
   // Migrate only closings from Bodega (storeId 1) to new Los Chiles
   app.get("/api/migrate-closings-loschiles", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const conn = await getRawDb();
     try {
       // Find Los Chiles store (not Bodega = id 1)
@@ -589,6 +626,8 @@ export function initRoute(app: Hono) {
 
   // Create payroll tables
   app.get("/api/init-payroll", async (c) => {
+    const denied = requireOpsSecret(c);
+    if (denied) return denied;
     const conn = await getRawDb();
     const results: string[] = [];
 

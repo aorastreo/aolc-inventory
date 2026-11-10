@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
 import mysql from "mysql2/promise";
-import bcrypt from "bcryptjs";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { assertInitTablesSecret } from "./lib/auth-secret";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -16,8 +16,7 @@ export const initDataRouter = createRouter({
   migrate: publicQuery
     .input(z.object({ secret: z.string() }))
     .query(async ({ input }) => {
-      // Simple security check
-      if (input.secret !== "aolc-migrate-2024") {
+      if (!assertInitTablesSecret(input.secret)) {
         throw new Error("Unauthorized");
       }
 

@@ -1,49 +1,67 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, publicQuery, adminQuery, authedQuery } from "./middleware";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import mysql from "mysql2/promise";
+import { getJwtSecretKey } from "./lib/auth-secret";
 
-const JWT_SECRET_TEXT = process.env.JWT_SECRET || "aolc-secret-key-2024";
-const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_TEXT);
-
-// Create raw MySQL connection
 async function getRawDb() {
   return mysql.createConnection(process.env.DATABASE_URL!);
 }
 
+async function signEmployeeToken(user: {
+  id: number;
+  username: string;
+  name: string;
+  role: string;
+  storeId: number;
+}) {
+  return new SignJWT({
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: user.role,
+    storeId: user.storeId,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("7d")
+    .sign(getJwtSecretKey());
+}
+
 export const localAuthRouter = createRouter({
-  // Login by store (select store + password, no username needed)
+  // Login by store (select store + password) — public by design
   loginByStore: publicQuery
-    .input(z.object({
-      storeId: z.number(),
-      password: z.string(),
-    }))
+    .input(
+      z.object({
+        storeId: z.number(),
+        password: z.string().min(1),
+      }),
+    )
     .mutation(async ({ input }) => {
       const conn = await getRawDb();
       try {
-        // Get all active employees for this store
         const [rows]: any = await conn.execute(
           "SELECT id, storeId, username, password, name, role FROM employees WHERE storeId = ? AND isActive = true",
-          [input.storeId]
+          [input.storeId],
         );
 
         if (rows.length === 0) {
           throw new Error("No hay usuarios configurados para esta tienda");
         }
 
-        // Try each employee's password
         for (const user of rows) {
           const valid = await bcrypt.compare(input.password, user.password);
           if (valid) {
-            const token = await new SignJWT({ id: user.id, username: user.username, name: user.name, role: user.role, storeId: user.storeId })
-              .setProtectedHeader({ alg: "HS256" })
-              .setExpirationTime("7d")
-              .sign(JWT_SECRET);
-
+            const token = await signEmployeeToken(user);
             return {
               token,
-              user: { id: user.id, name: user.name, username: user.username, role: user.role, storeId: user.storeId }
+              user: {
+                id: user.id,
+                name: user.name,
+                username: user.username,
+                role: user.role,
+                storeId: user.storeId,
+              },
             };
           }
         }
@@ -54,18 +72,20 @@ export const localAuthRouter = createRouter({
       }
     }),
 
-  // Login with username/password (for admin)
+  // Login with username/password (admin / named users)
   login: publicQuery
-    .input(z.object({
-      username: z.string(),
-      password: z.string(),
-    }))
+    .input(
+      z.object({
+        username: z.string().min(1),
+        password: z.string().min(1),
+      }),
+    )
     .mutation(async ({ input }) => {
       const conn = await getRawDb();
       try {
         const [rows]: any = await conn.execute(
           "SELECT id, storeId, username, password, name, role FROM employees WHERE username = ? AND isActive = true LIMIT 1",
-          [input.username]
+          [input.username],
         );
 
         if (rows.length === 0) {
@@ -78,46 +98,48 @@ export const localAuthRouter = createRouter({
           throw new Error("Usuario o contraseña incorrectos");
         }
 
-        const token = await new SignJWT({ id: user.id, username: user.username, name: user.name, role: user.role, storeId: user.storeId })
-          .setProtectedHeader({ alg: "HS256" })
-          .setExpirationTime("7d")
-          .sign(JWT_SECRET);
-
+        const token = await signEmployeeToken(user);
         return {
           token,
-          user: { id: user.id, name: user.name, username: user.username, role: user.role, storeId: user.storeId }
+          user: {
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            role: user.role,
+            storeId: user.storeId,
+          },
         };
       } finally {
         await conn.end();
       }
     }),
 
-  // Register new employee
-  register: publicQuery
-    .input(z.object({
-      username: z.string().min(3),
-      password: z.string().min(4),
-      name: z.string(),
-      storeId: z.number(),
-      role: z.enum(["employee", "manager", "admin"]).default("employee"),
-    }))
+  // Register new employee — admin only (was open to the internet)
+  register: adminQuery
+    .input(
+      z.object({
+        username: z.string().min(3),
+        password: z.string().min(4),
+        name: z.string().min(1),
+        storeId: z.number(),
+        role: z.enum(["employee", "manager", "admin"]).default("employee"),
+      }),
+    )
     .mutation(async ({ input }) => {
       const conn = await getRawDb();
       try {
-        const [existing]: any = await conn.execute(
-          "SELECT id FROM employees WHERE username = ?",
-          [input.username]
-        );
+        const [existing]: any = await conn.execute("SELECT id FROM employees WHERE username = ?", [
+          input.username,
+        ]);
 
         if (existing.length > 0) {
           throw new Error("El usuario ya existe");
         }
 
         const hashedPassword = await bcrypt.hash(input.password, 10);
-
         const [result]: any = await conn.execute(
           "INSERT INTO employees (storeId, username, password, name, role) VALUES (?, ?, ?, ?, ?)",
-          [input.storeId, input.username, hashedPassword, input.name, input.role]
+          [input.storeId, input.username, hashedPassword, input.name, input.role],
         );
 
         return { id: Number(result.insertId) };
@@ -126,12 +148,11 @@ export const localAuthRouter = createRouter({
       }
     }),
 
-  // Get current user from token
   me: publicQuery
     .input(z.object({ token: z.string() }))
     .query(async ({ input }) => {
       try {
-        const { payload } = await jwtVerify(input.token, JWT_SECRET, { clockTolerance: 60 });
+        const { payload } = await jwtVerify(input.token, getJwtSecretKey(), { clockTolerance: 60 });
         return {
           id: payload.id as number,
           name: payload.name as string,
@@ -144,15 +165,19 @@ export const localAuthRouter = createRouter({
       }
     }),
 
-  // List employees by store
-  list: publicQuery
+  list: authedQuery
     .input(z.object({ storeId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      // Non-admins only see their own store
+      if (ctx.user.role !== "admin" && ctx.user.storeId !== input.storeId) {
+        throw new Error("No autorizado para esta tienda");
+      }
+
       const conn = await getRawDb();
       try {
         const [rows]: any = await conn.execute(
           "SELECT id, username, name, role, isActive, createdAt FROM employees WHERE storeId = ?",
-          [input.storeId]
+          [input.storeId],
         );
         return rows;
       } finally {
@@ -160,29 +185,10 @@ export const localAuthRouter = createRouter({
       }
     }),
 
-  // Seed default employees (idempotent)
-  seedDefaults: publicQuery
-    .mutation(async () => {
-      const conn = await getRawDb();
-      try {
-        // Check if German exists
-        const [existing]: any = await conn.execute(
-          "SELECT id FROM employees WHERE username = ?",
-          ["german"]
-        );
-
-        if (existing.length === 0) {
-          const hashedPassword = await bcrypt.hash("german123", 10);
-          await conn.execute(
-            "INSERT INTO employees (storeId, username, password, name, role) VALUES (?, ?, ?, ?, ?)",
-            [1, "german", hashedPassword, "German", "employee"]
-          );
-          return { created: true, message: "Usuario German creado exitosamente" };
-        }
-
-        return { created: false, message: "Usuario German ya existe" };
-      } finally {
-        await conn.end();
-      }
-    }),
+  // Disabled as a public bootstrap. Create users from Settings as admin instead.
+  seedDefaults: adminQuery.mutation(async () => {
+    throw new Error(
+      "seedDefaults está deshabilitado. Crea usuarios desde Configuración con una cuenta admin.",
+    );
+  }),
 });

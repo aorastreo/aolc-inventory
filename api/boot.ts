@@ -8,27 +8,36 @@ import { env } from "./lib/env";
 import { createOAuthCallbackHandler } from "./kimi/auth";
 import { Paths } from "@contracts/constants";
 
-// Seed default employee (German) on startup
+// Optional first-run seed. Never invent passwords in production.
 async function seedDefaultEmployee() {
+  const seedPassword = process.env.EMPLOYEE_SEED_PASSWORD?.trim();
+  if (!seedPassword) {
+    console.log("[SEED] Skipped (set EMPLOYEE_SEED_PASSWORD only when creating a missing account).");
+    return;
+  }
+
   try {
     const mysql = await import("mysql2/promise");
     const bcrypt = await import("bcryptjs");
     const conn = await mysql.default.createConnection(process.env.DATABASE_URL!);
+    const username = process.env.EMPLOYEE_SEED_USERNAME?.trim() || "german";
+    const name = process.env.EMPLOYEE_SEED_NAME?.trim() || "German";
+    const storeId = Number(process.env.EMPLOYEE_SEED_STORE_ID || "1");
 
     const [existing]: any = await conn.execute(
       "SELECT id FROM employees WHERE username = ?",
-      ["german"]
+      [username],
     );
 
     if (existing.length === 0) {
-      const hashedPassword = await bcrypt.default.hash("german123", 10);
+      const hashedPassword = await bcrypt.default.hash(seedPassword, 10);
       await conn.execute(
         "INSERT INTO employees (storeId, username, password, name, role) VALUES (?, ?, ?, ?, ?)",
-        [1, "german", hashedPassword, "German", "employee"]
+        [storeId, username, hashedPassword, name, "employee"],
       );
-      console.log("[SEED] Employee 'German' created successfully.");
+      console.log(`[SEED] Employee '${username}' created successfully.`);
     } else {
-      console.log("[SEED] Employee 'German' already exists.");
+      console.log(`[SEED] Employee '${username}' already exists.`);
     }
 
     await conn.end();

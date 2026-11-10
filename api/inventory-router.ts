@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, publicQuery, adminQuery } from "./middleware";
+import { createRouter, authedQuery, authedQuery, adminQuery, managerQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   stores, pallets, products, productDatabase,
@@ -71,7 +71,7 @@ async function getNextAutoBarcode(db: any): Promise<string> {
 
 export const inventoryRouter = createRouter({
   // ========== STORES ==========
-  stores: publicQuery.query(async () => {
+  stores: authedQuery.query(async () => {
     const db = getDb();
     return db.select().from(stores).where(eq(stores.isActive, true));
   }),
@@ -81,7 +81,7 @@ export const inventoryRouter = createRouter({
     return db.select().from(stores).orderBy(stores.id);
   }),
 
-  createStore: publicQuery
+  createStore: adminQuery
     .input(z.object({ name: z.string(), slug: z.string(), description: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -90,7 +90,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== PALLETS ==========
-  pallets: publicQuery
+  pallets: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -99,7 +99,7 @@ export const inventoryRouter = createRouter({
         .orderBy(desc(pallets.createdAt));
     }),
 
-  palletById: publicQuery
+  palletById: authedQuery
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -107,7 +107,7 @@ export const inventoryRouter = createRouter({
       return result[0] || null;
     }),
 
-  createPallet: publicQuery
+  createPallet: managerQuery
     .input(z.object({ storeId: z.number(), palletId: z.string(), description: z.string(), fecha: z.string().optional(), costo: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -123,7 +123,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(insertResult?.insertId || 0) };
     }),
 
-  updatePallet: publicQuery
+  updatePallet: managerQuery
     .input(z.object({ id: z.number(), palletId: z.string().optional(), description: z.string().optional(), costo: z.string().optional(), fecha: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -137,7 +137,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  deletePallet: publicQuery
+  deletePallet: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -145,7 +145,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  palletsWithStats: publicQuery
+  palletsWithStats: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -201,7 +201,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== PRODUCT SEARCH (for autocomplete) ==========
-  searchProductsSimilar: publicQuery
+  searchProductsSimilar: authedQuery
     .input(z.object({ storeId: z.number(), query: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -260,7 +260,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== PRODUCTS ==========
-  products: publicQuery
+  products: authedQuery
     .input(z.object({ storeId: z.number(), palletId: z.number().optional() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -274,7 +274,7 @@ export const inventoryRouter = createRouter({
         .orderBy(desc(products.createdAt));
     }),
 
-  createProduct: publicQuery
+  createProduct: managerQuery
     .input(z.object({ storeId: z.number(), palletId: z.number(), nombre: z.string(), precio: z.string(), cantidad: z.number().default(1), codigoBarras: z.string().optional(), codigo: z.string().optional(), esNuevo: z.boolean().default(false) }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -289,7 +289,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId), codigoBarras };
     }),
 
-  updateProduct: publicQuery
+  updateProduct: managerQuery
     .input(z.object({ id: z.number(), nombre: z.string().optional(), precio: z.string().optional(), cantidad: z.number().optional(), codigoBarras: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -298,7 +298,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  deleteProduct: publicQuery
+  deleteProduct: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -306,7 +306,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  searchProducts: publicQuery
+  searchProducts: authedQuery
     .input(z.object({ storeId: z.number(), query: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -317,7 +317,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== PRODUCT DATABASE ==========
-  productDatabase: publicQuery
+  productDatabase: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -325,7 +325,7 @@ export const inventoryRouter = createRouter({
         .where(and(eq(productDatabase.storeId, input.storeId), eq(productDatabase.isActive, true)));
     }),
 
-  searchProductDB: publicQuery
+  searchProductDB: authedQuery
     .input(z.object({ storeId: z.number(), query: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -335,7 +335,7 @@ export const inventoryRouter = createRouter({
       return all.filter(p => p.nombre.toLowerCase().includes(q) || (p.codigoBarras && p.codigoBarras.includes(q)));
     }),
 
-  createProductDB: publicQuery
+  createProductDB: managerQuery
     .input(z.object({ storeId: z.number(), nombre: z.string(), precio: z.string().optional(), codigoBarras: z.string().optional(), categoria: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -350,7 +350,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId), codigoBarras };
     }),
 
-  updateProductDB: publicQuery
+  updateProductDB: managerQuery
     .input(z.object({ id: z.number(), nombre: z.string().optional(), precio: z.string().optional(), codigoBarras: z.string().optional(), categoria: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -359,7 +359,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  deleteProductDB: publicQuery
+  deleteProductDB: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -367,7 +367,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  adjustmentsWithStats: publicQuery
+  adjustmentsWithStats: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -394,7 +394,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== ADJUSTMENTS ==========
-  adjustments: publicQuery
+  adjustments: authedQuery
     .input(z.object({ storeId: z.number(), palletId: z.number().optional() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -408,7 +408,7 @@ export const inventoryRouter = createRouter({
         .orderBy(desc(adjustments.createdAt));
     }),
 
-  adjustmentById: publicQuery
+  adjustmentById: authedQuery
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -416,14 +416,14 @@ export const inventoryRouter = createRouter({
       return result[0] || null;
     }),
 
-  adjustmentItems: publicQuery
+  adjustmentItems: authedQuery
     .input(z.object({ adjustmentId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
       return db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.adjustmentId));
     }),
 
-  createAdjustment: publicQuery
+  createAdjustment: managerQuery
     .input(z.object({ storeId: z.number(), palletId: z.number(), adjustmentId: z.string(), description: z.string().optional(), fecha: z.string().optional(), fechaHora: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -431,7 +431,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId) };
     }),
 
-  addAdjustmentItem: publicQuery
+  addAdjustmentItem: managerQuery
     .input(z.object({ adjustmentId: z.number(), nombre: z.string(), precio: z.string(), cantidad: z.number().default(1), codigoBarras: z.string().optional(), orden: z.number().default(1) }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -446,7 +446,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId), codigoBarras };
     }),
 
-  removeAdjustmentItem: publicQuery
+  removeAdjustmentItem: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -454,7 +454,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  updateAdjustmentItem: publicQuery
+  updateAdjustmentItem: managerQuery
     .input(z.object({ id: z.number(), nombre: z.string().optional(), precio: z.string().optional(), cantidad: z.number().optional(), codigoBarras: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -463,19 +463,22 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  completeAdjustment: publicQuery
+  completeAdjustment: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
 
-      // Get the adjustment to find the pallet/store
       const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id));
       if (!adj) throw new Error("Ajuste no encontrado");
+      if (adj.estado === "completado") {
+        throw new Error("Este ajuste ya fue completado. No se puede aplicar dos veces.");
+      }
+      if (adj.estado === "cancelado") {
+        throw new Error("Este ajuste esta cancelado.");
+      }
 
-      // Get all items from this adjustment
       const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.id));
 
-      // Insert each item as a product into the container (pallet)
       for (const item of items) {
         await db.insert(products).values({
           storeId: adj.storeId,
@@ -488,25 +491,27 @@ export const inventoryRouter = createRouter({
         });
       }
 
-      // Mark adjustment as completed
       await db.update(adjustments).set({ estado: "completado", completedAt: new Date() }).where(eq(adjustments.id, input.id));
       return { success: true, productsAdded: items.length };
     }),
 
-  applyAdjustmentToContainer: publicQuery
+  applyAdjustmentToContainer: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
 
-      // Get the adjustment to find the pallet/store
       const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id));
       if (!adj) throw new Error("Ajuste no encontrado");
+      if (adj.estado === "completado") {
+        throw new Error("Este ajuste ya fue completado. Usa una sola aplicacion.");
+      }
+      if (adj.estado === "cancelado") {
+        throw new Error("Este ajuste esta cancelado.");
+      }
 
-      // Get all items from this adjustment
       const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.id));
       if (items.length === 0) throw new Error("El ajuste no tiene articulos");
 
-      // Insert each item as a product into the container (pallet)
       let productsAdded = 0;
       for (const item of items) {
         await db.insert(products).values({
@@ -521,10 +526,11 @@ export const inventoryRouter = createRouter({
         productsAdded++;
       }
 
+      await db.update(adjustments).set({ estado: "completado", completedAt: new Date() }).where(eq(adjustments.id, input.id));
       return { success: true, productsAdded };
     }),
 
-  forceApplyAdjustment: publicQuery
+  forceApplyAdjustment: adminQuery
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -551,7 +557,7 @@ export const inventoryRouter = createRouter({
       return { success: true, productsAdded, palletId: adj.palletId };
     }),
 
-  cancelAdjustment: publicQuery
+  cancelAdjustment: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -560,7 +566,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== STORE CONFIG ==========
-  storeConfig: publicQuery
+  storeConfig: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -579,7 +585,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== CLOSINGS ==========
-  closings: publicQuery
+  closings: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -587,7 +593,7 @@ export const inventoryRouter = createRouter({
       return Array.isArray(rows) ? rows[0] : (rows.rows || rows);
     }),
 
-  createClosing: publicQuery
+  createClosing: authedQuery
     .input(z.object({ storeId: z.number(), fecha: z.string(), dia: z.string().optional(), hora: z.string().optional(), efectivo: z.string().default("0"), sinpe: z.string().default("0"), tarjeta: z.string().default("0"), sinFactura: z.string().default("0"), total: z.string().default("0"), inicial: z.string().default("50000"), observaciones: z.string().optional(), createdBy: z.string().optional(), registradoPor: z.string().optional(), semana: z.number().optional(), anio: z.number().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -631,7 +637,7 @@ export const inventoryRouter = createRouter({
       }
     }),
 
-  updateClosing: publicQuery
+  updateClosing: authedQuery
     .input(z.object({ id: z.number(), fecha: z.string().optional(), dia: z.string().optional(), efectivo: z.union([z.string(), z.number()]).optional(), sinpe: z.union([z.string(), z.number()]).optional(), tarjeta: z.union([z.string(), z.number()]).optional(), sinFactura: z.union([z.string(), z.number()]).optional(), total: z.union([z.string(), z.number()]).optional(), observaciones: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -668,7 +674,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  deleteClosing: publicQuery
+  deleteClosing: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -690,7 +696,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  pendingReviews: publicQuery
+  pendingReviews: authedQuery
     .query(async () => {
       const db = getDb();
       const rows = await db.execute(sql`SELECT * FROM closings ORDER BY createdAt DESC`);
@@ -699,7 +705,7 @@ export const inventoryRouter = createRouter({
       return (all || []).filter((c: any) => c.revisado === false || c.revisado === 0 || c.revisado === undefined);
     }),
 
-  closingStats: publicQuery
+  closingStats: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -766,7 +772,7 @@ export const inventoryRouter = createRouter({
       };
     }),
 
-  closingTrend: publicQuery
+  closingTrend: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -797,7 +803,7 @@ export const inventoryRouter = createRouter({
       return trend;
     }),
 
-  closingByPaymentMethod: publicQuery
+  closingByPaymentMethod: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -823,7 +829,7 @@ export const inventoryRouter = createRouter({
       ];
     }),
 
-  closingWeeklyBreakdown: publicQuery
+  closingWeeklyBreakdown: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -889,7 +895,7 @@ export const inventoryRouter = createRouter({
       };
     }),
 
-  closingReportByPeriod: publicQuery
+  closingReportByPeriod: authedQuery
     .input(z.object({ storeId: z.number(), desde: z.string(), hasta: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -942,7 +948,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== PRINTED LABELS (Etiquetas) ==========
-  adjustmentItemsForLabels: publicQuery
+  adjustmentItemsForLabels: authedQuery
     .input(z.object({ storeId: z.number(), adjustmentId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -967,7 +973,7 @@ export const inventoryRouter = createRouter({
       }));
     }),
 
-  productsForLabels: publicQuery
+  productsForLabels: authedQuery
     .input(z.object({ storeId: z.number(), palletId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -997,7 +1003,7 @@ export const inventoryRouter = createRouter({
       }));
     }),
 
-  markLabelsPrinted: publicQuery
+  markLabelsPrinted: authedQuery
     .input(z.object({ storeId: z.number(), palletId: z.number(), productIds: z.array(z.number()) }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1022,7 +1028,7 @@ export const inventoryRouter = createRouter({
       return { success: true, count: input.productIds.length };
     }),
 
-  unmarkLabelPrinted: publicQuery
+  unmarkLabelPrinted: authedQuery
     .input(z.object({ storeId: z.number(), palletId: z.number(), productId: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1036,14 +1042,14 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== ASSEMBLERS ==========
-  assemblers: publicQuery
+  assemblers: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
       return db.select().from(assemblers).where(and(eq(assemblers.storeId, input.storeId), eq(assemblers.isActive, true)));
     }),
 
-  createAssembler: publicQuery
+  createAssembler: managerQuery
     .input(z.object({ storeId: z.number(), nombre: z.string(), telefono: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1051,7 +1057,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId) };
     }),
 
-  deleteAssembler: publicQuery
+  deleteAssembler: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1060,7 +1066,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== DASHBOARD STATS ==========
-  dashboardStats: publicQuery
+  dashboardStats: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -1085,7 +1091,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== EMPLOYEES ==========
-  employees: publicQuery
+  employees: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -1093,14 +1099,14 @@ export const inventoryRouter = createRouter({
         .from(employees).where(eq(employees.storeId, input.storeId));
     }),
 
-  allEmployees: publicQuery
+  allEmployees: authedQuery
     .query(async () => {
       const db = getDb();
       return db.select({ id: employees.id, username: employees.username, name: employees.name, role: employees.role, storeId: employees.storeId, isActive: employees.isActive, createdAt: employees.createdAt })
         .from(employees).where(eq(employees.isActive, true));
     }),
 
-  createEmployee: publicQuery
+  createEmployee: adminQuery
     .input(z.object({ storeId: z.number(), username: z.string(), password: z.string(), name: z.string(), role: z.enum(["employee", "manager", "admin"]).default("employee") }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1109,7 +1115,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId) };
     }),
 
-  deleteEmployee: publicQuery
+  deleteEmployee: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1118,7 +1124,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== SEARCH PRODUCT BY BARCODE (anywhere) ==========
-  searchProductByBarcode: publicQuery
+  searchProductByBarcode: authedQuery
     .input(z.object({ storeId: z.number(), barcode: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -1154,7 +1160,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== TRANSFERS ==========
-  createTransfer: publicQuery
+  createTransfer: managerQuery
     .input(z.object({ fromStoreId: z.number(), toStoreId: z.number(), fecha: z.string() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1162,7 +1168,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId) };
     }),
 
-  getTransfers: publicQuery
+  getTransfers: authedQuery
     .input(z.object({ storeId: z.number().optional() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -1174,14 +1180,14 @@ export const inventoryRouter = createRouter({
       return db.select().from(transfers).orderBy(desc(transfers.createdAt));
     }),
 
-  getTransferItems: publicQuery
+  getTransferItems: authedQuery
     .input(z.object({ transferId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
       return db.select().from(transferItems).where(eq(transferItems.transferId, input.transferId)).orderBy(transferItems.orden);
     }),
 
-  addTransferItem: publicQuery
+  addTransferItem: managerQuery
     .input(z.object({ transferId: z.number(), codigoBarras: z.string().optional(), nombre: z.string(), precio: z.string(), cantidad: z.number().default(1), orden: z.number().default(1) }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1189,7 +1195,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId) };
     }),
 
-  removeTransferItem: publicQuery
+  removeTransferItem: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1197,7 +1203,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  completeTransfer: publicQuery
+  completeTransfer: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1205,7 +1211,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  cancelTransfer: publicQuery
+  cancelTransfer: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1214,20 +1220,20 @@ export const inventoryRouter = createRouter({
     }),
 
   // ========== STORE EMPLOYEES (nombres para cierre) ==========
-  storeEmployees: publicQuery
+  storeEmployees: authedQuery
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
       return db.select().from(storeEmployees).where(and(eq(storeEmployees.storeId, input.storeId), eq(storeEmployees.isActive, true)));
     }),
 
-  allStoreEmployees: publicQuery
+  allStoreEmployees: authedQuery
     .query(async () => {
       const db = getDb();
       return db.select().from(storeEmployees).where(eq(storeEmployees.isActive, true));
     }),
 
-  createStoreEmployee: publicQuery
+  createStoreEmployee: managerQuery
     .input(z.object({ storeId: z.number(), nombre: z.string() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1235,7 +1241,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId) };
     }),
 
-  deleteStoreEmployee: publicQuery
+  deleteStoreEmployee: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1244,7 +1250,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // Fix: move employees from Bodega (storeId 1) to new Los Chiles store
-  fixLosChilesEmployees: publicQuery
+  fixLosChilesEmployees: adminQuery
     .mutation(async () => {
       const db = getDb();
       // Find Los Chiles store (not Bodega = id 1)
@@ -1274,7 +1280,7 @@ export const inventoryRouter = createRouter({
   // ============================================
 
   // -- Employees --
-  payrollEmployees: publicQuery
+  payrollEmployees: authedQuery
     .input(z.object({ storeId: z.number().optional() }).optional())
     .query(async ({ input }) => {
       const db = getDb();
@@ -1284,7 +1290,7 @@ export const inventoryRouter = createRouter({
       return await db.select().from(payrollEmployees).where(eq(payrollEmployees.isActive, true));
     }),
 
-  createPayrollEmployee: publicQuery
+  createPayrollEmployee: adminQuery
     .input(z.object({
       storeId: z.number(), nombre: z.string(), apellidos: z.string(),
       puesto: z.string(), salarioBase: z.string(), fechaIngreso: z.string(),
@@ -1324,7 +1330,7 @@ export const inventoryRouter = createRouter({
       }
     }),
 
-  updatePayrollEmployee: publicQuery
+  updatePayrollEmployee: adminQuery
     .input(z.object({
       id: z.number(), cedula: z.string().optional(), nombre: z.string().optional(), apellidos: z.string().optional(),
       puesto: z.string().optional(), salarioBase: z.string().optional(), tipoSalario: z.enum(["quincenal", "mensual", "semanal", "hora"]).optional(),
@@ -1338,7 +1344,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  deletePayrollEmployee: publicQuery
+  deletePayrollEmployee: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1347,13 +1353,13 @@ export const inventoryRouter = createRouter({
     }),
 
   // -- Periods --
-  payrollPeriods: publicQuery
+  payrollPeriods: authedQuery
     .query(async () => {
       const db = getDb();
       return await db.select().from(payrollPeriods).where(eq(payrollPeriods.isActive, true)).orderBy(desc(payrollPeriods.id));
     }),
 
-  createPayrollPeriod: publicQuery
+  createPayrollPeriod: adminQuery
     .input(z.object({
       nombre: z.string(), tipo: z.enum(["quincenal", "mensual", "semanal"]),
       fechaInicio: z.string(), fechaFin: z.string(),
@@ -1364,7 +1370,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId) };
     }),
 
-  updatePayrollPeriod: publicQuery
+  updatePayrollPeriod: adminQuery
     .input(z.object({
       id: z.number(), nombre: z.string().optional(), estado: z.enum(["abierto", "cerrado", "procesando"]).optional(),
     }))
@@ -1376,7 +1382,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // -- Payments --
-  payrollPayments: publicQuery
+  payrollPayments: authedQuery
     .input(z.object({ periodId: z.number().optional(), employeeId: z.number().optional() }).optional())
     .query(async ({ input }) => {
       const db = getDb();
@@ -1394,7 +1400,7 @@ export const inventoryRouter = createRouter({
       return await db.select().from(payrollPayments).orderBy(desc(payrollPayments.id));
     }),
 
-  createPayrollPayment: publicQuery
+  createPayrollPayment: adminQuery
     .input(z.object({
       employeeId: z.number(), periodId: z.number(), salarioBase: z.string(),
       horasExtra: z.string().optional(), montoHorasExtra: z.string().optional(),
@@ -1436,7 +1442,7 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId) };
     }),
 
-  updatePayrollPayment: publicQuery
+  updatePayrollPayment: adminQuery
     .input(z.object({
       id: z.number(), salarioBase: z.string().optional(), horasExtra: z.string().optional(),
       montoHorasExtra: z.string().optional(), comisiones: z.string().optional(),
@@ -1480,7 +1486,7 @@ export const inventoryRouter = createRouter({
       return { success: true };
     }),
 
-  deletePayrollPayment: publicQuery
+  deletePayrollPayment: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -1489,7 +1495,7 @@ export const inventoryRouter = createRouter({
     }),
 
   // -- Payroll Report --
-  payrollReportByPeriod: publicQuery
+  payrollReportByPeriod: authedQuery
     .input(z.object({ periodId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
