@@ -130,7 +130,7 @@ function buildZplBatch(
   const dpi = 203;
   const pw = Math.round((opts.widthMm / 25.4) * dpi);
   const ll = Math.round((opts.heightMm / 25.4) * dpi);
-  const clean = (s: string) => s.replace(/[\^~]/n/g, " ").slice(0, 40);
+  const clean = (s: string) => s.replace(/[\^~\r\n]/g, " ").slice(0, 40);
   const parts: string[] = [];
   for (const item of items) {
     const name = clean(item.nombre.toUpperCase());
