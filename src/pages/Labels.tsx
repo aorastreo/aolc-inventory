@@ -121,7 +121,10 @@ function buildZplBatch(
   const pw = Math.round((opts.widthMm / 25.4) * dpi);
   const ll = Math.round((opts.heightMm / 25.4) * dpi);
   const clean = (s: string) => s.replace(/[\^~\r\n]/g, " ").slice(0, 40);
-  const rot = Number(opts.rotation) === 180 ? "^POI" : "^PON";
+  // ^PON normal, ^POI invert 180; for 90/270 use field orientation ^FWR / ^FWB
+  const rot = Number(opts.rotation) || 0;
+  const po = rot === 180 ? "^POI" : "^PON";
+  const fw = rot === 90 ? "^FWR" : rot === 270 ? "^FWB" : "^FWN";
   const parts: string[] = [];
   for (const item of items) {
     const name = clean(item.nombre.toUpperCase());
@@ -131,7 +134,8 @@ function buildZplBatch(
       `${opts.showDate ? getLocalDateString() + " - " : ""}${opts.footer}`,
     );
     parts.push(`^XA
-${rot}
+${po}
+${fw}
 ^PW${pw}
 ^LL${ll}
 ^LH0,0

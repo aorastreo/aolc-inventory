@@ -202,25 +202,23 @@ export default function LabelConfigPage() {
               Estandar ZD411: 50mm × 25mm = 2 × 1 pulgadas
             </p>
             <div className="mt-3">
-              <Label className="text-xs mb-1 block">Rotacion (si el rollo sale al reves)</Label>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={Number(s("rotation")) === 0 ? "default" : "outline"}
-                  onClick={() => update("rotation", 0)}
-                >
-                  0°
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={Number(s("rotation")) === 180 ? "default" : "outline"}
-                  onClick={() => update("rotation", 180)}
-                >
-                  180°
-                </Button>
+              <Label className="text-xs mb-1 block">Rotacion (si el pie queda al lado, prueba 90° o 270°)</Label>
+              <div className="flex flex-wrap gap-2">
+                {([0, 90, 180, 270] as const).map((deg) => (
+                  <Button
+                    key={deg}
+                    type="button"
+                    size="sm"
+                    variant={Number(s("rotation")) === deg ? "default" : "outline"}
+                    onClick={() => update("rotation", deg)}
+                  >
+                    {deg}°
+                  </Button>
+                ))}
               </div>
+              <p className="text-[11px] mt-2" style={{ color: "hsl(207 20% 55%)" }}>
+                Si el pie sale a la derecha: empieza con <strong>90°</strong>, guarda y prueba 1 etiqueta. Si no, prueba <strong>270°</strong>.
+              </p>
             </div>
           </div>
 

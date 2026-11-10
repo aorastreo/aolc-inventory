@@ -36,7 +36,7 @@ export const LABEL_DEFAULTS = {
   showFooter: true,
   showDate: true,
   footerText: "American Outlet Los Chiles",
-  /** 0 or 180 — Zebra media sometimes feeds upside-down */
+  /** 0 | 90 | 180 | 270 — compensate Zebra/driver orientation */
   rotation: 0,
   /** Max chars per line for product name (2 lines) */
   nameMaxCharsPerLine: 28,
@@ -172,11 +172,11 @@ export function buildLabelHtml(
   const barcodeSvg = opts?.barcodeSvg ?? (code ? generateBarcodeSVG(code, barcodeH) : "");
   const footer =
     `${cfg.showDate ? getLocalDateString() + " - " : ""}${cfg.footerText || ""}`;
-  const rot = Number(cfg.rotation) === 180 ? 180 : 0;
-  // Only apply transform when needed — rotate(0) still shifts some print drivers
-  const rotStyle = rot === 180
-    ? "transform:rotate(180deg);transform-origin:center center;"
-    : "";
+  const rot = normalizeRotation(cfg.rotation);
+  // Only apply transform when needed — rotate(0) shifts some print drivers
+  const rotStyle = rot === 0
+    ? ""
+    : `transform:rotate(${rot}deg);transform-origin:center center;`;
 
   return `<div class="label-page" style="width:${cfg.labelWidth};height:${cfg.labelHeight};position:relative;background:#fff;margin:0;padding:0;box-sizing:border-box;overflow:hidden;font-family:${cfg.nameFontFamily || "Arial Narrow"}, Arial, sans-serif;${rotStyle}">
   <div style="position:absolute;top:${cfg.nameTop};left:1mm;right:1mm;font-size:${cfg.nameFontSize};font-weight:${cfg.nameFontWeight};font-family:${cfg.nameFontFamily}, Arial, sans-serif;color:#000;letter-spacing:0.2px;line-height:1.1;text-align:${cfg.nameTextAlign};">${nameHtml}</div>
@@ -190,9 +190,41 @@ export function buildLabelHtml(
 </div>`;
 }
 
+export function normalizeRotation(raw: unknown): 0 | 90 | 180 | 270 {
+  const n = Number(raw);
+  if (n === 90 || n === 180 || n === 270) return n;
+  return 0;
+}
+
+/** Page size for @page — swap sides when content is rotated 90/270. */
+export function pageSizeForRotation(cfg: LabelConfigValues): { pageW: string; pageH: string; designW: string; designH: string; rot: 0 | 90 | 180 | 270 } {
+  const designW = String(cfg.labelWidth || "50mm");
+  const designH = String(cfg.labelHeight || "25mm");
+  const rot = normalizeRotation(cfg.rotation);
+  if (rot === 90 || rot === 270) {
+    return { pageW: designH, pageH: designW, designW, designH, rot };
+  }
+  return { pageW: designW, pageH: designH, designW, designH, rot };
+}
+
+/**
+ * Wrap each top-level .label-page in a .label-sheet when page size is swapped (90/270).
+ * labelsHtml is a concatenation of label-page divs from buildLabelHtml.
+ */
+function wrapLabelsForSwappedPage(labelsHtml: string): string {
+  // Each buildLabelHtml output starts with <div class="label-page" ...> ... </div>
+  const parts = labelsHtml
+    .split(/(?=<div class="label-page")/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return parts.map((p) => `<div class="label-sheet">${p}</div>`).join("\n");
+}
+
 export function buildPrintDocumentHtml(labelsHtml: string, cfg: LabelConfigValues): string {
-  const w = cfg.labelWidth || "50mm";
-  const h = cfg.labelHeight || "25mm";
+  const { pageW, pageH, designW, designH, rot } = pageSizeForRotation(cfg);
+  const needsSwap = rot === 90 || rot === 270;
+  const body = needsSwap ? wrapLabelsForSwappedPage(labelsHtml) : labelsHtml;
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -202,36 +234,51 @@ export function buildPrintDocumentHtml(labelsHtml: string, cfg: LabelConfigValue
     html, body {
       margin: 0 !important;
       padding: 0 !important;
-      width: ${w};
+      width: ${pageW};
       background: #fff;
     }
     * { box-sizing: border-box; }
     @page {
-      size: ${w} ${h};
+      size: ${pageW} ${pageH};
       margin: 0 !important;
     }
     @media print {
       html, body {
         margin: 0 !important;
         padding: 0 !important;
-        width: ${w} !important;
+        width: ${pageW} !important;
       }
-      .label-page {
-        width: ${w} !important;
-        height: ${h} !important;
-        page-break-after: always;
-        break-after: page;
+      .label-sheet, .label-page {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
-      .label-page:last-child {
-        page-break-after: auto;
-        break-after: auto;
-      }
+    }
+    ${needsSwap ? `
+    .label-sheet {
+      width: ${pageW};
+      height: ${pageH};
+      position: relative;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
+    }
+    .label-sheet:last-child {
+      page-break-after: auto;
+      break-after: auto;
     }
     .label-page {
-      width: ${w};
-      height: ${h};
+      width: ${designW} !important;
+      height: ${designH} !important;
+      position: absolute !important;
+      left: 50%;
+      top: 50%;
+      margin-left: calc(${designW} / -2);
+      margin-top: calc(${designH} / -2);
+    }
+    ` : `
+    .label-page {
+      width: ${designW};
+      height: ${designH};
       page-break-after: always;
       break-after: page;
     }
@@ -239,10 +286,11 @@ export function buildPrintDocumentHtml(labelsHtml: string, cfg: LabelConfigValue
       page-break-after: auto;
       break-after: auto;
     }
+    `}
   </style>
 </head>
 <body>
-${labelsHtml}
+${body}
 </body>
 </html>`;
 }
