@@ -56,6 +56,43 @@ app.get(Paths.oauthCallback, createOAuthCallbackHandler());
 const { initRoute } = await import("./init-route.ts");
 initRoute(app);
 
+/**
+ * Temporary image hosting so Google Lens / reverse image search can fetch the photo.
+ * POST JSON { imageBase64, mimeType? } → { id, publicUrl, lensUrl, imagesUrl }
+ * GET  /api/lens-image/:id → raw image bytes (short TTL)
+ */
+app.post("/api/lens-image", async (c) => {
+  try {
+    const body = await c.req.json();
+    const imageBase64 = String(body?.imageBase64 || "");
+    const mimeType = String(body?.mimeType || "image/jpeg");
+    if (imageBase64.length < 40) return c.json({ error: "Falta imagen" }, 400);
+
+    const { putTempImage, buildPublicImageUrl, buildLensSearchUrls } = await import("./lib/temp-images");
+    const id = putTempImage(imageBase64, mimeType);
+    const publicUrl = buildPublicImageUrl(c.req.raw, id);
+    const urls = buildLensSearchUrls(publicUrl);
+    return c.json({ id, publicUrl, lensUrl: urls.lens, imagesUrl: urls.images });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Error subiendo imagen" }, 400);
+  }
+});
+
+app.get("/api/lens-image/:id", async (c) => {
+  const { getTempImage } = await import("./lib/temp-images");
+  const img = getTempImage(c.req.param("id"));
+  if (!img) return c.json({ error: "Imagen expirada o no encontrada" }, 404);
+  return new Response(new Uint8Array(img.bytes), {
+    status: 200,
+    headers: {
+      "Content-Type": img.mimeType,
+      "Cache-Control": "public, max-age=600",
+      // Allow Googlebot / Lens to fetch
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
+});
+
 app.use("/api/trpc/*", async (c) => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",

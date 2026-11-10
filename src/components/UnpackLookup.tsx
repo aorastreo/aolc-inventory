@@ -40,6 +40,9 @@ export default function UnpackLookup({ value, onChange }: Props) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoBase64, setPhotoBase64] = useState<string | null>(null);
+  const [photoMime, setPhotoMime] = useState("image/jpeg");
+  const [lensBusy, setLensBusy] = useState(false);
 
   const lookupMode =
     mode === "codigo" ? "codigo" as const
@@ -115,11 +118,6 @@ export default function UnpackLookup({ value, onChange }: Props) {
     onError: (e) => setError(e.message),
   });
 
-  const suggestPhoto = trpc.inventory.suggestPriceFromPhoto.useMutation({
-    onSuccess: (res) => applySuggestion(res),
-    onError: (e) => setError(e.message),
-  });
-
   const suggestUsd = trpc.inventory.suggestPriceFromUsd.useMutation({
     onSuccess: (res) => applySuggestion(res),
     onError: (e) => setError(e.message),
@@ -144,15 +142,51 @@ export default function UnpackLookup({ value, onChange }: Props) {
       return;
     }
     setError(null);
+    setNote(null);
+    setReferencias([]);
+    setFuentePrincipal(null);
+    setBand(null);
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result || "");
       setPhotoPreview(dataUrl);
-      const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
-      suggestPhoto.mutate({ imageBase64: base64, mimeType: file.type || "image/jpeg" });
+      setPhotoBase64(dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl);
+      setPhotoMime(file.type || "image/jpeg");
+      setNeedsManualUsd(true);
+      setNote("Foto lista. Pulsa “Google Lens” para buscar el producto real. Luego pega el $ USA aqui.");
     };
     reader.onerror = () => setError("No se pudo leer la imagen");
     reader.readAsDataURL(file);
+  };
+
+  const openGoogleImageSearch = async (kind: "lens" | "images") => {
+    if (!photoBase64) {
+      setError("Primero toma o carga una foto");
+      return;
+    }
+    setLensBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/lens-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: photoBase64, mimeType: photoMime }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "No se pudo preparar la imagen");
+      const url = kind === "lens" ? data.lensUrl : data.imagesUrl;
+      if (!url) throw new Error("No se genero el link de Google");
+      window.open(url, "_blank", "noopener,noreferrer");
+      setNote(
+        kind === "lens"
+          ? "Se abrio Google Lens con tu foto. Busca el producto, copia el precio USA ($) y pegalo abajo."
+          : "Se abrio Google Imagenes con tu foto. Busca el producto, copia el precio USA ($) y pegalo abajo.",
+      );
+    } catch (e: any) {
+      setError(e?.message || "Error abriendo Google");
+    } finally {
+      setLensBusy(false);
+    }
   };
 
   const tabs: { id: Mode; label: string; icon: typeof Search }[] = [
@@ -164,7 +198,7 @@ export default function UnpackLookup({ value, onChange }: Props) {
     { id: "usd", label: "USD", icon: Sparkles },
   ];
 
-  const busy = suggestLink.isPending || suggestPhoto.isPending || suggestUsd.isPending;
+  const busy = suggestLink.isPending || suggestUsd.isPending || lensBusy;
 
   return (
     <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "hsl(210 20% 90%)", background: "hsl(0 0% 99%)" }}>
@@ -297,8 +331,7 @@ export default function UnpackLookup({ value, onChange }: Props) {
 
       {mode === "foto" && (
         <div className="space-y-2">
-          <Label className="text-xs">Foto del articulo (caja o producto)</Label>
-          {/* Cámara — capture fuerza la cámara en móvil */}
+          <Label className="text-xs">Foto del articulo → buscar con Google (como la camara de Google)</Label>
           <input
             ref={cameraRef}
             type="file"
@@ -310,7 +343,6 @@ export default function UnpackLookup({ value, onChange }: Props) {
               e.target.value = "";
             }}
           />
-          {/* Galería / archivos — sin capture para poder cargar */}
           <input
             ref={uploadRef}
             type="file"
@@ -345,41 +377,57 @@ export default function UnpackLookup({ value, onChange }: Props) {
               Cargar foto
             </Button>
           </div>
-          {suggestPhoto.isPending && (
-            <p className="text-xs font-medium" style={{ color: BRAND_BLUE }}>Analizando foto...</p>
-          )}
           {photoPreview && (
             <div className="rounded-md border overflow-hidden" style={{ borderColor: "hsl(210 20% 90%)" }}>
               <img src={photoPreview} alt="Vista previa" className="max-h-40 w-full object-contain bg-white" />
             </div>
           )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Button
+              type="button"
+              className="w-full h-11 font-semibold"
+              disabled={busy || !photoBase64}
+              onClick={() => openGoogleImageSearch("lens")}
+              style={{ background: BRAND_RED }}
+            >
+              {lensBusy ? "Abriendo..." : "Buscar con Google Lens"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-11"
+              disabled={busy || !photoBase64}
+              onClick={() => openGoogleImageSearch("images")}
+              style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}
+            >
+              Buscar en Google Imagenes
+            </Button>
+          </div>
           <p className="text-[10px]" style={{ color: "hsl(207 20% 55%)" }}>
-            La foto lee marca/modelo/SKU de la caja y te da links de busqueda exactos. No inventa precio de Amazon: abre el link, mira el $ y pegalo abajo.
+            No inventamos el producto: se abre Google con TU foto (igual que el icono de camara de Google). Ahi ves el articulo real, copias el $ USA y lo pegas abajo.
           </p>
-          {(needsManualUsd || mode === "foto") && (
-            <div className="rounded-md border p-3 space-y-2" style={{ borderColor: "hsl(210 20% 90%)", background: "white" }}>
-              <p className="text-[11px] font-medium" style={{ color: BRAND_BLUE }}>
-                Despues de abrir un link, pega aqui el precio USA ($)
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={usdManual}
-                  placeholder="Ej: 29.99"
-                  onChange={(e) => setUsdManual(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  disabled={busy || !Number(usdManual)}
-                  onClick={() => suggestUsd.mutate({ usd: Number(usdManual) })}
-                  style={{ background: BRAND_RED }}
-                >
-                  Convertir
-                </Button>
-              </div>
+          <div className="rounded-md border p-3 space-y-2" style={{ borderColor: "hsl(210 20% 90%)", background: "white" }}>
+            <p className="text-[11px] font-medium" style={{ color: BRAND_BLUE }}>
+              Precio USA ($) que viste en Google
+            </p>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                step="0.01"
+                value={usdManual}
+                placeholder="Ej: 29.99"
+                onChange={(e) => setUsdManual(e.target.value)}
+              />
+              <Button
+                type="button"
+                disabled={busy || !Number(usdManual)}
+                onClick={() => suggestUsd.mutate({ usd: Number(usdManual) })}
+                style={{ background: BRAND_RED }}
+              >
+                Convertir
+              </Button>
             </div>
-          )}
+          </div>
         </div>
       )}
 
