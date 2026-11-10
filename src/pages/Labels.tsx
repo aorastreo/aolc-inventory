@@ -241,9 +241,12 @@ export default function LabelsPage() {
     },
   });
 
-  const { data: labelCfg } = trpc.labelConfig.get.useQuery({ storeId });
+  const { data: labelCfg, refetch: refetchLabelCfg } = trpc.labelConfig.get.useQuery(
+    { storeId },
+    { refetchOnMount: "always", refetchOnWindowFocus: true, staleTime: 0 },
+  );
 
-  // Sync showPrice from saved config once
+  // Sync local toggles from saved config (config page is source of truth for layout)
   useEffect(() => {
     if (labelCfg && typeof labelCfg.showPrice === "boolean") {
       setShowPrice(labelCfg.showPrice ? "si" : "no");
@@ -252,7 +255,7 @@ export default function LabelsPage() {
       const key = `${parseInt(String(labelCfg.labelWidth), 10)}x${parseInt(String(labelCfg.labelHeight), 10)}`;
       if (LABEL_SIZES[key]) setLabelSize(key);
     }
-  }, [labelCfg?.showPrice, labelCfg?.labelWidth, labelCfg?.labelHeight]);
+  }, [labelCfg]);
 
   // After print dialog: ask before marking (cancel in dialog must not auto-mark)
   useEffect(() => {
@@ -318,28 +321,41 @@ export default function LabelsPage() {
     });
   };
 
-  const resolvedSize = LABEL_SIZES[labelSize] || LABEL_SIZES["50x25"];
-  const labelWidth = resolvedSize.w;
-  const labelHeight = resolvedSize.h;
   const effectiveShowPrice = showPrice === "si";
-  const printCfg = useMemo(() => {
-    const merged = mergeLabelConfig(labelCfg as Record<string, unknown> | null);
-    return {
-      ...merged,
-      labelWidth,
-      labelHeight,
-      showPrice: effectiveShowPrice,
-    };
-  }, [labelCfg, labelWidth, labelHeight, effectiveShowPrice]);
 
-  const openBrowserPrint = (items: LabelItem[], productIds: number[]) => {
+  /** Always prefer saved Label Config; size dropdown only overrides when user picks another preset. */
+  const buildPrintCfg = (rawCfg: Record<string, unknown> | null | undefined) => {
+    const merged = mergeLabelConfig(rawCfg);
+    const cfgKey = `${parseInt(String(merged.labelWidth), 10)}x${parseInt(String(merged.labelHeight), 10)}`;
+    if (labelSize && labelSize !== cfgKey && LABEL_SIZES[labelSize]) {
+      merged.labelWidth = LABEL_SIZES[labelSize].w;
+      merged.labelHeight = LABEL_SIZES[labelSize].h;
+    }
+    merged.showPrice = effectiveShowPrice;
+    return merged;
+  };
+
+  const printCfg = useMemo(
+    () => buildPrintCfg(labelCfg as Record<string, unknown> | null),
+    [labelCfg, labelSize, effectiveShowPrice],
+  );
+
+  const labelWidth = String(printCfg.labelWidth || "50mm");
+  const labelHeight = String(printCfg.labelHeight || "25mm");
+
+  const openBrowserPrint = (
+    items: LabelItem[],
+    productIds: number[],
+    cfg: ReturnType<typeof buildPrintCfg>,
+  ) => {
     if (!refId) return;
+    const barcodeH = Math.max(12, Math.round((parseFloat(String(cfg.barcodeHeight)) / 25.4) * 96)) || 30;
     const labelsHtml = items.map((item) =>
       buildLabelHtml(
         { nombre: item.nombre, precio: item.precio, codigoBarras: item.codigoBarras },
-        printCfg,
+        cfg,
         {
-          barcodeSvg: item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "",
+          barcodeSvg: item.codigoBarras ? generateBarcodeSVG(item.codigoBarras, barcodeH) : "",
           forceShowPrice: effectiveShowPrice,
         },
       ),
@@ -359,7 +375,7 @@ export default function LabelsPage() {
       setPrinting(false);
       return;
     }
-    const doc = buildPrintDocumentHtml(labelsHtml, printCfg);
+    const doc = buildPrintDocumentHtml(labelsHtml, cfg);
     popup.document.write(doc.replace(
       "</body>",
       `<script>
@@ -386,6 +402,16 @@ export default function LabelsPage() {
     setPrinting(true);
     setPrintNote(null);
 
+    // Fresh config from DB so print matches Configuracion de Etiquetas
+    let freshRaw: Record<string, unknown> | null = labelCfg as Record<string, unknown> | null;
+    try {
+      const res = await refetchLabelCfg();
+      if (res.data) freshRaw = res.data as Record<string, unknown>;
+    } catch {
+      // keep cached
+    }
+    const cfg = buildPrintCfg(freshRaw);
+
     const selectedItemsList = sorted.filter(p => selectedProducts.has(p.id));
     const expanded = expandItems(selectedItemsList, labelQuantities, labelNames);
     if (expanded.length === 0) {
@@ -395,17 +421,17 @@ export default function LabelsPage() {
     }
 
     const productIds = Array.from(selectedProducts);
-    const widthMm = parseInt(labelWidth, 10) || 50;
-    const heightMm = parseInt(labelHeight, 10) || 25;
+    const widthMm = parseInt(String(cfg.labelWidth), 10) || 50;
+    const heightMm = parseInt(String(cfg.labelHeight), 10) || 25;
 
     if (preferZebraDirect) {
       const zpl = buildZplBatch(expanded, {
         widthMm,
         heightMm,
         showPrice: effectiveShowPrice,
-        footer: String(printCfg.footerText || "American Outlet Los Chiles"),
-        showDate: !!printCfg.showDate,
-        rotation: Number(printCfg.rotation) || 0,
+        footer: String(cfg.footerText || "American Outlet Los Chiles"),
+        showDate: !!cfg.showDate,
+        rotation: Number(cfg.rotation) || 0,
       });
       const result = await tryZebraBrowserPrint(zpl);
       if (result.ok) {
@@ -423,7 +449,7 @@ export default function LabelsPage() {
       setPrintNote(result.message);
     }
 
-    openBrowserPrint(expanded, productIds);
+    openBrowserPrint(expanded, productIds, cfg);
   };
 
   const filtered = useMemo(() => {
@@ -813,7 +839,10 @@ export default function LabelsPage() {
             <div className="p-4 rounded-lg border text-xs space-y-2" style={{ background: "hsl(0 0% 98%)", borderColor: "hsl(210 20% 92%)" }}>
               <p style={{ color: "hsl(207 20% 45%)" }}>
                 <AlertCircle className="w-3.5 h-3.5 inline mr-1" style={{ color: "#B45309" }} />
-                <strong>Dialogo del sistema:</strong> elige <strong>Zebra ZD411</strong>, tamano de pagina {labelWidth}×{labelHeight}, margenes en 0. Se marca “impresa” al cerrar el dialogo.
+                <strong>Dialogo del sistema:</strong> elige <strong>Zebra ZD411</strong>, pagina {labelWidth}×{labelHeight}, margenes <strong>0</strong>, desactiva “Ajustar/Fit to page”. Si sale corrido, casi siempre son margenes o scale del dialogo — no el diseno.
+              </p>
+              <p style={{ color: "hsl(207 20% 45%)" }}>
+                El layout sale de <Link to="/label-config" className="underline" style={{ color: BRAND_BLUE }}>Configuracion de Etiquetas</Link> (hay que <strong>Guardar</strong> alla). Esta pantalla solo elige articulos y si muestra precio.
               </p>
               <p style={{ color: "hsl(207 20% 45%)" }}>
                 <strong>Enviar a Zebra ZD411:</strong> usa Zebra Browser Print si esta instalado en la PC (ZPL directo). Si no, cae al dialogo del sistema.

@@ -98,7 +98,10 @@ export const labelConfigRouter = createRouter({
         for (const f of ALL_FIELDS) result[f] = r[f] ?? D[f];
         result.footerText = r.footerText ?? D.footerText;
         for (const f of BOOL_FIELDS) result[f] = !!r[f];
-        for (const f of NUM_FIELDS) result[f] = Number(r[f] ?? D[f]) || Number(D[f]);
+        for (const f of NUM_FIELDS) {
+          const n = Number(r[f]);
+          result[f] = Number.isFinite(n) ? n : Number(D[f]);
+        }
         return result;
       } finally { await conn.end(); }
     }),

@@ -104,10 +104,10 @@ export default function LabelConfigPage() {
   const s = (k: keyof typeof LABEL_DEFAULTS | string) =>
     (config[k] ?? (LABEL_DEFAULTS as any)[k]) as any;
 
-  const barcodeSvg = useMemo(
-    () => generateBarcodeSVG(PREVIEW_ITEM.codigoBarras),
-    [],
-  );
+  const barcodeSvg = useMemo(() => {
+    const h = Math.max(12, Math.round((parseFloat(String(config.barcodeHeight)) / 25.4) * 96)) || 30;
+    return generateBarcodeSVG(PREVIEW_ITEM.codigoBarras, h);
+  }, [config.barcodeHeight]);
 
   const previewHtml = useMemo(
     () => buildLabelHtml(PREVIEW_ITEM, config, { barcodeSvg }),
@@ -119,8 +119,9 @@ export default function LabelConfigPage() {
   }, [previewHtml]);
 
   const handleTestPrint = () => {
+    const h = Math.max(12, Math.round((parseFloat(String(config.barcodeHeight)) / 25.4) * 96)) || 30;
     const html = buildPrintDocumentHtml(
-      buildLabelHtml(PREVIEW_ITEM, config, { barcodeSvg: generateBarcodeSVG(PREVIEW_ITEM.codigoBarras) }),
+      buildLabelHtml(PREVIEW_ITEM, config, { barcodeSvg: generateBarcodeSVG(PREVIEW_ITEM.codigoBarras, h) }),
       config,
     );
     const popup = window.open("", "_blank", "width=420,height=560");
@@ -343,8 +344,9 @@ export default function LabelConfigPage() {
             <Button type="button" className="mt-4 gap-2" style={{ background: BRAND_RED }} onClick={handleTestPrint}>
               <Printer className="w-4 h-4" /> Probar en Zebra ZD411
             </Button>
-            <div className="mt-4 text-sm text-gray-500 text-center">
-              Guarda para que la pantalla <strong>Imprimir Etiquetas</strong> use este diseno.
+            <div className="mt-4 text-sm text-gray-500 text-center space-y-1">
+              <p>Pulsa <strong>Guardar</strong> para que Imprimir Etiquetas use este diseno.</p>
+              <p>Al imprimir: Zebra ZD411 · tamano {String(s("labelWidth"))}×{String(s("labelHeight"))} · margenes <strong>0</strong> · sin “ajustar a la pagina”.</p>
             </div>
           </div>
         </div>
