@@ -229,23 +229,50 @@ export default function UnpackLookup({ value, onChange }: Props) {
       )}
 
       {mode === "link" && (
-        <div>
-          <Label className="text-xs">Pegar link Amazon / Target / Costway / etc.</Label>
-          <div className="flex gap-2 mt-1">
-            <Input
-              value={link}
-              placeholder="https://..."
-              onChange={(e) => setLink(e.target.value)}
-              className="flex-1 font-mono text-xs"
-            />
-            <Button
-              type="button"
-              disabled={busy || !link.trim()}
-              onClick={() => suggestLink.mutate({ url: link.trim() })}
-              style={{ background: BRAND_RED }}
-            >
-              {suggestLink.isPending ? "..." : "Sugerir"}
-            </Button>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">Pegar link Amazon / Target / Costway / etc.</Label>
+            <div className="flex gap-2 mt-1">
+              <Input
+                value={link}
+                placeholder="https://..."
+                onChange={(e) => setLink(e.target.value)}
+                className="flex-1 font-mono text-xs"
+              />
+              <Button
+                type="button"
+                disabled={busy || !link.trim()}
+                onClick={() => suggestLink.mutate({ url: link.trim() })}
+                style={{ background: BRAND_RED }}
+              >
+                {suggestLink.isPending ? "..." : "Sugerir"}
+              </Button>
+            </div>
+          </div>
+          <div className="rounded-md border p-3 space-y-2" style={{ borderColor: "hsl(210 20% 90%)", background: "white" }}>
+            <p className="text-[11px] font-medium" style={{ color: BRAND_BLUE }}>
+              Si el link no trae precio (muy comun en Amazon/Costway), pega el $ que ves en la pagina:
+            </p>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                step="0.01"
+                value={usdManual}
+                placeholder="Ej: 29.99"
+                onChange={(e) => setUsdManual(e.target.value)}
+              />
+              <Button
+                type="button"
+                disabled={busy || !Number(usdManual)}
+                onClick={() => {
+                  onChange({ ...value, sourceUrl: link.trim() || value.sourceUrl });
+                  suggestUsd.mutate({ usd: Number(usdManual) });
+                }}
+                style={{ background: BRAND_RED }}
+              >
+                Convertir
+              </Button>
+            </div>
           </div>
         </div>
       )}

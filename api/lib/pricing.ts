@@ -153,12 +153,98 @@ function decodeHtml(s: string) {
     .replace(/&gt;/g, ">");
 }
 
+async function suggestFromUrlWithAi(opts: {
+  url: string;
+  hostname: string;
+  htmlSnippet?: string;
+  titleHint?: string | null;
+}): Promise<{
+  nombre: string | null;
+  usd: number | null;
+  precioSugeridoCrc: number | null;
+  precioMismo: number | null;
+  precioMenos20: number | null;
+  precioUnPocoMas: number | null;
+  source: string;
+  note: string;
+  needsManualUsd: boolean;
+} | null> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) return null;
+
+  const snippet = (opts.htmlSnippet || "").replace(/\s+/g, " ").slice(0, 12000);
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: process.env.OPENAI_VISION_MODEL || "gpt-4o-mini",
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You extract US retail product info for a Costa Rica outlet. Return JSON only: {\"nombre\": string|null, \"usd_price\": number|null}. usd_price = current/typical US retail in USD. If unknown, null.",
+        },
+        {
+          role: "user",
+          content: `Product URL: ${opts.url}\nHostname: ${opts.hostname}\nTitle hint: ${opts.titleHint || "n/a"}\nHTML snippet:\n${snippet || "(empty — site may block scrapers; use URL knowledge if reliable, else null price)"}`,
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) return null;
+  const json: any = await res.json();
+  let parsed: any = {};
+  try {
+    parsed = JSON.parse(json?.choices?.[0]?.message?.content || "{}");
+  } catch {
+    return null;
+  }
+
+  const nombre = typeof parsed.nombre === "string" ? parsed.nombre.slice(0, 255) : opts.titleHint || null;
+  const usd =
+    typeof parsed.usd_price === "number" && parsed.usd_price > 0 && parsed.usd_price < 100000
+      ? parsed.usd_price
+      : null;
+
+  if (usd == null) {
+    return {
+      nombre,
+      usd: null,
+      precioSugeridoCrc: null,
+      precioMismo: null,
+      precioMenos20: null,
+      precioUnPocoMas: null,
+      source: opts.hostname,
+      note: "El sitio no deja leer el precio. Abajo pega el $ USA que ves en la pagina y pulsa Convertir.",
+      needsManualUsd: true,
+    };
+  }
+
+  const band = buildPriceBandFromUsd(usd);
+  return {
+    nombre,
+    ...band,
+    source: opts.hostname,
+    needsManualUsd: false,
+  };
+}
+
 export async function fetchLinkSuggestion(url: string): Promise<{
   nombre: string | null;
   usd: number | null;
   precioSugeridoCrc: number | null;
+  precioMismo: number | null;
+  precioMenos20: number | null;
+  precioUnPocoMas: number | null;
   source: string;
   note: string;
+  needsManualUsd?: boolean;
 }> {
   let parsed: URL;
   try {
@@ -168,6 +254,8 @@ export async function fetchLinkSuggestion(url: string): Promise<{
   }
   if (!/^https?:$/i.test(parsed.protocol)) throw new Error("Solo links http/https");
 
+  let title: string | null = null;
+  let html = "";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
@@ -180,31 +268,45 @@ export async function fetchLinkSuggestion(url: string): Promise<{
       },
       redirect: "follow",
     });
-    const html = await res.text();
-    const title = extractTitleFromHtml(html);
+    html = await res.text();
+    title = extractTitleFromHtml(html);
     const price = extractPriceFromHtml(html);
-    if (!price) {
+    if (price) {
+      const band = buildPriceBandFromUsd(price.usd);
       return {
         nombre: title,
-        usd: null,
-        precioSugeridoCrc: null,
-        precioMismo: null as number | null,
-        precioMenos20: null as number | null,
-        precioUnPocoMas: null as number | null,
+        usd: price.usd,
+        ...band,
         source: parsed.hostname,
-        note: "No se pudo leer el precio del link (sitio bloqueado o dinamico). Pega el precio USA manualmente o usa foto.",
+        needsManualUsd: false,
       };
     }
-    const band = buildPriceBandFromUsd(price.usd);
-    return {
-      nombre: title,
-      usd: price.usd,
-      ...band,
-      source: parsed.hostname,
-    };
+  } catch {
+    // blocked / timeout — fall through to AI / manual
   } finally {
     clearTimeout(timer);
   }
+
+  // Amazon/Costway/Target often block scrapers — try OpenAI with URL + snippet
+  const ai = await suggestFromUrlWithAi({
+    url,
+    hostname: parsed.hostname,
+    htmlSnippet: html,
+    titleHint: title,
+  });
+  if (ai) return ai;
+
+  return {
+    nombre: title,
+    usd: null,
+    precioSugeridoCrc: null,
+    precioMismo: null,
+    precioMenos20: null,
+    precioUnPocoMas: null,
+    source: parsed.hostname,
+    note: "No se pudo leer el precio del link (sitio bloqueado). Pega abajo el $ USA de la pagina y Convierte.",
+    needsManualUsd: true,
+  };
 }
 
 export async function suggestFromPhoto(opts: {
