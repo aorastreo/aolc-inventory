@@ -6,3 +6,7 @@ dist/
 boot-out.txt
 boot-err.txt
 *.tsbuildinfo
+
+# Accidental tsc emit next to .ts sources
+api/**/*.js
+src/**/*.js
