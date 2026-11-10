@@ -1,4 +1,5 @@
 import { trpc } from "@/providers/trpc";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Package, AlertTriangle } from "lucide-react";
@@ -18,13 +19,14 @@ interface ProductAutocompleteProps {
 export default function ProductAutocomplete({
   nombre, precio, codigoBarras, cantidad, onChange, label = "Nombre del Articulo",
 }: ProductAutocompleteProps) {
+  const { storeId } = useActiveStore();
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState(-1);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: suggestions } = trpc.inventory.searchProductsSimilar.useQuery(
-    { storeId: 1, query: nombre },
+    { storeId, query: nombre },
     { enabled: nombre.length >= 2 }
   );
 

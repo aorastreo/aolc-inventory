@@ -1,4 +1,5 @@
 import { trpc } from "@/providers/trpc";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { useParams, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,9 +19,10 @@ export default function ProductsPage() {
   const { palletId } = useParams<{ palletId: string }>();
   const navigate = useNavigate();
   const palletIdNum = Number(palletId);
+  const { storeId } = useActiveStore();
 
   const { data: pallet } = trpc.inventory.palletById.useQuery({ id: palletIdNum });
-  const { data: products, isLoading } = trpc.inventory.products.useQuery({ storeId: 1, palletId: palletIdNum });
+  const { data: products, isLoading } = trpc.inventory.products.useQuery({ storeId, palletId: palletIdNum });
   const utils = trpc.useUtils();
 
   const createProduct = trpc.inventory.createProduct.useMutation({
@@ -57,7 +59,7 @@ export default function ProductsPage() {
   const handleCreate = () => {
     if (!form.nombre || !form.precio) return;
     createProduct.mutate({
-      storeId: 1, palletId: palletIdNum,
+      storeId, palletId: palletIdNum,
       nombre: form.nombre, precio: form.precio,
       cantidad: form.cantidad, codigoBarras: form.codigoBarras,
     });

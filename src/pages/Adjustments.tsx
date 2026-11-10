@@ -1,4 +1,5 @@
 import { trpc } from "@/providers/trpc";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,12 +19,13 @@ export default function AdjustmentsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const palletFilter = searchParams.get("palletId");
   const palletFilterNum = palletFilter ? Number(palletFilter) : null;
+  const { storeId } = useActiveStore();
 
   const utils = trpc.useUtils();
   const { data: adjustments, isLoading } = trpc.inventory.adjustments.useQuery(
-    palletFilterNum ? { storeId: 1, palletId: palletFilterNum } : { storeId: 1 }
+    palletFilterNum ? { storeId, palletId: palletFilterNum } : { storeId }
   );
-  const { data: pallets } = trpc.inventory.pallets.useQuery({ storeId: 1 });
+  const { data: pallets } = trpc.inventory.pallets.useQuery({ storeId });
   const { data: filteredPallet } = trpc.inventory.palletById.useQuery(
     { id: palletFilterNum! },
     { enabled: !!palletFilterNum }
@@ -60,7 +62,7 @@ export default function AdjustmentsPage() {
   const { data: adjItems } = trpc.inventory.adjustmentItems.useQuery({ adjustmentId: viewingAdj! }, { enabled: !!viewingAdj });
   // Products from the container (pallet) associated with this adjustment
   const { data: palletProducts } = trpc.inventory.products.useQuery(
-    { storeId: 1, palletId: adjDetail?.palletId || 0 },
+    { storeId, palletId: adjDetail?.palletId || 0 },
     { enabled: !!adjDetail?.palletId }
   );
 
@@ -71,7 +73,7 @@ export default function AdjustmentsPage() {
     if (!barcode) return;
     setSearchingBarcode(true);
     try {
-      const result = await utils.inventory.searchProductByBarcode.fetch({ storeId: 1, barcode });
+      const result = await utils.inventory.searchProductByBarcode.fetch({ storeId, barcode });
       if (result) {
         setNewItem(prev => ({
           ...prev,
@@ -107,7 +109,7 @@ export default function AdjustmentsPage() {
   const handleCreate = () => {
     if (!newAdj.adjustmentId || !newAdj.palletId) return;
     createAdj.mutate({
-      storeId: 1, palletId: Number(newAdj.palletId), adjustmentId: newAdj.adjustmentId,
+      storeId, palletId: Number(newAdj.palletId), adjustmentId: newAdj.adjustmentId,
       description: newAdj.description, fecha: new Date().toISOString().split("T")[0],
       fechaHora: new Date().toLocaleString("es-CR"),
     });

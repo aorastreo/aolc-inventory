@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/providers/trpc";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,9 +20,10 @@ type Tab = "empleados" | "periodos" | "pagos" | "reporte";
 export default function PayrollPage() {
   const [activeTab, setActiveTab] = useState<Tab>("empleados");
   const utils = trpc.useUtils();
+  const { storeId } = useActiveStore();
 
   // Queries
-  const { data: employees, isLoading: loadingEmps } = trpc.inventory.payrollEmployees.useQuery({});
+  const { data: employees, isLoading: loadingEmps } = trpc.inventory.payrollEmployees.useQuery({ storeId });
   const { data: periods, isLoading: loadingPeriods } = trpc.inventory.payrollPeriods.useQuery();
   const { data: payments, isLoading: loadingPayments } = trpc.inventory.payrollPayments.useQuery();
 
@@ -67,7 +69,7 @@ export default function PayrollPage() {
       </div>
 
       {/* Content */}
-      {activeTab === "empleados" && <EmployeesTab employees={employees || []} loading={loadingEmps} utils={utils} />}
+      {activeTab === "empleados" && <EmployeesTab employees={employees || []} loading={loadingEmps} utils={utils} storeId={storeId} />}
       {activeTab === "periodos" && <PeriodsTab periods={periods || []} loading={loadingPeriods} utils={utils} />}
       {activeTab === "pagos" && <PaymentsTab employees={employees || []} periods={periods || []} payments={payments || []} loading={loadingPayments} utils={utils} />}
       {activeTab === "reporte" && <ReportTab periods={periods || []} />}
@@ -96,14 +98,15 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any; label: strin
 // ============================================
 // EMPLOYEES TAB
 // ============================================
-function EmployeesTab({ employees, loading, utils }: { employees: any[]; loading: boolean; utils: any }) {
+function EmployeesTab({ employees, loading, utils, storeId }: { employees: any[]; loading: boolean; utils: any; storeId: number }) {
+  const emptyForm = { storeId, cedula: "", nombre: "", apellidos: "", puesto: "", salarioBase: "", tipoSalario: "quincenal" as const, fechaIngreso: "", telefono: "", correo: "", cuentaBancaria: "", banco: "" };
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ storeId: 1, cedula: "", nombre: "", apellidos: "", puesto: "", salarioBase: "", tipoSalario: "quincenal" as const, fechaIngreso: "", telefono: "", correo: "", cuentaBancaria: "", banco: "" });
+  const [form, setForm] = useState(emptyForm);
 
   const createEmp = trpc.inventory.createPayrollEmployee.useMutation({
-    onSuccess: () => { utils.inventory.payrollEmployees.invalidate(); setDialogOpen(false); setForm({ storeId: 1, cedula: "", nombre: "", apellidos: "", puesto: "", salarioBase: "", tipoSalario: "quincenal", fechaIngreso: "", telefono: "", correo: "", cuentaBancaria: "", banco: "" }); },
+    onSuccess: () => { utils.inventory.payrollEmployees.invalidate(); setDialogOpen(false); setForm({ ...emptyForm, storeId }); },
     onError: (err) => alert("Error al guardar: " + err.message),
   });
   const updateEmp = trpc.inventory.updatePayrollEmployee.useMutation({
@@ -151,7 +154,7 @@ function EmployeesTab({ employees, loading, utils }: { employees: any[]; loading
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "hsl(207 20% 55%)" }} />
           <Input placeholder="Buscar empleado..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Button onClick={() => { setEditing(null); setForm({ storeId: 1, cedula: "", nombre: "", apellidos: "", puesto: "", salarioBase: "", tipoSalario: "quincenal", fechaIngreso: "", telefono: "", correo: "", cuentaBancaria: "", banco: "" }); setDialogOpen(true); }} style={{ background: BRAND_RED }}>
+        <Button onClick={() => { setEditing(null); setForm({ ...emptyForm, storeId }); setDialogOpen(true); }} style={{ background: BRAND_RED }}>
           <Plus className="w-4 h-4 mr-2" /> Nuevo Empleado
         </Button>
       </div>

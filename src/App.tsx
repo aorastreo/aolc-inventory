@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router";
 import { TRPCProvider } from "@/providers/trpc";
 import { useLocalAuth } from "@/hooks/useLocalAuth";
+import { ActiveStoreProvider } from "@/hooks/useActiveStore";
 import LoginLocalPage from "@/pages/LoginLocal";
 import NotFoundPage from "@/pages/NotFound";
 import DashboardPage from "@/pages/Dashboard";
@@ -58,21 +59,23 @@ function RootRedirect() {
 function App() {
   return (
     <TRPCProvider>
-      <Routes>
-        <Route path="/login" element={<LoginLocalPage />} />
-        <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
-        <Route path="/pallets" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><PalletsPage /></ProtectedRoute>} />
-        <Route path="/pallets/:palletId/products" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><ProductsPage /></ProtectedRoute>} />
-        <Route path="/adjustments" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><AdjustmentsPage /></ProtectedRoute>} />
-        <Route path="/transfers" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><TransfersPage /></ProtectedRoute>} />
-        <Route path="/closings" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><ClosingsPage /></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin"]}><SettingsPage /></ProtectedRoute>} />
-        <Route path="/label-config" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><LabelConfigPage /></ProtectedRoute>} />
-        <Route path="/catalog" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><CatalogPage /></ProtectedRoute>} />
-        <Route path="/labels" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><LabelsPage /></ProtectedRoute>} />
-        <Route path="/payroll" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><PayrollPage /></ProtectedRoute>} />
-        <Route path="*" element={<ProtectedRoute><NotFoundPage /></ProtectedRoute>} />
-      </Routes>
+      <ActiveStoreProvider>
+        <Routes>
+          <Route path="/login" element={<LoginLocalPage />} />
+          <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
+          <Route path="/pallets" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><PalletsPage /></ProtectedRoute>} />
+          <Route path="/pallets/:palletId/products" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><ProductsPage /></ProtectedRoute>} />
+          <Route path="/adjustments" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><AdjustmentsPage /></ProtectedRoute>} />
+          <Route path="/transfers" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><TransfersPage /></ProtectedRoute>} />
+          <Route path="/closings" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><ClosingsPage /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin"]}><SettingsPage /></ProtectedRoute>} />
+          <Route path="/label-config" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><LabelConfigPage /></ProtectedRoute>} />
+          <Route path="/catalog" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><CatalogPage /></ProtectedRoute>} />
+          <Route path="/labels" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><LabelsPage /></ProtectedRoute>} />
+          <Route path="/payroll" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><PayrollPage /></ProtectedRoute>} />
+          <Route path="*" element={<ProtectedRoute><NotFoundPage /></ProtectedRoute>} />
+        </Routes>
+      </ActiveStoreProvider>
     </TRPCProvider>
   );
 }

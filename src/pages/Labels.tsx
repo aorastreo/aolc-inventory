@@ -1,4 +1,5 @@
 import { trpc } from "@/providers/trpc";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -110,9 +111,10 @@ function expandItems(items: LabelItem[], quantities: Record<number, number>, nam
 }
 
 export default function LabelsPage() {
-  const { data: pallets } = trpc.inventory.pallets.useQuery({ storeId: 1 });
-  const { data: adjustments } = trpc.inventory.adjustmentsWithStats.useQuery({ storeId: 1 });
-  const { data: palletsWithStats } = trpc.inventory.palletsWithStats.useQuery({ storeId: 1 });
+  const { storeId } = useActiveStore();
+  const { data: pallets } = trpc.inventory.pallets.useQuery({ storeId });
+  const { data: adjustments } = trpc.inventory.adjustmentsWithStats.useQuery({ storeId });
+  const { data: palletsWithStats } = trpc.inventory.palletsWithStats.useQuery({ storeId });
   const utils = trpc.useUtils();
 
   const [selectedPallet, setSelectedPallet] = useState<string>("");
@@ -132,11 +134,11 @@ export default function LabelsPage() {
   const adjustmentIdNum = selectedAdjustment ? Number(selectedAdjustment) : null;
 
   const { data: palletProducts, isLoading: loadingPallet } = trpc.inventory.productsForLabels.useQuery(
-    { storeId: 1, palletId: palletIdNum! },
+    { storeId, palletId: palletIdNum! },
     { enabled: !!palletIdNum }
   );
   const { data: adjustmentProducts, isLoading: loadingAdj } = trpc.inventory.adjustmentItemsForLabels.useQuery(
-    { storeId: 1, adjustmentId: adjustmentIdNum! },
+    { storeId, adjustmentId: adjustmentIdNum! },
     { enabled: !!adjustmentIdNum }
   );
 
@@ -148,7 +150,7 @@ export default function LabelsPage() {
   });
 
   // Load label configuration from DB
-  const { data: labelCfg } = trpc.labelConfig.get.useQuery({ storeId: 1 });
+  const { data: labelCfg } = trpc.labelConfig.get.useQuery({ storeId });
 
   const toggleProduct = (id: number) => {
     setSelectedProducts(prev => {
@@ -205,7 +207,7 @@ export default function LabelsPage() {
     if (selectedProducts.size === 0) return;
     const targetId = adjustmentIdNum || palletIdNum;
     if (!targetId) return;
-    markPrinted.mutate({ storeId: 1, palletId: targetId, productIds: Array.from(selectedProducts) });
+    markPrinted.mutate({ storeId, palletId: targetId, productIds: Array.from(selectedProducts) });
 
     // Build label HTML for popup
     const labelsHtml = expandedItems.map((item) => {

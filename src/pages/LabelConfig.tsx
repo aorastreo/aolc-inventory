@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { trpc } from "@/providers/trpc";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,7 +83,8 @@ const defaultConfig: Record<string, any> = {
 
 export default function LabelConfigPage() {
   const utils = trpc.useUtils();
-  const { data: savedConfig, error: queryError } = trpc.labelConfig.get.useQuery({ storeId: 1 });
+  const { storeId } = useActiveStore();
+  const { data: savedConfig, error: queryError } = trpc.labelConfig.get.useQuery({ storeId });
   const upsertConfig = trpc.labelConfig.upsert.useMutation({
     onSuccess: () => { utils.labelConfig.get.invalidate(); toast.success("Configuracion guardada"); },
     onError: (err) => { toast.error("Error: " + err.message); console.error(err); },
@@ -123,7 +125,7 @@ export default function LabelConfigPage() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => { setConfig({ ...defaultConfig }); toast.info("Reseteado"); }} className="gap-2"><RotateCcw className="w-4 h-4" /> Resetear</Button>
           <Button onClick={() => {
-            const payload: Record<string, any> = { storeId: 1 };
+            const payload: Record<string, any> = { storeId };
             for (const [k, v] of Object.entries(config)) {
               if (v !== undefined && v !== null) payload[k] = v;
             }

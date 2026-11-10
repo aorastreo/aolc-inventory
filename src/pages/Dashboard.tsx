@@ -1,9 +1,11 @@
 import { trpc } from "@/providers/trpc";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Package, ShoppingCart, Receipt, ClipboardList, DollarSign, TrendingUp, Store, MapPin } from "lucide-react";
 
 export default function DashboardPage() {
-  const { data: stats, isLoading } = trpc.inventory.dashboardStats.useQuery({ storeId: 1 });
+  const { storeId } = useActiveStore();
+  const { data: stats, isLoading } = trpc.inventory.dashboardStats.useQuery({ storeId });
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString("es-CR", { style: "currency", currency: "CRC", minimumFractionDigits: 0 });

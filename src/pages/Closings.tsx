@@ -12,6 +12,7 @@ import { useState, useMemo, useEffect } from "react";
 import { CheckCircle, AlertCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell } from "recharts";
 import { useLocalAuth } from "@/hooks/useLocalAuth";
+import { useActiveStore } from "@/hooks/useActiveStore";
 
 const BRAND_RED = "#B22234";
 
@@ -31,13 +32,9 @@ const paymentConfig = [
 ];
 
 export default function ClosingsPage() {
-  const { isEmployee, isAdmin, storeId: userStoreId } = useLocalAuth();
+  const { isAdmin, isEmployee } = useLocalAuth();
+  const { storeId: effectiveStoreId, setStoreId, canSwitchStore, stores, storeName } = useActiveStore();
   const utils = trpc.useUtils();
-  const { data: stores } = trpc.inventory.allStores.useQuery();
-  const [adminStoreId, setAdminStoreId] = useState<number>(1);
-
-  // Empleados ven solo su tienda. Admin puede cambiar.
-  const effectiveStoreId = isAdmin ? adminStoreId : (userStoreId || 1);
 
   const { data: closings } = trpc.inventory.closings.useQuery({ storeId: effectiveStoreId });
   const { data: stats } = trpc.inventory.closingStats.useQuery({ storeId: effectiveStoreId });
@@ -206,19 +203,19 @@ export default function ClosingsPage() {
             <Receipt className="w-6 h-6" style={{ color: BRAND_RED }} />
             Cierre de Caja
           </h1>
-          {isAdmin ? (
+          {canSwitchStore ? (
             <select
               className="h-9 px-3 rounded-md border border-input bg-background text-sm"
-              value={adminStoreId}
-              onChange={(e) => setAdminStoreId(Number(e.target.value))}
+              value={effectiveStoreId}
+              onChange={(e) => setStoreId(Number(e.target.value))}
             >
-              {stores?.map(s => (
+              {stores.map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
           ) : (
             <span className="h-9 px-3 rounded-md border border-input bg-gray-50 text-sm flex items-center" style={{ color: "hsl(207 20% 45%)" }}>
-              {stores?.find(s => s.id === effectiveStoreId)?.name || "Cargando..."}
+              {storeName}
             </span>
           )}
         </div>

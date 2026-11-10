@@ -1,4 +1,5 @@
 import { trpc } from "@/providers/trpc";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,9 +11,12 @@ import { useState, useRef, useEffect } from "react";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
+/** Warehouse origin for outbound transfers */
+const BODEGA_STORE_ID = 1;
 
 export default function TransfersPage() {
   const utils = trpc.useUtils();
+  const { storeId: activeStoreId } = useActiveStore();
   const { data: transfersList, isLoading } = trpc.inventory.getTransfers.useQuery({});
   const { data: stores } = trpc.inventory.allStores.useQuery();
 
@@ -30,9 +34,9 @@ export default function TransfersPage() {
   });
 
   const [showCreate, setShowCreate] = useState(false);
-  const [toStoreId, setToStoreId] = useState<number | null>(null);
-  // Origen is always Bodega (storeId 1)
-  const BODEGA_STORE_ID = 1;
+  const [toStoreId, setToStoreId] = useState<number | null>(
+    activeStoreId !== BODEGA_STORE_ID ? activeStoreId : null,
+  );
 
   // Viewing
   const [viewingTransfer, setViewingTransfer] = useState<number | null>(null);

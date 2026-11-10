@@ -1,7 +1,6 @@
 import { Link, useLocation } from "react-router";
 import { useLocalAuth } from "@/hooks/useLocalAuth";
-import { trpc } from "@/providers/trpc";
-import { useState } from "react";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import {
   LayoutDashboard,
   Package,
@@ -35,8 +34,7 @@ const menuItems = [
 export function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const location = useLocation();
   const { logout, user, role } = useLocalAuth();
-  const { data: stores } = trpc.inventory.stores.useQuery();
-  const [selectedStore, setSelectedStore] = useState("los-chiles");
+  const { storeId, setStoreId, canSwitchStore, stores, storeName } = useActiveStore();
 
   const visibleItems = menuItems.filter(item => item.roles.includes(role || "admin"));
 
@@ -80,8 +78,8 @@ export function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => voi
             />
             <div className="overflow-hidden">
               <h1 className="text-sm font-bold text-white leading-tight tracking-tight">American Outlet</h1>
-              <p className="text-[10px] font-medium leading-tight" style={{ color: "hsl(354 78% 60%)" }}>
-                LOS CHILES
+              <p className="text-[10px] font-medium leading-tight uppercase" style={{ color: "hsl(354 78% 60%)" }}>
+                {storeName}
               </p>
             </div>
           </div>
@@ -95,25 +93,39 @@ export function Sidebar({ open, onToggle }: { open: boolean; onToggle: () => voi
         )}
       </div>
 
-      {/* Store Selector */}
-      {open && stores && stores.length > 0 && (
+      {/* Store Selector — admin/manager can switch; employees stay on their store */}
+      {open && stores.length > 0 && (
         <div className="px-3 py-3 border-b" style={{ borderColor: "hsl(207 40% 20%)" }}>
-          <select
-            value={selectedStore}
-            onChange={(e) => setSelectedStore(e.target.value)}
-            className="w-full text-sm rounded-lg px-3 py-2 border focus:outline-none focus:ring-2 focus:ring-offset-0"
-            style={{
-              background: "hsl(207 55% 18%)",
-              borderColor: "hsl(207 40% 25%)",
-              color: "hsl(210 20% 90%)",
-            }}
-          >
-            {stores.map((s) => (
-              <option key={s.id} value={s.slug} style={{ background: "hsl(207 55% 18%)" }}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+          {canSwitchStore ? (
+            <select
+              value={storeId}
+              onChange={(e) => setStoreId(Number(e.target.value))}
+              className="w-full text-sm rounded-lg px-3 py-2 border focus:outline-none focus:ring-2 focus:ring-offset-0"
+              style={{
+                background: "hsl(207 55% 18%)",
+                borderColor: "hsl(207 40% 25%)",
+                color: "hsl(210 20% 90%)",
+              }}
+            >
+              {stores.map((s) => (
+                <option key={s.id} value={s.id} style={{ background: "hsl(207 55% 18%)" }}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div
+              className="w-full text-sm rounded-lg px-3 py-2 border truncate"
+              style={{
+                background: "hsl(207 55% 18%)",
+                borderColor: "hsl(207 40% 25%)",
+                color: "hsl(210 20% 90%)",
+              }}
+              title={storeName}
+            >
+              {storeName}
+            </div>
+          )}
         </div>
       )}
 

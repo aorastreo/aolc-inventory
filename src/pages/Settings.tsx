@@ -1,5 +1,6 @@
 import { trpc } from "@/providers/trpc";
 import { useLocalAuth } from "@/hooks/useLocalAuth";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,8 @@ const roleConfig = {
 };
 
 export default function SettingsPage() {
-  const { user, isAdmin, storeId: userStoreId } = useLocalAuth();
+  const { user, isAdmin } = useLocalAuth();
+  const { storeId: activeStoreId, storeName } = useActiveStore();
   const utils = trpc.useUtils();
   const { data: stores } = trpc.inventory.allStores.useQuery();
   const { data: employees } = trpc.inventory.allEmployees.useQuery();
@@ -30,7 +32,7 @@ export default function SettingsPage() {
   });
   const deleteEmployee = trpc.inventory.deleteEmployee.useMutation({ onSuccess: () => utils.inventory.allEmployees.invalidate() });
 
-  const [newUser, setNewUser] = useState({ username: "", password: "", name: "", role: "employee" as "employee" | "manager" | "admin", storeId: 1 });
+  const [newUser, setNewUser] = useState({ username: "", password: "", name: "", role: "employee" as "employee" | "manager" | "admin", storeId: activeStoreId });
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const handleCreate = () => {
@@ -42,12 +44,12 @@ export default function SettingsPage() {
   // Close dialog and reset on success
   useEffect(() => {
     if (createEmployee.isSuccess) {
-      setNewUser({ username: "", password: "", name: "", role: "employee", storeId: 1 });
+      setNewUser({ username: "", password: "", name: "", role: "employee", storeId: activeStoreId });
       setDialogOpen(false);
     }
-  }, [createEmployee.isSuccess]);
+  }, [createEmployee.isSuccess, activeStoreId]);
 
-  const currentStoreName = stores?.find(s => s.id === userStoreId)?.name || "American Outlet Los Chiles";
+  const currentStoreName = storeName || "American Outlet";
 
   const currentUserRole = user?.role as keyof typeof roleConfig || "admin";
   const CurrentRoleConfig = roleConfig[currentUserRole] || roleConfig.admin;
@@ -72,7 +74,7 @@ export default function SettingsPage() {
     onSuccess: () => utils.inventory.allStoreEmployees.invalidate(),
   });
 
-  const [newStoreEmployee, setNewStoreEmployee] = useState({ storeId: 1, nombre: "" });
+  const [newStoreEmployee, setNewStoreEmployee] = useState({ storeId: activeStoreId, nombre: "" });
   const [empDialogOpen, setEmpDialogOpen] = useState(false);
 
   const getConfig = (storeId: number) => {
@@ -323,7 +325,7 @@ export default function SettingsPage() {
                     <Label>Nombre del empleado</Label>
                     <Input placeholder="Ej: Elvis Gomez" value={newStoreEmployee.nombre} onChange={(e) => setNewStoreEmployee({ ...newStoreEmployee, nombre: e.target.value })} />
                   </div>
-                  <Button onClick={() => { createStoreEmployee.mutate(newStoreEmployee); setNewStoreEmployee({ storeId: 1, nombre: "" }); setEmpDialogOpen(false); }} className="w-full font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
+                  <Button onClick={() => { createStoreEmployee.mutate(newStoreEmployee); setNewStoreEmployee({ storeId: activeStoreId, nombre: "" }); setEmpDialogOpen(false); }} className="w-full font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
                     Agregar Empleado
                   </Button>
                 </div>

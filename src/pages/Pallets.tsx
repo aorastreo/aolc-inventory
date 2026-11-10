@@ -1,4 +1,5 @@
 import { trpc } from "@/providers/trpc";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router";
 import { Plus, Eye, ArrowUpDown, Container, ClipboardList, Pencil } from "lucide-react";
@@ -22,7 +23,8 @@ const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
 
 export default function PalletsPage() {
-  const { data: pallets, isLoading } = trpc.inventory.palletsWithStats.useQuery({ storeId: 1 });
+  const { storeId } = useActiveStore();
+  const { data: pallets, isLoading } = trpc.inventory.palletsWithStats.useQuery({ storeId });
   const utils = trpc.useUtils();
   const createPallet = trpc.inventory.createPallet.useMutation({
     onSuccess: () => {
@@ -99,7 +101,7 @@ export default function PalletsPage() {
   const handleCreate = () => {
     if (!newPallet.palletId || !newPallet.description) return;
     createPallet.mutate({
-      storeId: 1,
+      storeId,
       palletId: newPallet.palletId,
       description: newPallet.description,
       costo: newPallet.costo || "0",

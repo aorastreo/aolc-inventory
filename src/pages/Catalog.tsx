@@ -1,4 +1,5 @@
 import { trpc } from "@/providers/trpc";
+import { useActiveStore } from "@/hooks/useActiveStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +15,8 @@ const BRAND_BLUE = "#1B3A5C";
 
 export default function CatalogPage() {
   const utils = trpc.useUtils();
-  const { data: products, isLoading } = trpc.inventory.productDatabase.useQuery({ storeId: 1 });
+  const { storeId } = useActiveStore();
+  const { data: products, isLoading } = trpc.inventory.productDatabase.useQuery({ storeId });
   const createProduct = trpc.inventory.createProductDB.useMutation({
     onSuccess: () => utils.inventory.productDatabase.invalidate(),
   });
@@ -44,7 +46,7 @@ export default function CatalogPage() {
 
   const handleCreate = () => {
     if (!newProduct.nombre) return;
-    createProduct.mutate({ storeId: 1, nombre: newProduct.nombre, precio: newProduct.precio || "0", codigoBarras: newProduct.codigoBarras });
+    createProduct.mutate({ storeId, nombre: newProduct.nombre, precio: newProduct.precio || "0", codigoBarras: newProduct.codigoBarras });
     setNewProduct({ nombre: "", precio: "", codigoBarras: "" });
     setDialogOpen(false);
   };
