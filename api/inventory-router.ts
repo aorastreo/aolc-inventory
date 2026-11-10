@@ -11,6 +11,14 @@ import {
 import { eq, and, desc, like, sql, count, or, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { ensureEnterpriseSchema } from "./lib/enterprise-schema";
+import {
+  computeMarginProgress,
+  fetchLinkSuggestion,
+  suggestFromPhoto,
+  usdToSuggestedCrc,
+  getUsdToCrc,
+  getOutletOfUsFactor,
+} from "./lib/pricing";
 
 // Helper: format Date to YYYY-MM-DD string (local date, no timezone issues)
 function formatDateToString(d: Date): string {
@@ -319,22 +327,31 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number(), query: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
-      const q = input.query.toLowerCase();
+      await ensureEnterpriseSchema();
+      const q = input.query.toLowerCase().trim();
       if (!q || q.length < 2) return [];
 
-      // Search in catalog
+      // Search in catalog (name, barcode, vendor codigo)
       const catalog = await db.select().from(productDatabase)
         .where(and(eq(productDatabase.storeId, input.storeId), eq(productDatabase.isActive, true)));
       const catalogMatches = catalog
-        .filter(p => p.nombre.toLowerCase().includes(q))
-        .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, codigoBarras: p.codigoBarras, source: "catalog" as const }));
+        .filter(p =>
+          p.nombre.toLowerCase().includes(q)
+          || (p.codigoBarras && p.codigoBarras.toLowerCase().includes(q))
+          || (p.codigo && p.codigo.toLowerCase().includes(q)),
+        )
+        .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, codigoBarras: p.codigoBarras, codigo: p.codigo, source: "catalog" as const }));
 
       // Search in existing products (with pallet info)
       const allProducts = await db.select().from(products)
         .where(and(eq(products.storeId, input.storeId), eq(products.isActive, true)));
       const productMatches = allProducts
-        .filter(p => p.nombre.toLowerCase().includes(q))
-        .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, codigoBarras: p.codigoBarras, palletId: p.palletId, source: "product" as const }));
+        .filter(p =>
+          p.nombre.toLowerCase().includes(q)
+          || (p.codigoBarras && p.codigoBarras.toLowerCase().includes(q))
+          || (p.codigo && p.codigo.toLowerCase().includes(q)),
+        )
+        .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, codigoBarras: p.codigoBarras, codigo: p.codigo, palletId: p.palletId, source: "product" as const }));
 
       // Get pallet names for product matches
       const palletIds = [...new Set(productMatches.map(p => p.palletId))];
@@ -350,6 +367,7 @@ export const inventoryRouter = createRouter({
           nombre: c.nombre,
           precio: Number(c.precio || 0),
           codigoBarras: c.codigoBarras,
+          codigo: c.codigo || null,
           contenedor: null as string | null,
           source: "catalog" as const,
         })),
@@ -358,6 +376,7 @@ export const inventoryRouter = createRouter({
           nombre: p.nombre,
           precio: Number(p.precio || 0),
           codigoBarras: p.codigoBarras,
+          codigo: p.codigo || null,
           contenedor: palletMap.get(p.palletId)?.description || palletMap.get(p.palletId)?.palletId || null,
           source: "product" as const,
         })),
@@ -371,6 +390,167 @@ export const inventoryRouter = createRouter({
         seen.add(key);
         return true;
       }).slice(0, 10);
+    }),
+
+  /** Unified lookup: name, barcode, or vendor article code (Costway box, etc.) */
+  lookupProduct: authedQuery
+    .input(z.object({
+      storeId: z.number(),
+      query: z.string().min(1),
+      mode: z.enum(["auto", "nombre", "barcode", "codigo"]).default("auto"),
+    }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const q = input.query.trim();
+      const qLower = q.toLowerCase();
+      if (!q) return [];
+
+      const mode = input.mode;
+      const matchCodigo = (code: string | null | undefined) =>
+        !!code && code.toLowerCase().includes(qLower);
+      const matchBarcode = (code: string | null | undefined) =>
+        !!code && code.toLowerCase().includes(qLower);
+      const matchName = (name: string) => name.toLowerCase().includes(qLower);
+
+      const catalog = await db.select().from(productDatabase)
+        .where(and(eq(productDatabase.storeId, input.storeId), eq(productDatabase.isActive, true)));
+      const allProducts = await db.select().from(products)
+        .where(and(eq(products.storeId, input.storeId), eq(products.isActive, true)));
+
+      type Hit = {
+        id: string;
+        nombre: string;
+        precio: number;
+        codigoBarras: string | null;
+        codigo: string | null;
+        source: "catalog" | "product";
+        match: "nombre" | "barcode" | "codigo";
+      };
+      const hits: Hit[] = [];
+
+      const pushCatalog = (p: typeof catalog[0], match: Hit["match"]) => {
+        hits.push({
+          id: `cat-${p.id}`,
+          nombre: p.nombre,
+          precio: Number(p.precio || 0),
+          codigoBarras: p.codigoBarras,
+          codigo: p.codigo || null,
+          source: "catalog",
+          match,
+        });
+      };
+      const pushProduct = (p: typeof allProducts[0], match: Hit["match"]) => {
+        hits.push({
+          id: `prod-${p.id}`,
+          nombre: p.nombre,
+          precio: Number(p.precio || 0),
+          codigoBarras: p.codigoBarras,
+          codigo: p.codigo || null,
+          source: "product",
+          match,
+        });
+      };
+
+      for (const p of catalog) {
+        if ((mode === "auto" || mode === "codigo") && matchCodigo(p.codigo)) pushCatalog(p, "codigo");
+        else if ((mode === "auto" || mode === "barcode") && matchBarcode(p.codigoBarras)) pushCatalog(p, "barcode");
+        else if ((mode === "auto" || mode === "nombre") && matchName(p.nombre)) pushCatalog(p, "nombre");
+      }
+      for (const p of allProducts) {
+        if ((mode === "auto" || mode === "codigo") && matchCodigo(p.codigo)) pushProduct(p, "codigo");
+        else if ((mode === "auto" || mode === "barcode") && matchBarcode(p.codigoBarras)) pushProduct(p, "barcode");
+        else if ((mode === "auto" || mode === "nombre") && matchName(p.nombre)) pushProduct(p, "nombre");
+      }
+
+      const seen = new Set<string>();
+      return hits.filter((h) => {
+        const key = `${h.nombre.toLowerCase()}|${h.codigoBarras || ""}|${h.codigo || ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 15);
+    }),
+
+  suggestPriceFromUsd: managerQuery
+    .input(z.object({ usd: z.number().positive() }))
+    .mutation(async ({ input }) => {
+      return {
+        usd: input.usd,
+        precioSugeridoCrc: usdToSuggestedCrc(input.usd),
+        usdToCrc: getUsdToCrc(),
+        outletFactor: getOutletOfUsFactor(),
+        note: `$${input.usd} × ₡${getUsdToCrc()} × ${getOutletOfUsFactor()} (outlet). Confirmar siempre.`,
+      };
+    }),
+
+  suggestPriceFromLink: managerQuery
+    .input(z.object({ url: z.string().url() }))
+    .mutation(async ({ input }) => {
+      return fetchLinkSuggestion(input.url);
+    }),
+
+  suggestPriceFromPhoto: managerQuery
+    .input(z.object({
+      imageBase64: z.string().min(20),
+      mimeType: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      // Cap ~4MB base64 to protect Railway memory
+      if (input.imageBase64.length > 5_500_000) {
+        throw new Error("Foto demasiado grande (max ~4MB). Usa otra foto mas liviana.");
+      }
+      return suggestFromPhoto({ imageBase64: input.imageBase64, mimeType: input.mimeType });
+    }),
+
+  palletMarginProgress: authedQuery
+    .input(z.object({
+      storeId: z.number(),
+      palletId: z.number(),
+      /** Include open adjustment lines in projected sales */
+      includeActiveAdjustments: z.boolean().default(true),
+    }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const pallet = await assertPalletInStore(db, input.palletId, input.storeId);
+      const rows = await db.select().from(products).where(and(
+        eq(products.storeId, input.storeId),
+        eq(products.palletId, input.palletId),
+        eq(products.isActive, true),
+      ));
+      const ventasActuales = rows.reduce(
+        (s, r) => s + Number(r.precio || 0) * Number(r.cantidad || 0),
+        0,
+      );
+
+      let ventasEnAjuste = 0;
+      if (input.includeActiveAdjustments) {
+        const openAdjs = await db.select().from(adjustments).where(and(
+          eq(adjustments.storeId, input.storeId),
+          eq(adjustments.palletId, input.palletId),
+          eq(adjustments.estado, "activo"),
+          eq(adjustments.isActive, true),
+        ));
+        for (const adj of openAdjs) {
+          const items = await db.select().from(adjustmentItems)
+            .where(eq(adjustmentItems.adjustmentId, adj.id));
+          ventasEnAjuste += items.reduce(
+            (s, i) => s + Number(i.precio || 0) * Number(i.cantidad || 0),
+            0,
+          );
+        }
+      }
+
+      return {
+        ...computeMarginProgress({
+          palletCosto: Number(pallet.costo || 0),
+          ventasActuales,
+          ventasEnAjuste,
+        }),
+        palletLabel: pallet.palletId,
+        description: pallet.description,
+      };
     }),
 
   // ========== PRODUCTS ==========
@@ -590,14 +770,17 @@ export const inventoryRouter = createRouter({
       precio: z.string(),
       cantidad: z.number().default(1),
       codigoBarras: z.string().optional(),
+      codigo: z.string().optional(),
       orden: z.number().default(1),
       costo: z.string().optional(),
+      precioRefUsd: z.string().optional(),
+      sourceUrl: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
       await ensureEnterpriseSchema();
       await assertAdjustmentActive(db, input.adjustmentId);
-      let { codigoBarras, costo, ...rest } = input;
+      let { codigoBarras, costo, codigo, precioRefUsd, sourceUrl, ...rest } = input;
 
       if (!codigoBarras || codigoBarras.trim() === "") {
         codigoBarras = await getNextAutoBarcode(db);
@@ -606,7 +789,10 @@ export const inventoryRouter = createRouter({
       const result = await db.insert(adjustmentItems).values({
         ...rest,
         codigoBarras,
+        codigo: codigo?.trim() || null,
         costo: costo && costo.trim() !== "" ? costo : null,
+        precioRefUsd: precioRefUsd && precioRefUsd.trim() !== "" ? precioRefUsd : null,
+        sourceUrl: sourceUrl?.trim() || null,
       });
       return { id: Number(result[0].insertId), codigoBarras };
     }),
@@ -672,6 +858,7 @@ export const inventoryRouter = createRouter({
             costo: item.costo != null ? String(item.costo) : null,
             cantidad: item.cantidad,
             codigoBarras: item.codigoBarras,
+            codigo: item.codigo || null,
             esNuevo: false,
           });
           const productId = Number(insertResult[0].insertId);
@@ -728,6 +915,7 @@ export const inventoryRouter = createRouter({
             costo: item.costo != null ? String(item.costo) : null,
             cantidad: item.cantidad,
             codigoBarras: item.codigoBarras,
+            codigo: item.codigo || null,
             esNuevo: false,
           });
           productsAdded++;

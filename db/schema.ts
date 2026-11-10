@@ -130,6 +130,8 @@ export const productDatabase = mysqlTable("productDatabase", {
   nombre: varchar("nombre", { length: 255 }).notNull(),
   precio: decimal("precio", { precision: 12, scale: 2 }).default("0"),
   codigoBarras: varchar("codigoBarras", { length: 50 }),
+  /** Vendor / Costway / box SKU */
+  codigo: varchar("codigo", { length: 50 }),
   categoria: varchar("categoria", { length: 100 }),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -170,6 +172,11 @@ export const adjustmentItems = mysqlTable("adjustmentItems", {
   costo: decimal("costo", { precision: 12, scale: 2 }),
   cantidad: int("cantidad").default(1).notNull(),
   codigoBarras: varchar("codigoBarras", { length: 50 }),
+  /** Vendor / Costway / box article code */
+  codigo: varchar("codigo", { length: 50 }),
+  /** Optional US reference price used when suggesting CRC sell price */
+  precioRefUsd: decimal("precioRefUsd", { precision: 12, scale: 2 }),
+  sourceUrl: varchar("sourceUrl", { length: 500 }),
   orden: int("orden").default(1),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

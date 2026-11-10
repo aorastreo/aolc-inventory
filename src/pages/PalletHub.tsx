@@ -11,6 +11,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import ProductAutocomplete from "@/components/ProductAutocomplete";
+import MarginGauge from "@/components/MarginGauge";
 import {
   ArrowLeft, Search, Plus, Trash2, Package, Barcode, Pencil, Check, X,
   ClipboardList, ArrowLeftRight, TrendingUp, Eye, Clock, CheckCircle, XCircle, Container,
@@ -188,6 +189,10 @@ export default function PalletHubPage() {
           </Button>
         </div>
       </div>
+
+      {Number.isFinite(palletIdNum) && palletIdNum > 0 && (
+        <MarginGauge storeId={storeId} palletId={palletIdNum} />
+      )}
 
       <Tabs value={activeTab} onValueChange={(v) => setTab(v as TabKey)}>
         <TabsList className="mb-6">

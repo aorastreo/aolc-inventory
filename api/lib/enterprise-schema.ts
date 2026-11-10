@@ -25,10 +25,16 @@ export async function ensureEnterpriseSchema() {
   try {
     await tryExec(conn, "ALTER TABLE products ADD COLUMN costo DECIMAL(12,2) NULL");
     await tryExec(conn, "ALTER TABLE adjustmentItems ADD COLUMN costo DECIMAL(12,2) NULL");
+    await tryExec(conn, "ALTER TABLE adjustmentItems ADD COLUMN codigo VARCHAR(50) NULL");
+    await tryExec(conn, "ALTER TABLE adjustmentItems ADD COLUMN precioRefUsd DECIMAL(12,2) NULL");
+    await tryExec(conn, "ALTER TABLE adjustmentItems ADD COLUMN sourceUrl VARCHAR(500) NULL");
+    await tryExec(conn, "ALTER TABLE productDatabase ADD COLUMN codigo VARCHAR(50) NULL");
     await tryExec(conn, "ALTER TABLE transferItems ADD COLUMN costo DECIMAL(12,2) NULL");
     await tryExec(conn, "ALTER TABLE transfers ADD COLUMN completedAt TIMESTAMP NULL");
     await tryExec(conn, "ALTER TABLE transfers ADD COLUMN createdBy VARCHAR(255) NULL");
     await tryExec(conn, "ALTER TABLE adjustments ADD COLUMN completedBy VARCHAR(255) NULL");
+    await tryExec(conn, "CREATE INDEX idx_products_store_codigo ON products (storeId, codigo)");
+    await tryExec(conn, "CREATE INDEX idx_adj_items_codigo ON adjustmentItems (codigo)");
 
     await tryExec(
       conn,

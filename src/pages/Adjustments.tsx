@@ -20,10 +20,22 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
-import ProductAutocomplete from "@/components/ProductAutocomplete";
+import UnpackLookup, { type UnpackFields } from "@/components/UnpackLookup";
+import MarginGauge from "@/components/MarginGauge";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
+
+const emptyItem = (): UnpackFields => ({
+  nombre: "",
+  precio: "",
+  cantidad: 1,
+  codigoBarras: "",
+  codigo: "",
+  costo: "",
+  precioRefUsd: "",
+  sourceUrl: "",
+});
 
 export default function AdjustmentsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -43,21 +55,38 @@ export default function AdjustmentsPage() {
   );
 
   const createAdj = trpc.inventory.createAdjustment.useMutation({ onSuccess: () => utils.inventory.adjustments.invalidate() });
-  const completeAdj = trpc.inventory.completeAdjustment.useMutation({ onSuccess: () => { utils.inventory.adjustments.invalidate(); utils.inventory.products.invalidate(); } });
+  const completeAdj = trpc.inventory.completeAdjustment.useMutation({
+    onSuccess: () => {
+      utils.inventory.adjustments.invalidate();
+      utils.inventory.products.invalidate();
+      utils.inventory.palletMarginProgress.invalidate();
+    },
+  });
   const cancelAdj = trpc.inventory.cancelAdjustment.useMutation({ onSuccess: () => utils.inventory.adjustments.invalidate() });
-  const addItem = trpc.inventory.addAdjustmentItem.useMutation({ onSuccess: () => { utils.inventory.adjustmentItems.invalidate(); utils.inventory.adjustments.invalidate(); } });
-  const removeItem = trpc.inventory.removeAdjustmentItem.useMutation({ onSuccess: () => utils.inventory.adjustmentItems.invalidate() });
-  const updateItem = trpc.inventory.updateAdjustmentItem.useMutation({ onSuccess: () => { utils.inventory.adjustmentItems.invalidate(); setEditingItemId(null); } });
+  const addItem = trpc.inventory.addAdjustmentItem.useMutation({
+    onSuccess: () => {
+      utils.inventory.adjustmentItems.invalidate();
+      utils.inventory.adjustments.invalidate();
+      utils.inventory.palletMarginProgress.invalidate();
+    },
+  });
+  const removeItem = trpc.inventory.removeAdjustmentItem.useMutation({
+    onSuccess: () => {
+      utils.inventory.adjustmentItems.invalidate();
+      utils.inventory.palletMarginProgress.invalidate();
+    },
+  });
+  const updateItem = trpc.inventory.updateAdjustmentItem.useMutation({ onSuccess: () => { utils.inventory.adjustmentItems.invalidate(); utils.inventory.palletMarginProgress.invalidate(); setEditingItemId(null); } });
 
   const [viewingAdj, setViewingAdj] = useState<number | null>(null);
   const [newAdj, setNewAdj] = useState({ adjustmentId: "", description: "", palletId: palletFilter || "" });
-  const [newItem, setNewItem] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "", costo: "" });
+  const [newItem, setNewItem] = useState<UnpackFields>(emptyItem);
   const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Inline edit state
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
-  const [editItemForm, setEditItemForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "", costo: "" });
+  const [editItemForm, setEditItemForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "", costo: "", codigo: "" });
 
   // Item search/filter
   const [itemSearch, setItemSearch] = useState("");
@@ -91,31 +120,6 @@ export default function AdjustmentsPage() {
     { enabled: !!adjDetail?.palletId }
   );
 
-  const [searchingBarcode, setSearchingBarcode] = useState(false);
-
-  const handleBarcodeSearch = async () => {
-    const barcode = newItem.codigoBarras.trim();
-    if (!barcode) return;
-    setSearchingBarcode(true);
-    try {
-      const result = await utils.inventory.searchProductByBarcode.fetch({ storeId, barcode });
-      if (result) {
-        setNewItem(prev => ({
-          ...prev,
-          nombre: result.nombre || "",
-          precio: String(result.precio || ""),
-          codigoBarras: barcode,
-        }));
-      } else {
-        alert("No se encontro ningun articulo con ese codigo de barras");
-      }
-    } catch (e: any) {
-      alert("Error al buscar: " + (e.message || "Desconocido"));
-    } finally {
-      setSearchingBarcode(false);
-    }
-  };
-
   if (isLoading) return (
     <div className="flex items-center justify-center h-full">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: BRAND_RED }} />
@@ -145,11 +149,18 @@ export default function AdjustmentsPage() {
   const handleAddItem = () => {
     if (!viewingAdj || !newItem.nombre || !newItem.precio) return;
     addItem.mutate({
-      adjustmentId: viewingAdj, nombre: newItem.nombre, precio: newItem.precio,
-      cantidad: newItem.cantidad, codigoBarras: newItem.codigoBarras, orden: (adjItems?.length || 0) + 1,
+      adjustmentId: viewingAdj,
+      nombre: newItem.nombre,
+      precio: newItem.precio,
+      cantidad: newItem.cantidad,
+      codigoBarras: newItem.codigoBarras || undefined,
+      codigo: newItem.codigo || undefined,
+      orden: (adjItems?.length || 0) + 1,
       ...(newItem.costo ? { costo: newItem.costo } : {}),
-    } as Parameters<typeof addItem.mutate>[0]);
-    setNewItem({ nombre: "", precio: "", cantidad: 1, codigoBarras: "", costo: "" });
+      ...(newItem.precioRefUsd ? { precioRefUsd: newItem.precioRefUsd } : {}),
+      ...(newItem.sourceUrl ? { sourceUrl: newItem.sourceUrl } : {}),
+    });
+    setNewItem(emptyItem());
   };
 
   const formatCurrency = (value: string) => Number(value || 0).toLocaleString("es-CR", { style: "currency", currency: "CRC" });
@@ -207,6 +218,10 @@ export default function AdjustmentsPage() {
           </div>
         </div>
 
+        {adjDetail.palletId && (
+          <MarginGauge storeId={storeId} palletId={adjDetail.palletId} />
+        )}
+
         {/* Stats bar */}
         {adjItems && adjItems.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 mb-5">
@@ -233,64 +248,36 @@ export default function AdjustmentsPage() {
             <CardContent className="p-5">
               <h3 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: BRAND_BLUE }}>
                 <Plus className="w-4 h-4" />
-                Agregar Articulo al Ajuste
+                Estacion de armado — buscar y poner precio
               </h3>
               <div className="space-y-4">
-                {/* Autocomplete */}
-                <ProductAutocomplete
-                  nombre={newItem.nombre}
-                  precio={newItem.precio}
-                  codigoBarras={newItem.codigoBarras}
-                  cantidad={newItem.cantidad}
-                  onChange={(fields) => setNewItem({ ...newItem, ...fields })}
-                />
+                <UnpackLookup value={newItem} onChange={setNewItem} />
 
-                {/* Precio */}
-                <div>
-                  <Label>Precio</Label>
-                  <Input type="number" placeholder="0" value={newItem.precio} onChange={(e) => setNewItem({ ...newItem, precio: e.target.value })} />
-                </div>
-
-                <div>
-                  <Label>Costo unitario (opcional)</Label>
-                  <Input type="number" placeholder="0" value={newItem.costo} onChange={(e) => setNewItem({ ...newItem, costo: e.target.value })} />
-                </div>
-
-                {/* Cantidad */}
-                <div>
-                  <Label>Cantidad</Label>
-                  <Input type="number" placeholder="1" value={newItem.cantidad} onChange={(e) => setNewItem({ ...newItem, cantidad: Number(e.target.value) })} />
-                </div>
-
-                {/* Codigo de barras */}
-                <div>
-                  <Label className="flex items-center gap-1">
-                    <Barcode className="w-3.5 h-3.5" />
-                    Cod. Barras
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Escribe el codigo y presiona Enter o Buscar"
-                      value={newItem.codigoBarras}
-                      onChange={(e) => setNewItem({ ...newItem, codigoBarras: e.target.value })}
-                      onKeyDown={(e) => { if (e.key === "Enter") handleBarcodeSearch(); }}
-                      className="flex-1"
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleBarcodeSearch}
-                      disabled={searchingBarcode}
-                      className="font-medium"
-                      style={{ borderColor: "hsl(210 20% 88%)", color: BRAND_BLUE }}
-                    >
-                      <Search className="w-4 h-4 mr-1" />
-                      {searchingBarcode ? "Buscando..." : "Buscar"}
-                    </Button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label>Nombre</Label>
+                    <Input value={newItem.nombre} onChange={(e) => setNewItem({ ...newItem, nombre: e.target.value })} />
                   </div>
-                  <p className="text-xs mt-1" style={{ color: "hsl(207 20% 55%)" }}>
-                    Si el articulo existe, se completaran el nombre y precio automaticamente.
-                  </p>
+                  <div>
+                    <Label>Precio venta ₡ (confirmar)</Label>
+                    <Input type="number" placeholder="0" value={newItem.precio} onChange={(e) => setNewItem({ ...newItem, precio: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Codigo articulo</Label>
+                    <Input value={newItem.codigo} onChange={(e) => setNewItem({ ...newItem, codigo: e.target.value })} placeholder="Costway / caja" />
+                  </div>
+                  <div>
+                    <Label className="flex items-center gap-1"><Barcode className="w-3.5 h-3.5" /> Cod. barras</Label>
+                    <Input value={newItem.codigoBarras} onChange={(e) => setNewItem({ ...newItem, codigoBarras: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Cantidad</Label>
+                    <Input type="number" placeholder="1" value={newItem.cantidad} onChange={(e) => setNewItem({ ...newItem, cantidad: Number(e.target.value) })} />
+                  </div>
+                  <div>
+                    <Label>Ref. USA $ (opcional)</Label>
+                    <Input type="number" step="0.01" value={newItem.precioRefUsd} onChange={(e) => setNewItem({ ...newItem, precioRefUsd: e.target.value })} />
+                  </div>
                 </div>
 
                 <Button onClick={handleAddItem} className="font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
