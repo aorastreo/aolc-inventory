@@ -6,9 +6,11 @@ import {
   adjustments, adjustmentItems, closings, assemblers, assemblyAssignments, employees, printedLabels,
   transfers, transferItems, storeConfig, storeEmployees,
   payrollEmployees, payrollPeriods, payrollPayments,
+  inventoryMovements,
 } from "@db/schema";
-import { eq, and, desc, like, sql, count, or } from "drizzle-orm";
+import { eq, and, desc, like, sql, count, or, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { ensureEnterpriseSchema } from "./lib/enterprise-schema";
 
 // Helper: format Date to YYYY-MM-DD string (local date, no timezone issues)
 function formatDateToString(d: Date): string {
@@ -111,6 +113,25 @@ async function assertProductDbInStore(db: ReturnType<typeof getDb>, id: number, 
   return row;
 }
 
+async function assertAdjustmentActive(db: ReturnType<typeof getDb>, id: number) {
+  const [row] = await db.select().from(adjustments).where(eq(adjustments.id, id)).limit(1);
+  if (!row) throw new Error("Ajuste no encontrado");
+  if (row.estado !== "activo") throw new Error("Solo se pueden editar ajustes activos");
+  return row;
+}
+
+async function withNamedLock<T>(db: ReturnType<typeof getDb>, lockName: string, fn: () => Promise<T>): Promise<T> {
+  const lockResult: any = await db.execute(sql`SELECT GET_LOCK(${lockName}, 30)`);
+  const lockRows = Array.isArray(lockResult) ? lockResult[0] : (lockResult.rows || lockResult);
+  const got = Array.isArray(lockRows) ? Number(Object.values(lockRows[0] || {})[0]) : 0;
+  if (got !== 1) throw new Error("No se pudo obtener bloqueo. Intenta de nuevo en unos segundos.");
+  try {
+    return await fn();
+  } finally {
+    await db.execute(sql`SELECT RELEASE_LOCK(${lockName})`);
+  }
+}
+
 const BODEGA_STORE_ID = 1;
 
 /** Keep store 1 named Bodega — it is the principal warehouse workspace. */
@@ -170,9 +191,15 @@ export const inventoryRouter = createRouter({
     }),
 
   palletById: authedQuery
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number(), storeId: z.number().optional() }))
     .query(async ({ input }) => {
       const db = getDb();
+      if (input.storeId != null) {
+        const result = await db.select().from(pallets)
+          .where(and(eq(pallets.id, input.id), eq(pallets.storeId, input.storeId)))
+          .limit(1);
+        return result[0] || null;
+      }
       const result = await db.select().from(pallets).where(eq(pallets.id, input.id)).limit(1);
       return result[0] || null;
     }),
@@ -221,6 +248,7 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
       const palletList = await db.select().from(pallets)
         .where(and(eq(pallets.storeId, input.storeId), eq(pallets.isActive, true)))
         .orderBy(desc(pallets.createdAt));
@@ -254,9 +282,22 @@ export const inventoryRouter = createRouter({
         valueMap.set(v.palletId, Number(v.totalPrecio) || 0);
       }
 
+      // Unit-cost totals when available
+      const costValues = await db.select({
+        palletId: products.palletId,
+        totalCosto: sql<number>`SUM(COALESCE(${products.costo}, 0) * ${products.cantidad})`,
+      }).from(products)
+        .where(and(eq(products.storeId, input.storeId), eq(products.isActive, true)))
+        .groupBy(products.palletId);
+      const costMap = new Map<number, number>();
+      for (const v of costValues) {
+        costMap.set(v.palletId, Number(v.totalCosto) || 0);
+      }
+
       return palletList.map(p => {
         const ventas = valueMap.get(p.id) || 0;
         const costo = Number(p.costo || 0);
+        const costoArticulos = costMap.get(p.id) || 0;
         return {
           id: p.id,
           palletId: p.palletId,
@@ -267,6 +308,7 @@ export const inventoryRouter = createRouter({
           articulos: countMap.get(p.id) || 0,
           unidades: unitsMap.get(p.id) || 0,
           ventas,
+          costoArticulos,
           ganancia: ventas - costo,
         };
       });
@@ -347,27 +389,54 @@ export const inventoryRouter = createRouter({
     }),
 
   createProduct: managerQuery
-    .input(z.object({ storeId: z.number(), palletId: z.number(), nombre: z.string(), precio: z.string(), cantidad: z.number().default(1), codigoBarras: z.string().optional(), codigo: z.string().optional(), esNuevo: z.boolean().default(false) }))
+    .input(z.object({
+      storeId: z.number(),
+      palletId: z.number(),
+      nombre: z.string(),
+      precio: z.string(),
+      cantidad: z.number().default(1),
+      codigoBarras: z.string().optional(),
+      codigo: z.string().optional(),
+      esNuevo: z.boolean().default(false),
+      costo: z.string().optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
+      await assertPalletInStore(db, input.palletId, input.storeId);
       let codigoBarras = input.codigoBarras;
 
-      // Auto-generate barcode if not provided or empty
       if (!codigoBarras || codigoBarras.trim() === "") {
         codigoBarras = await getNextAutoBarcode(db);
       }
 
-      const result = await db.insert(products).values({ ...input, codigoBarras });
+      const { costo, ...rest } = input;
+      const result = await db.insert(products).values({
+        ...rest,
+        codigoBarras,
+        costo: costo && costo.trim() !== "" ? costo : null,
+      });
       return { id: Number(result[0].insertId), codigoBarras };
     }),
 
   updateProduct: managerQuery
-    .input(z.object({ id: z.number(), storeId: z.number(), nombre: z.string().optional(), precio: z.string().optional(), cantidad: z.number().optional(), codigoBarras: z.string().optional() }))
+    .input(z.object({
+      id: z.number(),
+      storeId: z.number(),
+      nombre: z.string().optional(),
+      precio: z.string().optional(),
+      cantidad: z.number().optional(),
+      codigoBarras: z.string().optional(),
+      costo: z.string().optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
       await assertProductInStore(db, input.id, input.storeId);
       const { id, storeId, ...data } = input;
-      await db.update(products).set(data).where(and(eq(products.id, id), eq(products.storeId, storeId)));
+      const setData: Record<string, any> = { ...data };
+      if (data.costo !== undefined && data.costo.trim() === "") setData.costo = null;
+      await db.update(products).set(setData).where(and(eq(products.id, id), eq(products.storeId, storeId)));
       return { success: true };
     }),
 
@@ -485,9 +554,15 @@ export const inventoryRouter = createRouter({
     }),
 
   adjustmentById: authedQuery
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number(), storeId: z.number().optional() }))
     .query(async ({ input }) => {
       const db = getDb();
+      if (input.storeId != null) {
+        const result = await db.select().from(adjustments)
+          .where(and(eq(adjustments.id, input.id), eq(adjustments.storeId, input.storeId)))
+          .limit(1);
+        return result[0] || null;
+      }
       const result = await db.select().from(adjustments).where(eq(adjustments.id, input.id)).limit(1);
       return result[0] || null;
     }),
@@ -503,22 +578,36 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number(), palletId: z.number(), adjustmentId: z.string(), description: z.string().optional(), fecha: z.string().optional(), fechaHora: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      await assertPalletInStore(db, input.palletId, input.storeId);
       const result = await db.insert(adjustments).values({ ...input, estado: "activo" });
       return { id: Number(result[0].insertId) };
     }),
 
   addAdjustmentItem: managerQuery
-    .input(z.object({ adjustmentId: z.number(), nombre: z.string(), precio: z.string(), cantidad: z.number().default(1), codigoBarras: z.string().optional(), orden: z.number().default(1) }))
+    .input(z.object({
+      adjustmentId: z.number(),
+      nombre: z.string(),
+      precio: z.string(),
+      cantidad: z.number().default(1),
+      codigoBarras: z.string().optional(),
+      orden: z.number().default(1),
+      costo: z.string().optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      let { codigoBarras } = input;
+      await ensureEnterpriseSchema();
+      await assertAdjustmentActive(db, input.adjustmentId);
+      let { codigoBarras, costo, ...rest } = input;
 
-      // Auto-generate barcode if not provided or empty
       if (!codigoBarras || codigoBarras.trim() === "") {
         codigoBarras = await getNextAutoBarcode(db);
       }
 
-      const result = await db.insert(adjustmentItems).values({ ...input, codigoBarras });
+      const result = await db.insert(adjustmentItems).values({
+        ...rest,
+        codigoBarras,
+        costo: costo && costo.trim() !== "" ? costo : null,
+      });
       return { id: Number(result[0].insertId), codigoBarras };
     }),
 
@@ -526,124 +615,154 @@ export const inventoryRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      const [item] = await db.select().from(adjustmentItems).where(eq(adjustmentItems.id, input.id)).limit(1);
+      if (!item) throw new Error("Articulo no encontrado");
+      await assertAdjustmentActive(db, item.adjustmentId);
       await db.delete(adjustmentItems).where(eq(adjustmentItems.id, input.id));
       return { success: true };
     }),
 
   updateAdjustmentItem: managerQuery
-    .input(z.object({ id: z.number(), nombre: z.string().optional(), precio: z.string().optional(), cantidad: z.number().optional(), codigoBarras: z.string().optional() }))
+    .input(z.object({
+      id: z.number(),
+      nombre: z.string().optional(),
+      precio: z.string().optional(),
+      cantidad: z.number().optional(),
+      codigoBarras: z.string().optional(),
+      costo: z.string().optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
+      const [item] = await db.select().from(adjustmentItems).where(eq(adjustmentItems.id, input.id)).limit(1);
+      if (!item) throw new Error("Articulo no encontrado");
+      await assertAdjustmentActive(db, item.adjustmentId);
       const { id, ...data } = input;
-      await db.update(adjustmentItems).set(data).where(eq(adjustmentItems.id, id));
+      const setData: Record<string, any> = { ...data };
+      if (data.costo !== undefined && data.costo.trim() === "") setData.costo = null;
+      await db.update(adjustmentItems).set(setData).where(eq(adjustmentItems.id, id));
       return { success: true };
     }),
 
   completeAdjustment: managerQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
+      return withNamedLock(db, `aolc_adj_${input.id}`, async () => {
+        const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id));
+        if (!adj) throw new Error("Ajuste no encontrado");
+        if (adj.estado === "completado") {
+          throw new Error("Este ajuste ya fue completado. No se puede aplicar dos veces.");
+        }
+        if (adj.estado === "cancelado") {
+          throw new Error("Este ajuste esta cancelado.");
+        }
 
-      const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id));
-      if (!adj) throw new Error("Ajuste no encontrado");
-      if (adj.estado === "completado") {
-        throw new Error("Este ajuste ya fue completado. No se puede aplicar dos veces.");
-      }
-      if (adj.estado === "cancelado") {
-        throw new Error("Este ajuste esta cancelado.");
-      }
+        const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.id));
+        if (items.length === 0) throw new Error("El ajuste no tiene articulos");
 
-      const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.id));
+        let unitsAdded = 0;
+        for (const item of items) {
+          const insertResult = await db.insert(products).values({
+            storeId: adj.storeId,
+            palletId: adj.palletId,
+            nombre: item.nombre,
+            precio: String(item.precio),
+            costo: item.costo != null ? String(item.costo) : null,
+            cantidad: item.cantidad,
+            codigoBarras: item.codigoBarras,
+            esNuevo: false,
+          });
+          const productId = Number(insertResult[0].insertId);
+          unitsAdded += Number(item.cantidad || 0);
+          await db.insert(inventoryMovements).values({
+            storeId: adj.storeId,
+            movementType: "adjustment_in",
+            refType: "adjustment",
+            refId: adj.id,
+            productId,
+            palletId: adj.palletId,
+            codigoBarras: item.codigoBarras,
+            nombre: item.nombre,
+            cantidad: item.cantidad,
+            precio: String(item.precio),
+            costo: item.costo != null ? String(item.costo) : null,
+            actorId: ctx.user?.id,
+            actorName: ctx.user?.name || ctx.user?.unionId,
+            note: `Ajuste ${adj.adjustmentId}`,
+          });
+        }
 
-      for (const item of items) {
-        await db.insert(products).values({
-          storeId: adj.storeId,
-          palletId: adj.palletId,
-          nombre: item.nombre,
-          precio: String(item.precio),
-          cantidad: item.cantidad,
-          codigoBarras: item.codigoBarras,
-          esNuevo: false,
-        });
-      }
+        await db.update(adjustments).set({
+          estado: "completado",
+          completedAt: new Date(),
+          completedBy: ctx.user?.name || ctx.user?.unionId || null,
+        }).where(and(eq(adjustments.id, input.id), eq(adjustments.estado, "activo")));
 
-      await db.update(adjustments).set({ estado: "completado", completedAt: new Date() }).where(eq(adjustments.id, input.id));
-      return { success: true, productsAdded: items.length };
+        return { success: true, productsAdded: items.length, unitsAdded, palletId: adj.palletId };
+      });
     }),
 
+  /** Alias kept for older clients — same as completeAdjustment */
   applyAdjustmentToContainer: managerQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
+      return withNamedLock(db, `aolc_adj_${input.id}`, async () => {
+        const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id));
+        if (!adj) throw new Error("Ajuste no encontrado");
+        if (adj.estado === "completado") throw new Error("Este ajuste ya fue completado. Usa una sola aplicacion.");
+        if (adj.estado === "cancelado") throw new Error("Este ajuste esta cancelado.");
+        const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.id));
+        if (items.length === 0) throw new Error("El ajuste no tiene articulos");
 
-      const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id));
-      if (!adj) throw new Error("Ajuste no encontrado");
-      if (adj.estado === "completado") {
-        throw new Error("Este ajuste ya fue completado. Usa una sola aplicacion.");
-      }
-      if (adj.estado === "cancelado") {
-        throw new Error("Este ajuste esta cancelado.");
-      }
-
-      const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.id));
-      if (items.length === 0) throw new Error("El ajuste no tiene articulos");
-
-      let productsAdded = 0;
-      for (const item of items) {
-        await db.insert(products).values({
-          storeId: adj.storeId,
-          palletId: adj.palletId,
-          nombre: item.nombre,
-          precio: String(item.precio),
-          cantidad: item.cantidad,
-          codigoBarras: item.codigoBarras,
-          esNuevo: false,
-        });
-        productsAdded++;
-      }
-
-      await db.update(adjustments).set({ estado: "completado", completedAt: new Date() }).where(eq(adjustments.id, input.id));
-      return { success: true, productsAdded };
-    }),
-
-  forceApplyAdjustment: adminQuery
-    .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id));
-      if (!adj) throw new Error("Ajuste no encontrado");
-      if (adj.estado === "completado") {
-        throw new Error("Este ajuste ya fue aplicado. No se puede forzar de nuevo.");
-      }
-      if (adj.estado === "cancelado") {
-        throw new Error("Este ajuste esta cancelado.");
-      }
-
-      const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, input.id));
-      if (items.length === 0) throw new Error("Sin articulos");
-
-      let productsAdded = 0;
-      for (const item of items) {
-        await db.insert(products).values({
-          storeId: adj.storeId,
-          palletId: adj.palletId,
-          nombre: item.nombre,
-          precio: String(item.precio),
-          cantidad: item.cantidad,
-          codigoBarras: item.codigoBarras,
-          esNuevo: false,
-        });
-        productsAdded++;
-      }
-
-      await db.update(adjustments).set({ estado: "completado", completedAt: new Date() }).where(eq(adjustments.id, input.id));
-      return { success: true, productsAdded, palletId: adj.palletId };
+        let productsAdded = 0;
+        for (const item of items) {
+          const insertResult = await db.insert(products).values({
+            storeId: adj.storeId,
+            palletId: adj.palletId,
+            nombre: item.nombre,
+            precio: String(item.precio),
+            costo: item.costo != null ? String(item.costo) : null,
+            cantidad: item.cantidad,
+            codigoBarras: item.codigoBarras,
+            esNuevo: false,
+          });
+          productsAdded++;
+          await db.insert(inventoryMovements).values({
+            storeId: adj.storeId,
+            movementType: "adjustment_in",
+            refType: "adjustment",
+            refId: adj.id,
+            productId: Number(insertResult[0].insertId),
+            palletId: adj.palletId,
+            codigoBarras: item.codigoBarras,
+            nombre: item.nombre,
+            cantidad: item.cantidad,
+            precio: String(item.precio),
+            costo: item.costo != null ? String(item.costo) : null,
+            actorId: ctx.user?.id,
+            actorName: ctx.user?.name || ctx.user?.unionId,
+          });
+        }
+        await db.update(adjustments).set({
+          estado: "completado",
+          completedAt: new Date(),
+          completedBy: ctx.user?.name || ctx.user?.unionId || null,
+        }).where(and(eq(adjustments.id, input.id), eq(adjustments.estado, "activo")));
+        return { success: true, productsAdded, palletId: adj.palletId };
+      });
     }),
 
   cancelAdjustment: managerQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id)).limit(1);
+      if (!adj) throw new Error("Ajuste no encontrado");
+      if (adj.estado !== "activo") throw new Error("Solo se pueden cancelar ajustes activos");
       await db.update(adjustments).set({ estado: "cancelado", isActive: false }).where(eq(adjustments.id, input.id));
       return { success: true };
     }),
@@ -1154,6 +1273,7 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
       const [palletList, productList, closingList, adjustmentList] = await Promise.all([
         db.select().from(pallets).where(and(eq(pallets.storeId, input.storeId), eq(pallets.isActive, true))),
         db.select().from(products).where(and(eq(products.storeId, input.storeId), eq(products.isActive, true))),
@@ -1163,6 +1283,32 @@ export const inventoryRouter = createRouter({
 
       const totalUnits = productList.reduce((sum, p) => sum + (p.cantidad || 1), 0);
       const totalCierreValue = closingList.reduce((sum, c) => sum + Number(c.total), 0);
+      const stockValue = productList.reduce((sum, p) => sum + Number(p.precio || 0) * Number(p.cantidad || 0), 0);
+      const stockCost = productList.reduce((sum, p) => {
+        if (p.costo == null) return sum;
+        return sum + Number(p.costo) * Number(p.cantidad || 0);
+      }, 0);
+      const estimatedProfit = stockValue - (stockCost > 0
+        ? stockCost
+        : palletList.reduce((s, p) => s + Number(p.costo || 0), 0));
+
+      let transferValueOut = 0;
+      let transferUnitsOut = 0;
+      if (input.storeId === BODEGA_STORE_ID) {
+        try {
+          const outs = await db.select().from(inventoryMovements)
+            .where(and(
+              eq(inventoryMovements.storeId, BODEGA_STORE_ID),
+              eq(inventoryMovements.movementType, "transfer_out"),
+            ));
+          for (const m of outs) {
+            transferUnitsOut += Number(m.cantidad || 0);
+            transferValueOut += Number(m.precio || 0) * Number(m.cantidad || 0);
+          }
+        } catch {
+          // table may not exist yet on first boot race
+        }
+      }
 
       return {
         totalPallets: palletList.length,
@@ -1171,6 +1317,11 @@ export const inventoryRouter = createRouter({
         totalClosings: closingList.length,
         totalAdjustments: adjustmentList.length,
         totalCierreValue,
+        stockValue,
+        stockCost,
+        estimatedProfit,
+        transferValueOut,
+        transferUnitsOut,
       };
     }),
 
@@ -1255,9 +1406,22 @@ export const inventoryRouter = createRouter({
   // ========== TRANSFERS ==========
   createTransfer: managerQuery
     .input(z.object({ fromStoreId: z.number(), toStoreId: z.number(), fecha: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = getDb();
-      const result = await db.insert(transfers).values(input);
+      await ensureEnterpriseSchema();
+      if (input.fromStoreId !== BODEGA_STORE_ID) {
+        throw new Error("Las transferencias solo pueden salir de Bodega");
+      }
+      if (input.toStoreId === BODEGA_STORE_ID) {
+        throw new Error("Destino no puede ser Bodega");
+      }
+      if (input.fromStoreId === input.toStoreId) {
+        throw new Error("Origen y destino deben ser distintos");
+      }
+      const result = await db.insert(transfers).values({
+        ...input,
+        createdBy: ctx.user?.name || ctx.user?.unionId || null,
+      });
       return { id: Number(result[0].insertId) };
     }),
 
@@ -1281,13 +1445,49 @@ export const inventoryRouter = createRouter({
     }),
 
   addTransferItem: managerQuery
-    .input(z.object({ transferId: z.number(), codigoBarras: z.string().optional(), nombre: z.string(), precio: z.string(), cantidad: z.number().default(1), orden: z.number().default(1) }))
+    .input(z.object({
+      transferId: z.number(),
+      codigoBarras: z.string().optional(),
+      nombre: z.string(),
+      precio: z.string(),
+      cantidad: z.number().default(1),
+      orden: z.number().default(1),
+      costo: z.string().optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
       const [transfer] = await db.select().from(transfers).where(eq(transfers.id, input.transferId));
       if (!transfer) throw new Error("Transferencia no encontrada");
       if (transfer.estado !== "activo") throw new Error("Solo se pueden agregar articulos a transferencias activas");
-      const result = await db.insert(transferItems).values(input);
+      if (transfer.fromStoreId !== BODEGA_STORE_ID) throw new Error("Transferencia invalida: origen no es Bodega");
+
+      const barcode = input.codigoBarras?.trim();
+      if (barcode) {
+        const sourceRows = await db.select().from(products).where(and(
+          eq(products.storeId, BODEGA_STORE_ID),
+          eq(products.codigoBarras, barcode),
+          eq(products.isActive, true),
+        ));
+        const available = sourceRows.reduce((sum, row) => sum + Number(row.cantidad || 0), 0);
+        const existingItems = await db.select().from(transferItems).where(eq(transferItems.transferId, input.transferId));
+        const alreadyQueued = existingItems
+          .filter((i) => i.codigoBarras === barcode)
+          .reduce((sum, i) => sum + Number(i.cantidad || 0), 0);
+        if (available < alreadyQueued + input.cantidad) {
+          throw new Error(`Stock insuficiente en Bodega para ${input.nombre}. Disponible ${available}, en transferencia ${alreadyQueued}, se piden ${input.cantidad}.`);
+        }
+        // Prefer costo from first source row if client omitted it
+        if ((!input.costo || input.costo.trim() === "") && sourceRows[0]?.costo != null) {
+          input = { ...input, costo: String(sourceRows[0].costo) };
+        }
+      }
+
+      const { costo, ...rest } = input;
+      const result = await db.insert(transferItems).values({
+        ...rest,
+        costo: costo && costo.trim() !== "" ? costo : null,
+      });
       return { id: Number(result[0].insertId) };
     }),
 
@@ -1295,83 +1495,152 @@ export const inventoryRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      const [item] = await db.select().from(transferItems).where(eq(transferItems.id, input.id)).limit(1);
+      if (!item) throw new Error("Articulo no encontrado");
+      const [transfer] = await db.select().from(transfers).where(eq(transfers.id, item.transferId)).limit(1);
+      if (!transfer || transfer.estado !== "activo") throw new Error("Solo se pueden quitar articulos de transferencias activas");
       await db.delete(transferItems).where(eq(transferItems.id, input.id));
       return { success: true };
     }),
 
   completeTransfer: managerQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = getDb();
-      const [transfer] = await db.select().from(transfers).where(eq(transfers.id, input.id));
-      if (!transfer) throw new Error("Transferencia no encontrada");
-      if (transfer.estado !== "activo") throw new Error("Esta transferencia ya no esta activa");
-
-      const items = await db.select().from(transferItems).where(eq(transferItems.transferId, input.id));
-      if (items.length === 0) throw new Error("La transferencia no tiene articulos");
-
-      // Destination holding pallet for received stock
-      let [destPallet] = await db.select().from(pallets).where(and(
-        eq(pallets.storeId, transfer.toStoreId),
-        eq(pallets.palletId, "TRANSFERENCIAS"),
-        eq(pallets.isActive, true),
-      )).limit(1);
-      if (!destPallet) {
-        const created = await db.insert(pallets).values({
-          storeId: transfer.toStoreId,
-          palletId: "TRANSFERENCIAS",
-          description: "Recibido por transferencia desde Bodega",
-          fecha: transfer.fecha,
-          costo: "0",
-        });
-        const newId = Number(created[0].insertId);
-        destPallet = { id: newId } as typeof destPallet;
-      }
-
-      for (const item of items) {
-        const barcode = item.codigoBarras?.trim();
-        const needQty = Number(item.cantidad || 0);
-        if (!barcode || needQty <= 0) {
-          throw new Error(`Articulo invalido en transferencia: ${item.nombre}`);
+      await ensureEnterpriseSchema();
+      return withNamedLock(db, `aolc_xfer_${input.id}`, async () => {
+        const [transfer] = await db.select().from(transfers).where(eq(transfers.id, input.id));
+        if (!transfer) throw new Error("Transferencia no encontrada");
+        if (transfer.estado !== "activo") throw new Error("Esta transferencia ya no esta activa");
+        if (transfer.fromStoreId !== BODEGA_STORE_ID) {
+          throw new Error("Las transferencias solo pueden salir de Bodega");
         }
 
-        const sourceRows = await db.select().from(products).where(and(
-          eq(products.storeId, transfer.fromStoreId),
-          eq(products.codigoBarras, barcode),
-          eq(products.isActive, true),
-        ));
-        const available = sourceRows.reduce((sum, row) => sum + Number(row.cantidad || 0), 0);
-        if (available < needQty) {
-          throw new Error(`Stock insuficiente en Bodega para ${item.nombre} (${barcode}). Hay ${available}, se piden ${needQty}.`);
+        const items = await db.select().from(transferItems).where(eq(transferItems.transferId, input.id));
+        if (items.length === 0) throw new Error("La transferencia no tiene articulos");
+
+        let [destPallet] = await db.select().from(pallets).where(and(
+          eq(pallets.storeId, transfer.toStoreId),
+          eq(pallets.palletId, "TRANSFERENCIAS"),
+          eq(pallets.isActive, true),
+        )).limit(1);
+        if (!destPallet) {
+          const created = await db.insert(pallets).values({
+            storeId: transfer.toStoreId,
+            palletId: "TRANSFERENCIAS",
+            description: "Recibido por transferencia desde Bodega",
+            fecha: transfer.fecha,
+            costo: "0",
+          });
+          destPallet = { id: Number(created[0].insertId) } as typeof destPallet;
         }
 
-        let remaining = needQty;
-        for (const row of sourceRows) {
-          if (remaining <= 0) break;
-          const rowQty = Number(row.cantidad || 0);
-          const take = Math.min(rowQty, remaining);
-          const left = rowQty - take;
-          if (left <= 0) {
-            await db.update(products).set({ cantidad: 0, isActive: false }).where(eq(products.id, row.id));
-          } else {
-            await db.update(products).set({ cantidad: left }).where(eq(products.id, row.id));
+        let totalUnits = 0;
+        let totalVenta = 0;
+        let totalCosto = 0;
+
+        for (const item of items) {
+          const barcode = item.codigoBarras?.trim();
+          const needQty = Number(item.cantidad || 0);
+          if (!barcode || needQty <= 0) {
+            throw new Error(`Articulo invalido en transferencia: ${item.nombre}`);
           }
-          remaining -= take;
+
+          // Lock stock rows by re-reading under transfer lock; FOR UPDATE via raw when possible
+          const sourceRows = await db.select().from(products).where(and(
+            eq(products.storeId, transfer.fromStoreId),
+            eq(products.codigoBarras, barcode),
+            eq(products.isActive, true),
+          ));
+          const available = sourceRows.reduce((sum, row) => sum + Number(row.cantidad || 0), 0);
+          if (available < needQty) {
+            throw new Error(`Stock insuficiente en Bodega para ${item.nombre} (${barcode}). Hay ${available}, se piden ${needQty}.`);
+          }
+
+          let remaining = needQty;
+          let weightedCost = 0;
+          for (const row of sourceRows) {
+            if (remaining <= 0) break;
+            const rowQty = Number(row.cantidad || 0);
+            const take = Math.min(rowQty, remaining);
+            const unitCost = row.costo != null ? Number(row.costo) : (item.costo != null ? Number(item.costo) : 0);
+            weightedCost += unitCost * take;
+            const left = rowQty - take;
+            if (left <= 0) {
+              await db.update(products).set({ cantidad: 0, isActive: false }).where(eq(products.id, row.id));
+            } else {
+              await db.update(products).set({ cantidad: left }).where(eq(products.id, row.id));
+            }
+            await db.insert(inventoryMovements).values({
+              storeId: transfer.fromStoreId,
+              toStoreId: transfer.toStoreId,
+              movementType: "transfer_out",
+              refType: "transfer",
+              refId: transfer.id,
+              productId: row.id,
+              palletId: row.palletId,
+              codigoBarras: barcode,
+              nombre: item.nombre,
+              cantidad: take,
+              precio: String(item.precio),
+              costo: String(unitCost),
+              actorId: ctx.user?.id,
+              actorName: ctx.user?.name || ctx.user?.unionId,
+            });
+            remaining -= take;
+          }
+
+          const avgCost = needQty > 0 ? weightedCost / needQty : 0;
+          const lineCosto = item.costo != null ? String(item.costo) : (avgCost > 0 ? avgCost.toFixed(2) : null);
+
+          const destInsert = await db.insert(products).values({
+            storeId: transfer.toStoreId,
+            palletId: destPallet.id,
+            nombre: item.nombre,
+            precio: String(item.precio),
+            costo: lineCosto,
+            cantidad: needQty,
+            codigoBarras: barcode,
+            esNuevo: false,
+          });
+
+          await db.insert(inventoryMovements).values({
+            storeId: transfer.toStoreId,
+            toStoreId: null,
+            movementType: "transfer_in",
+            refType: "transfer",
+            refId: transfer.id,
+            productId: Number(destInsert[0].insertId),
+            palletId: destPallet.id,
+            codigoBarras: barcode,
+            nombre: item.nombre,
+            cantidad: needQty,
+            precio: String(item.precio),
+            costo: lineCosto,
+            actorId: ctx.user?.id,
+            actorName: ctx.user?.name || ctx.user?.unionId,
+          });
+
+          totalUnits += needQty;
+          totalVenta += Number(item.precio) * needQty;
+          totalCosto += (lineCosto != null ? Number(lineCosto) : 0) * needQty;
         }
 
-        await db.insert(products).values({
-          storeId: transfer.toStoreId,
-          palletId: destPallet.id,
-          nombre: item.nombre,
-          precio: String(item.precio),
-          cantidad: needQty,
-          codigoBarras: barcode,
-          esNuevo: false,
-        });
-      }
+        await db.update(transfers).set({
+          estado: "completado",
+          completedAt: new Date(),
+        }).where(and(eq(transfers.id, input.id), eq(transfers.estado, "activo")));
 
-      await db.update(transfers).set({ estado: "completado" }).where(eq(transfers.id, input.id));
-      return { success: true, itemsMoved: items.length };
+        return {
+          success: true,
+          itemsMoved: items.length,
+          unitsMoved: totalUnits,
+          totalVenta,
+          totalCosto,
+          gananciaEstimada: totalVenta - totalCosto,
+          toStoreId: transfer.toStoreId,
+        };
+      });
     }),
 
   cancelTransfer: managerQuery
@@ -1383,6 +1652,125 @@ export const inventoryRouter = createRouter({
       if (transfer.estado !== "activo") throw new Error("Solo se pueden cancelar transferencias activas");
       await db.update(transfers).set({ estado: "cancelado" }).where(eq(transfers.id, input.id));
       return { success: true };
+    }),
+
+  /** Allocate pallet.costo evenly across active product units that lack costo */
+  allocatePalletCost: managerQuery
+    .input(z.object({ storeId: z.number(), palletId: z.number(), overwrite: z.boolean().default(false) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const pallet = await assertPalletInStore(db, input.palletId, input.storeId);
+      const palletCosto = Number(pallet.costo || 0);
+      if (palletCosto <= 0) throw new Error("El contenedor no tiene costo para repartir");
+
+      const rows = await db.select().from(products).where(and(
+        eq(products.storeId, input.storeId),
+        eq(products.palletId, input.palletId),
+        eq(products.isActive, true),
+      ));
+      const totalUnits = rows.reduce((s, r) => s + Number(r.cantidad || 0), 0);
+      if (totalUnits <= 0) throw new Error("El contenedor no tiene unidades activas");
+
+      const unitCost = palletCosto / totalUnits;
+      let updated = 0;
+      for (const row of rows) {
+        if (!input.overwrite && row.costo != null) continue;
+        await db.update(products).set({ costo: unitCost.toFixed(2) }).where(eq(products.id, row.id));
+        updated++;
+      }
+      return { success: true, unitCost: Number(unitCost.toFixed(2)), updated, totalUnits };
+    }),
+
+  palletProfitability: authedQuery
+    .input(z.object({ storeId: z.number(), palletId: z.number() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const pallet = await assertPalletInStore(db, input.palletId, input.storeId);
+      const rows = await db.select().from(products).where(and(
+        eq(products.storeId, input.storeId),
+        eq(products.palletId, input.palletId),
+        eq(products.isActive, true),
+      ));
+      let ventas = 0;
+      let costoArticulos = 0;
+      let units = 0;
+      let withCosto = 0;
+      for (const r of rows) {
+        const qty = Number(r.cantidad || 0);
+        units += qty;
+        ventas += Number(r.precio || 0) * qty;
+        if (r.costo != null) {
+          costoArticulos += Number(r.costo) * qty;
+          withCosto += qty;
+        }
+      }
+      const palletCosto = Number(pallet.costo || 0);
+      const gananciaVsPallet = ventas - palletCosto;
+      const gananciaVsUnitCost = withCosto > 0 ? ventas - costoArticulos - (units - withCosto > 0 ? 0 : 0) : null;
+      return {
+        palletId: pallet.id,
+        palletLabel: pallet.palletId,
+        description: pallet.description,
+        palletCosto,
+        ventas,
+        units,
+        articulos: rows.length,
+        costoArticulos,
+        unitsWithCosto: withCosto,
+        ganancia: gananciaVsPallet,
+        margenPct: ventas > 0 ? (gananciaVsPallet / ventas) * 100 : 0,
+        gananciaUnitCost: gananciaVsUnitCost,
+      };
+    }),
+
+  palletRelatedTransfers: authedQuery
+    .input(z.object({ storeId: z.number(), palletId: z.number() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      await assertPalletInStore(db, input.palletId, input.storeId);
+      const barcodeRows = await db.select({ codigoBarras: products.codigoBarras }).from(products)
+        .where(and(eq(products.storeId, input.storeId), eq(products.palletId, input.palletId)));
+      const barcodes = [...new Set(barcodeRows.map((r) => r.codigoBarras).filter(Boolean) as string[])];
+      if (barcodes.length === 0) return [];
+
+      const movs = await db.select().from(inventoryMovements)
+        .where(and(
+          eq(inventoryMovements.refType, "transfer"),
+          eq(inventoryMovements.movementType, "transfer_out"),
+          inArray(inventoryMovements.codigoBarras, barcodes.slice(0, 200)),
+        ))
+        .orderBy(desc(inventoryMovements.createdAt))
+        .limit(100);
+
+      const transferIds = [...new Set(movs.map((m) => m.refId))];
+      if (transferIds.length === 0) return [];
+      return db.select().from(transfers).where(inArray(transfers.id, transferIds)).orderBy(desc(transfers.createdAt));
+    }),
+
+  inventoryMovements: authedQuery
+    .input(z.object({
+      storeId: z.number().optional(),
+      refType: z.string().optional(),
+      refId: z.number().optional(),
+      limit: z.number().min(1).max(200).default(50),
+    }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const conditions = [];
+      if (input.storeId != null) conditions.push(eq(inventoryMovements.storeId, input.storeId));
+      if (input.refType) conditions.push(eq(inventoryMovements.refType, input.refType));
+      if (input.refId != null) conditions.push(eq(inventoryMovements.refId, input.refId));
+      if (conditions.length === 0) {
+        return db.select().from(inventoryMovements).orderBy(desc(inventoryMovements.createdAt)).limit(input.limit);
+      }
+      return db.select().from(inventoryMovements)
+        .where(and(...conditions))
+        .orderBy(desc(inventoryMovements.createdAt))
+        .limit(input.limit);
     }),
 
   // ========== STORE EMPLOYEES (nombres para cierre) ==========

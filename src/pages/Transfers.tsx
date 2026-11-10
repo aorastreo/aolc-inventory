@@ -6,6 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ArrowLeftRight, Plus, Trash2, Barcode, Download, CheckCircle, XCircle, Clock,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
@@ -28,8 +38,36 @@ export default function TransfersPage() {
     onSuccess: () => utils.inventory.getTransferItems.invalidate(),
   });
   const completeTransfer = trpc.inventory.completeTransfer.useMutation({
-    onSuccess: () => { utils.inventory.getTransfers.invalidate(); setViewingTransfer(null); },
+    onSuccess: (data) => {
+      utils.inventory.getTransfers.invalidate();
+      setCompleteSummary({
+        itemsMoved: data.itemsMoved ?? transferDetail?.length ?? 0,
+        units: data.unitsMoved ?? transferDetail?.reduce((s, i) => s + i.cantidad, 0) ?? 0,
+        totalVenta: data.totalVenta ?? transferDetail?.reduce((s, i) => s + Number(i.precio || 0) * i.cantidad, 0) ?? 0,
+        totalCosto: data.totalCosto,
+        gananciaEstimada: data.gananciaEstimada,
+      });
+      setCompleteConfirmOpen(false);
+    },
+    onError: (err) => alert(err.message),
   });
+  const cancelTransfer = trpc.inventory.cancelTransfer.useMutation({
+    onSuccess: () => {
+      utils.inventory.getTransfers.invalidate();
+      setCancelConfirmOpen(false);
+      setViewingTransfer(null);
+    },
+  });
+
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [completeSummary, setCompleteSummary] = useState<{
+    itemsMoved: number;
+    units: number;
+    totalVenta: number;
+    totalCosto?: number;
+    gananciaEstimada?: number;
+  } | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [toStoreId, setToStoreId] = useState<number | null>(
@@ -65,6 +103,12 @@ export default function TransfersPage() {
     }
   }, [foundProduct, barcode]);
 
+  useEffect(() => {
+    setCompleteSummary(null);
+    setCompleteConfirmOpen(false);
+    setCancelConfirmOpen(false);
+  }, [viewingTransfer]);
+
   const handleAddItem = () => {
     if (!viewingTransfer || !scannedProduct || scanQty < 1) return;
     const available = Number(scannedProduct.cantidad || 0);
@@ -79,7 +123,8 @@ export default function TransfersPage() {
       precio: String(scannedProduct.precio),
       cantidad: scanQty,
       orden: (transferDetail?.length || 0) + 1,
-    });
+      ...(scannedProduct.costo != null ? { costo: String(scannedProduct.costo) } : {}),
+    } as Parameters<typeof addItem.mutate>[0]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -148,6 +193,10 @@ export default function TransfersPage() {
     const status = getStatusConfig(currentTransfer.estado);
     const fromName = getStoreName(currentTransfer.fromStoreId);
     const toName = getStoreName(currentTransfer.toStoreId);
+    const detailUnits = transferDetail?.reduce((s, i) => s + i.cantidad, 0) ?? 0;
+    const detailTotalVenta = transferDetail?.reduce((s, i) => s + Number(i.precio || 0) * i.cantidad, 0) ?? 0;
+    const stockAvailable = scannedProduct ? Number(scannedProduct.cantidad || 0) : 0;
+    const stockExceeded = scannedProduct && scanQty > stockAvailable;
 
     return (
       <div>
@@ -210,7 +259,7 @@ export default function TransfersPage() {
                 </div>
 
                 {scannedProduct && (
-                  <div className="p-4 rounded-lg border" style={{ background: "hsl(0 0% 98%)", borderColor: "hsl(210 20% 90%)" }}>
+                  <div className="p-4 rounded-lg border" style={{ background: "hsl(0 0% 98%)", borderColor: stockExceeded ? "#FCA5A5" : "hsl(210 20% 90%)" }}>
                     <div className="grid grid-cols-2 gap-4 mb-4">
                       <div>
                         <Label className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>Nombre</Label>
@@ -220,13 +269,22 @@ export default function TransfersPage() {
                         <Label className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>Precio</Label>
                         <p className="text-sm font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{formatCurrency(String(scannedProduct.precio))}</p>
                       </div>
+                      <div className="col-span-2">
+                        <Label className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>Stock en Bodega</Label>
+                        <p className="text-sm font-bold" style={{ color: BRAND_BLUE }}>{stockAvailable} unidad(es) disponibles</p>
+                      </div>
                     </div>
+                    {stockExceeded && (
+                      <p className="text-sm mb-3 px-3 py-2 rounded-md bg-red-50 text-red-700 border border-red-200">
+                        La cantidad a enviar ({scanQty}) supera el stock disponible ({stockAvailable}).
+                      </p>
+                    )}
                     <div className="flex items-center gap-3">
                       <div className="w-32">
                         <Label className="text-xs">Cantidad a enviar</Label>
                         <Input type="number" min={1} value={scanQty} onChange={(e) => setScanQty(Number(e.target.value))} className="h-10 text-center" />
                       </div>
-                      <Button onClick={handleAddItem} className="h-10 mt-5 font-medium" style={{ background: BRAND_RED }}>
+                      <Button onClick={handleAddItem} disabled={!!stockExceeded} className="h-10 mt-5 font-medium" style={{ background: BRAND_RED }}>
                         <Plus className="w-4 h-4 mr-2" />
                         Agregar
                       </Button>
@@ -276,12 +334,93 @@ export default function TransfersPage() {
           </table>
         </div>
 
-        {currentTransfer.estado === "activo" && (
-          <Button onClick={() => completeTransfer.mutate({ id: viewingTransfer })} className="font-medium" style={{ background: "#16A34A" }}>
-            <CheckCircle className="w-4 h-4 mr-2" />
-            Completar Transferencia
-          </Button>
+        {completeSummary && (
+          <Card className="mb-6 border border-green-200 bg-green-50">
+            <CardContent className="p-5">
+              <h3 className="text-sm font-semibold text-green-800 mb-2">Transferencia completada</h3>
+              <p className="text-sm text-green-900">
+                {completeSummary.itemsMoved} productos · {completeSummary.units} unidades · {formatCurrency(String(completeSummary.totalVenta))} venta
+                {completeSummary.totalCosto != null ? ` · ${formatCurrency(String(completeSummary.totalCosto))} costo` : ""}
+                {completeSummary.gananciaEstimada != null ? ` · ganancia ${formatCurrency(String(completeSummary.gananciaEstimada))}` : ""}
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => { setCompleteSummary(null); setViewingTransfer(null); }}>
+                Cerrar
+              </Button>
+            </CardContent>
+          </Card>
         )}
+
+        {currentTransfer.estado === "activo" && !completeSummary && (
+          <div className="flex flex-wrap gap-3">
+            <Button
+              onClick={() => setCompleteConfirmOpen(true)}
+              disabled={completeTransfer.isPending || !transferDetail?.length}
+              className="font-medium"
+              style={{ background: "#16A34A" }}
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              {completeTransfer.isPending ? "Completando..." : "Completar Transferencia"}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => setCancelConfirmOpen(true)}
+              disabled={cancelTransfer.isPending}
+              className="font-medium"
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              Cancelar
+            </Button>
+          </div>
+        )}
+
+        <AlertDialog open={completeConfirmOpen} onOpenChange={setCompleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Completar transferencia</AlertDialogTitle>
+              <AlertDialogDescription>
+                Se moveran <strong>{transferDetail?.length ?? 0}</strong> productos (
+                <strong>{detailUnits}</strong> unidades) por un valor de venta de{" "}
+                <strong>{formatCurrency(String(detailTotalVenta))}</strong> a la tienda destino.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Volver</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={completeTransfer.isPending}
+                onClick={(e) => {
+                  e.preventDefault();
+                  completeTransfer.mutate({ id: viewingTransfer });
+                }}
+                style={{ background: "#16A34A" }}
+              >
+                Confirmar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancelar transferencia</AlertDialogTitle>
+              <AlertDialogDescription>
+                La transferencia quedara cancelada. Los articulos escaneados no se moveran de Bodega.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Volver</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={(e) => {
+                  e.preventDefault();
+                  cancelTransfer.mutate({ id: viewingTransfer });
+                }}
+              >
+                Cancelar transferencia
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     );
   }

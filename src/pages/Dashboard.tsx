@@ -11,6 +11,13 @@ export default function DashboardPage() {
     return value.toLocaleString("es-CR", { style: "currency", currency: "CRC", minimumFractionDigits: 0 });
   };
 
+  type DashboardStats = NonNullable<typeof stats> & {
+    stockValue?: number;
+    transferValueOut?: number;
+    estimatedProfit?: number;
+  };
+  const ext = stats as DashboardStats | undefined;
+
   const statCards = [
     {
       title: "Contenedores",
@@ -63,6 +70,29 @@ export default function DashboardPage() {
     },
   ];
 
+  const bodegaExtraCards = isBodega
+    ? [
+        ext?.stockValue != null && {
+          title: "Valor en stock",
+          value: formatCurrency(ext.stockValue),
+          icon: DollarSign,
+          gradient: "from-[#1B3A5C] to-[#0F2340]",
+        },
+        ext?.transferValueOut != null && {
+          title: "Salida transferencias",
+          value: formatCurrency(ext.transferValueOut),
+          icon: TrendingUp,
+          gradient: "from-[#B22234] to-[#8B1A2B]",
+        },
+        ext?.estimatedProfit != null && {
+          title: "Ganancia estimada",
+          value: formatCurrency(ext.estimatedProfit),
+          icon: TrendingUp,
+          gradient: "from-[#2D6A4F] to-[#1B4332]",
+        },
+      ].filter(Boolean) as typeof statCards
+    : [];
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -85,7 +115,7 @@ export default function DashboardPage() {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        {statCards.map((card) => {
+        {[...statCards, ...bodegaExtraCards].map((card) => {
           const Icon = card.icon;
           return (
             <Card key={card.title} className="border-0 shadow-sm overflow-hidden">

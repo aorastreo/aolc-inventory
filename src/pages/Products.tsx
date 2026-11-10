@@ -39,11 +39,11 @@ export default function ProductsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // New product form state
-  const [form, setForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
+  const [form, setForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "", costo: "" });
 
   // Inline edit state
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
-  const [editProductForm, setEditProductForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
+  const [editProductForm, setEditProductForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "", costo: "" });
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-full">
@@ -62,8 +62,9 @@ export default function ProductsPage() {
       storeId, palletId: palletIdNum,
       nombre: form.nombre, precio: form.precio,
       cantidad: form.cantidad, codigoBarras: form.codigoBarras,
-    });
-    setForm({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
+      ...(form.costo ? { costo: form.costo } : {}),
+    } as Parameters<typeof createProduct.mutate>[0]);
+    setForm({ nombre: "", precio: "", cantidad: 1, codigoBarras: "", costo: "" });
     setDialogOpen(false);
   };
 
@@ -71,9 +72,9 @@ export default function ProductsPage() {
     <div>
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <Button variant="outline" size="sm" onClick={() => navigate("/pallets")} style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}>
+        <Button variant="outline" size="sm" onClick={() => navigate(`/pallets/${palletIdNum}`)} style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}>
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Volver
+          Volver al hub
         </Button>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #B22234 0%, #8B1A2B 100%)" }}>
@@ -128,6 +129,11 @@ export default function ProductsPage() {
               <div>
                 <Label>Precio de Venta</Label>
                 <Input type="number" placeholder="0" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} />
+              </div>
+
+              <div>
+                <Label>Costo unitario (opcional)</Label>
+                <Input type="number" placeholder="0" value={form.costo} onChange={(e) => setForm({ ...form, costo: e.target.value })} />
               </div>
 
               {/* Cantidad */}
@@ -189,7 +195,7 @@ export default function ProductsPage() {
                         <TableCell className="py-2"><Input size="sm" value={editProductForm.codigoBarras} onChange={(e) => setEditProductForm({ ...editProductForm, codigoBarras: e.target.value })} className="h-8 text-sm font-mono" /></TableCell>
                         <TableCell className="py-2">
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => { updateProduct.mutate({ id: product.id, storeId, ...editProductForm }); }} className="hover:bg-green-50 h-8 w-8 p-0">
+                            <Button variant="ghost" size="sm" onClick={() => { updateProduct.mutate({ id: product.id, storeId, ...editProductForm } as Parameters<typeof updateProduct.mutate>[0]); }} className="hover:bg-green-50 h-8 w-8 p-0">
                               <Check className="w-4 h-4" style={{ color: "#16A34A" }} />
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => setEditingProductId(null)} className="hover:bg-gray-100 h-8 w-8 p-0">
@@ -213,7 +219,7 @@ export default function ProductsPage() {
                         <TableCell className="text-sm font-mono text-xs" style={{ color: "hsl(207 20% 55%)" }}>{product.codigoBarras || "-"}</TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => { setEditingProductId(product.id); setEditProductForm({ nombre: product.nombre, precio: String(product.precio), cantidad: product.cantidad, codigoBarras: product.codigoBarras || "" }); }} className="hover:bg-blue-50 h-8 w-8 p-0">
+                            <Button variant="ghost" size="sm" onClick={() => { const pc = (product as { costo?: string }).costo; setEditingProductId(product.id); setEditProductForm({ nombre: product.nombre, precio: String(product.precio), cantidad: product.cantidad, codigoBarras: product.codigoBarras || "", costo: pc != null ? String(pc) : "" }); }} className="hover:bg-blue-50 h-8 w-8 p-0">
                               <Pencil className="w-4 h-4" style={{ color: "#1B3A5C" }} />
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => deleteProduct.mutate({ id: product.id, storeId })} className="hover:bg-red-50 h-8 w-8 p-0">

@@ -107,6 +107,8 @@ export const products = mysqlTable("products", {
   codigo: varchar("codigo", { length: 50 }),
   nombre: varchar("nombre", { length: 255 }).notNull(),
   precio: decimal("precio", { precision: 12, scale: 2 }).notNull(),
+  /** Unit cost (COGS). Nullable for historical rows. */
+  costo: decimal("costo", { precision: 12, scale: 2 }),
   cantidad: int("cantidad").default(1).notNull(),
   codigoBarras: varchar("codigoBarras", { length: 50 }),
   esNuevo: boolean("esNuevo").default(false),
@@ -148,6 +150,7 @@ export const adjustments = mysqlTable("adjustments", {
   fecha: varchar("fecha", { length: 20 }),
   fechaHora: varchar("fechaHora", { length: 50 }),
   completedAt: timestamp("completedAt"),
+  completedBy: varchar("completedBy", { length: 255 }),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -163,6 +166,8 @@ export const adjustmentItems = mysqlTable("adjustmentItems", {
   adjustmentId: bigint("adjustmentId", { mode: "number", unsigned: true }).notNull(),
   nombre: varchar("nombre", { length: 255 }).notNull(),
   precio: decimal("precio", { precision: 12, scale: 2 }).notNull(),
+  /** Optional unit cost when applying into container */
+  costo: decimal("costo", { precision: 12, scale: 2 }),
   cantidad: int("cantidad").default(1).notNull(),
   codigoBarras: varchar("codigoBarras", { length: 50 }),
   orden: int("orden").default(1),
@@ -329,6 +334,8 @@ export const transfers = mysqlTable("transfers", {
   toStoreId: bigint("toStoreId", { mode: "number", unsigned: true }).notNull(),
   fecha: varchar("fecha", { length: 20 }).notNull(),
   estado: varchar("estado", { length: 20 }).notNull().default("activo"),
+  completedAt: timestamp("completedAt"),
+  createdBy: varchar("createdBy", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -341,12 +348,40 @@ export const transferItems = mysqlTable("transferItems", {
   codigoBarras: varchar("codigoBarras", { length: 50 }),
   nombre: varchar("nombre", { length: 255 }).notNull(),
   precio: decimal("precio", { precision: 12, scale: 2 }).notNull(),
+  /** Snapshot of unit cost at transfer time */
+  costo: decimal("costo", { precision: 12, scale: 2 }),
   cantidad: int("cantidad").default(1).notNull(),
   orden: int("orden").default(1),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export type TransferItem = typeof transferItems.$inferInsert;
+export type TransferItem = typeof transferItems.$inferSelect;
+export type InsertTransferItem = typeof transferItems.$inferInsert;
+
+// ============================================
+// INVENTORY MOVEMENTS (audit trail)
+// ============================================
+export const inventoryMovements = mysqlTable("inventory_movements", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  toStoreId: bigint("toStoreId", { mode: "number", unsigned: true }),
+  movementType: varchar("movementType", { length: 40 }).notNull(),
+  refType: varchar("refType", { length: 40 }).notNull(),
+  refId: bigint("refId", { mode: "number", unsigned: true }).notNull(),
+  productId: bigint("productId", { mode: "number", unsigned: true }),
+  palletId: bigint("palletId", { mode: "number", unsigned: true }),
+  codigoBarras: varchar("codigoBarras", { length: 50 }),
+  nombre: varchar("nombre", { length: 255 }),
+  cantidad: int("cantidad").default(0).notNull(),
+  precio: decimal("precio", { precision: 12, scale: 2 }),
+  costo: decimal("costo", { precision: 12, scale: 2 }),
+  actorId: bigint("actorId", { mode: "number", unsigned: true }),
+  actorName: varchar("actorName", { length: 255 }),
+  note: varchar("note", { length: 500 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type InventoryMovement = typeof inventoryMovements.$inferSelect;
 
 // ============================================
 // PAYROLL (Planilla / Nómina)

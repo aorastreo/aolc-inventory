@@ -7,6 +7,7 @@ import NotFoundPage from "@/pages/NotFound";
 import DashboardPage from "@/pages/Dashboard";
 import PalletsPage from "@/pages/Pallets";
 import ProductsPage from "@/pages/Products";
+import PalletHubPage from "@/pages/PalletHub";
 import AdjustmentsPage from "@/pages/Adjustments";
 import TransfersPage from "@/pages/Transfers";
 import ClosingsPage from "@/pages/Closings";
@@ -63,6 +64,7 @@ function App() {
           <Route path="/login" element={<LoginLocalPage />} />
           <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
           <Route path="/pallets" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><PalletsPage /></ProtectedRoute>} />
+          <Route path="/pallets/:palletId" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><PalletHubPage /></ProtectedRoute>} />
           <Route path="/pallets/:palletId/products" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><ProductsPage /></ProtectedRoute>} />
           <Route path="/adjustments" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><AdjustmentsPage /></ProtectedRoute>} />
           <Route path="/transfers" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><TransfersPage /></ProtectedRoute>} />

@@ -251,7 +251,7 @@ export default function PalletsPage() {
                   </TableCell>
                   <TableCell className="text-center">
                     <div className="flex items-center justify-center gap-1.5">
-                      <Link to={`/pallets/${pallet.id}/products`}>
+                      <Link to={`/pallets/${pallet.id}`}>
                         <Button
                           variant="outline"
                           size="sm"
@@ -262,7 +262,7 @@ export default function PalletsPage() {
                           Ver
                         </Button>
                       </Link>
-                      <Link to={`/adjustments?palletId=${pallet.id}`}>
+                      <Link to={`/pallets/${pallet.id}?tab=ajustes`}>
                         <Button
                           variant="outline"
                           size="sm"

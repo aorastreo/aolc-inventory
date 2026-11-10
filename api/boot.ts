@@ -81,9 +81,14 @@ if (env.isProduction) {
   });
 
   // Initialize database AFTER server starts (non-blocking)
-  initDatabase().catch((err) => {
-    console.error("[DB-INIT] Failed:", err.message);
-  });
+  initDatabase()
+    .then(async () => {
+      const { ensureEnterpriseSchema } = await import("./lib/enterprise-schema");
+      await ensureEnterpriseSchema();
+    })
+    .catch((err) => {
+      console.error("[DB-INIT] Failed:", err.message);
+    });
 
   // Seed default employee (German) on startup
   seedDefaultEmployee();

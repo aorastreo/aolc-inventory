@@ -6,6 +6,16 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ClipboardList, CheckCircle, Clock, XCircle, Plus, Eye, Trash2, ArrowLeft, Package, X, Barcode, Pencil, Check, Search, Download,
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -18,6 +28,7 @@ const BRAND_BLUE = "#1B3A5C";
 export default function AdjustmentsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const palletFilter = searchParams.get("palletId");
+  const viewFilter = searchParams.get("view");
   const palletFilterNum = palletFilter ? Number(palletFilter) : null;
   const { storeId } = useActiveStore();
 
@@ -34,29 +45,43 @@ export default function AdjustmentsPage() {
   const createAdj = trpc.inventory.createAdjustment.useMutation({ onSuccess: () => utils.inventory.adjustments.invalidate() });
   const completeAdj = trpc.inventory.completeAdjustment.useMutation({ onSuccess: () => { utils.inventory.adjustments.invalidate(); utils.inventory.products.invalidate(); } });
   const cancelAdj = trpc.inventory.cancelAdjustment.useMutation({ onSuccess: () => utils.inventory.adjustments.invalidate() });
-  const applyToContainer = trpc.inventory.applyAdjustmentToContainer.useMutation({ onSuccess: () => { utils.inventory.adjustments.invalidate(); utils.inventory.products.invalidate(); } });
   const addItem = trpc.inventory.addAdjustmentItem.useMutation({ onSuccess: () => { utils.inventory.adjustmentItems.invalidate(); utils.inventory.adjustments.invalidate(); } });
   const removeItem = trpc.inventory.removeAdjustmentItem.useMutation({ onSuccess: () => utils.inventory.adjustmentItems.invalidate() });
   const updateItem = trpc.inventory.updateAdjustmentItem.useMutation({ onSuccess: () => { utils.inventory.adjustmentItems.invalidate(); setEditingItemId(null); } });
 
   const [viewingAdj, setViewingAdj] = useState<number | null>(null);
   const [newAdj, setNewAdj] = useState({ adjustmentId: "", description: "", palletId: palletFilter || "" });
-  const [newItem, setNewItem] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
+  const [newItem, setNewItem] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "", costo: "" });
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Inline edit state
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
-  const [editItemForm, setEditItemForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
+  const [editItemForm, setEditItemForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "", costo: "" });
 
   // Item search/filter
   const [itemSearch, setItemSearch] = useState("");
 
-  // Pre-fill palletId when coming from a filtered view
+  // Pre-fill palletId when coming from a filtered view; open detail via ?view=
   useEffect(() => {
     if (palletFilter) {
       setNewAdj(prev => ({ ...prev, palletId: palletFilter }));
     }
   }, [palletFilter]);
+
+  useEffect(() => {
+    const viewId = searchParams.get("view");
+    if (viewId && Number.isFinite(Number(viewId))) {
+      setViewingAdj(Number(viewId));
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (viewFilter) {
+      const id = Number(viewFilter);
+      if (!Number.isNaN(id)) setViewingAdj(id);
+    }
+  }, [viewFilter]);
 
   const { data: adjDetail } = trpc.inventory.adjustmentById.useQuery({ id: viewingAdj! }, { enabled: !!viewingAdj });
   const { data: adjItems } = trpc.inventory.adjustmentItems.useQuery({ adjustmentId: viewingAdj! }, { enabled: !!viewingAdj });
@@ -122,8 +147,9 @@ export default function AdjustmentsPage() {
     addItem.mutate({
       adjustmentId: viewingAdj, nombre: newItem.nombre, precio: newItem.precio,
       cantidad: newItem.cantidad, codigoBarras: newItem.codigoBarras, orden: (adjItems?.length || 0) + 1,
-    });
-    setNewItem({ nombre: "", precio: "", cantidad: 1, codigoBarras: "" });
+      ...(newItem.costo ? { costo: newItem.costo } : {}),
+    } as Parameters<typeof addItem.mutate>[0]);
+    setNewItem({ nombre: "", precio: "", cantidad: 1, codigoBarras: "", costo: "" });
   };
 
   const formatCurrency = (value: string) => Number(value || 0).toLocaleString("es-CR", { style: "currency", currency: "CRC" });
@@ -223,6 +249,11 @@ export default function AdjustmentsPage() {
                 <div>
                   <Label>Precio</Label>
                   <Input type="number" placeholder="0" value={newItem.precio} onChange={(e) => setNewItem({ ...newItem, precio: e.target.value })} />
+                </div>
+
+                <div>
+                  <Label>Costo unitario (opcional)</Label>
+                  <Input type="number" placeholder="0" value={newItem.costo} onChange={(e) => setNewItem({ ...newItem, costo: e.target.value })} />
                 </div>
 
                 {/* Cantidad */}
@@ -359,12 +390,13 @@ export default function AdjustmentsPage() {
         {adjDetail.estado === "activo" && (
           <div className="flex gap-3">
             <Button
-              onClick={() => { completeAdj.mutate({ id: viewingAdj }); setViewingAdj(null); }}
+              onClick={() => setCompleteConfirmOpen(true)}
+              disabled={completeAdj.isPending}
               className="font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90"
               style={{ background: "#16A34A" }}
             >
               <CheckCircle className="w-4 h-4 mr-2" />
-              Completar Ajuste
+              {completeAdj.isPending ? "Completando..." : "Completar Ajuste"}
             </Button>
             <Button
               variant="destructive"
@@ -376,6 +408,33 @@ export default function AdjustmentsPage() {
             </Button>
           </div>
         )}
+
+        <AlertDialog open={completeConfirmOpen} onOpenChange={setCompleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Completar ajuste</AlertDialogTitle>
+              <AlertDialogDescription>
+                Se aplicaran <strong>{adjItems?.length ?? 0}</strong> productos (
+                <strong>{adjItems?.reduce((s, i) => s + (i.cantidad || 0), 0) ?? 0}</strong> unidades) al contenedor.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Volver</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={completeAdj.isPending}
+                style={{ background: "#16A34A" }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  completeAdj.mutate({ id: viewingAdj! }, {
+                    onSuccess: () => { setCompleteConfirmOpen(false); setViewingAdj(null); },
+                  });
+                }}
+              >
+                Confirmar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {adjDetail.estado === "completado" && (
           <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">

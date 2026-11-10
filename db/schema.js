@@ -75,6 +75,8 @@ export const products = mysqlTable("products", {
     codigo: varchar("codigo", { length: 50 }),
     nombre: varchar("nombre", { length: 255 }).notNull(),
     precio: decimal("precio", { precision: 12, scale: 2 }).notNull(),
+    /** Unit cost (COGS). Nullable for historical rows. */
+    costo: decimal("costo", { precision: 12, scale: 2 }),
     cantidad: int("cantidad").default(1).notNull(),
     codigoBarras: varchar("codigoBarras", { length: 50 }),
     esNuevo: boolean("esNuevo").default(false),
@@ -109,6 +111,7 @@ export const adjustments = mysqlTable("adjustments", {
     fecha: varchar("fecha", { length: 20 }),
     fechaHora: varchar("fechaHora", { length: 50 }),
     completedAt: timestamp("completedAt"),
+    completedBy: varchar("completedBy", { length: 255 }),
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -120,6 +123,8 @@ export const adjustmentItems = mysqlTable("adjustmentItems", {
     adjustmentId: bigint("adjustmentId", { mode: "number", unsigned: true }).notNull(),
     nombre: varchar("nombre", { length: 255 }).notNull(),
     precio: decimal("precio", { precision: 12, scale: 2 }).notNull(),
+    /** Optional unit cost when applying into container */
+    costo: decimal("costo", { precision: 12, scale: 2 }),
     cantidad: int("cantidad").default(1).notNull(),
     codigoBarras: varchar("codigoBarras", { length: 50 }),
     orden: int("orden").default(1),
@@ -133,27 +138,41 @@ export const closings = mysqlTable("closings", {
     storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
     fecha: varchar("fecha", { length: 20 }).notNull(),
     dia: varchar("dia", { length: 20 }),
+    hora: varchar("hora", { length: 10 }),
     efectivo: decimal("efectivo", { precision: 12, scale: 2 }).default("0"),
     sinpe: decimal("sinpe", { precision: 12, scale: 2 }).default("0"),
     tarjeta: decimal("tarjeta", { precision: 12, scale: 2 }).default("0"),
     sinFactura: decimal("sinFactura", { precision: 12, scale: 2 }).default("0"),
     total: decimal("total", { precision: 12, scale: 2 }).default("0"),
     inicial: decimal("inicial", { precision: 12, scale: 2 }).default("0"),
+    diferencia: decimal("diferencia", { precision: 12, scale: 2 }).default("0"),
+    observaciones: text("observaciones"),
+    revisado: boolean("revisado").default(false).notNull(),
+    createdBy: varchar("createdBy", { length: 255 }),
+    registradoPor: varchar("registradoPor", { length: 255 }),
+    cierreHora: timestamp("cierreHora").defaultNow().notNull(),
     semana: int("semana"),
     anio: int("anio"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 // ============================================
-// PRINTED LABELS
+// STORE EMPLOYEES (nombres para cierre)
 // ============================================
-export const printedLabels = mysqlTable("printedLabels", {
+export const storeEmployees = mysqlTable("storeEmployees", {
     id: serial("id").primaryKey(),
     storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
-    palletId: varchar("palletId", { length: 20 }),
-    productId: bigint("productId", { mode: "number", unsigned: true }),
-    codigoBarras: varchar("codigoBarras", { length: 50 }),
-    cantidad: int("cantidad").default(1),
-    printedAt: timestamp("printedAt").defaultNow().notNull(),
+    nombre: varchar("nombre", { length: 255 }).notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+// ============================================
+// STORE CONFIG (Monto inicial por tienda)
+// ============================================
+export const storeConfig = mysqlTable("storeConfig", {
+    id: serial("id").primaryKey(),
+    storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull().unique(),
+    montoInicial: decimal("montoInicial", { precision: 12, scale: 2 }).default("50000"),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 // ============================================
 // ASSEMBLERS (Armadores)
@@ -178,4 +197,164 @@ export const assemblyAssignments = mysqlTable("assemblyAssignments", {
     items: json("items"),
     estado: mysqlEnum("estado", ["pendiente", "en_progreso", "completado"]).default("pendiente"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+// ============================================
+// PRINTED LABELS (Etiquetas impresas)
+// ============================================
+export const printedLabels = mysqlTable("printedLabels", {
+    id: serial("id").primaryKey(),
+    storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+    palletId: bigint("palletId", { mode: "number", unsigned: true }).notNull(),
+    productId: bigint("productId", { mode: "number", unsigned: true }).notNull(),
+    printedAt: timestamp("printedAt").defaultNow().notNull(),
+});
+// ============================================
+// LABEL CONFIG (Configuracion de etiquetas)
+// ============================================
+export const labelConfig = mysqlTable("labelConfig", {
+    id: serial("id").primaryKey(),
+    storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull().default(1),
+    // Label dimensions
+    labelWidth: varchar("labelWidth", { length: 20 }).notNull().default("50mm"),
+    labelHeight: varchar("labelHeight", { length: 20 }).notNull().default("25mm"),
+    // Product name (absolute position Y=top)
+    nameFontSize: varchar("nameFontSize", { length: 10 }).notNull().default("5pt"),
+    nameTop: varchar("nameTop", { length: 10 }).notNull().default("1mm"),
+    nameTextAlign: varchar("nameTextAlign", { length: 10 }).notNull().default("center"),
+    // Price (absolute position Y=top)
+    priceFontSize: varchar("priceFontSize", { length: 10 }).notNull().default("20pt"),
+    ivaFontSize: varchar("ivaFontSize", { length: 10 }).notNull().default("8pt"),
+    priceTop: varchar("priceTop", { length: 10 }).notNull().default("6mm"),
+    priceTextAlign: varchar("priceTextAlign", { length: 10 }).notNull().default("center"),
+    // Barcode (absolute position Y=top)
+    barcodeWidth: varchar("barcodeWidth", { length: 10 }).notNull().default("35mm"),
+    barcodeHeight: varchar("barcodeHeight", { length: 10 }).notNull().default("7.5mm"),
+    barcodeModuleWidth: varchar("barcodeModuleWidth", { length: 10 }).notNull().default("0.50"),
+    barcodeBarHeight: varchar("barcodeBarHeight", { length: 10 }).notNull().default("9"),
+    barcodeTop: varchar("barcodeTop", { length: 10 }).notNull().default("12mm"),
+    barcodeAlign: varchar("barcodeAlign", { length: 10 }).notNull().default("center"),
+    // Barcode number (absolute position Y=top)
+    barcodeNumberFontSize: varchar("barcodeNumberFontSize", { length: 10 }).notNull().default("8pt"),
+    barcodeNumberLetterSpacing: varchar("barcodeNumberLetterSpacing", { length: 10 }).notNull().default("2px"),
+    barcodeNumberTop: varchar("barcodeNumberTop", { length: 10 }).notNull().default("17mm"),
+    barcodeNumberAlign: varchar("barcodeNumberAlign", { length: 10 }).notNull().default("center"),
+    // Footer (absolute position Y=top)
+    footerFontSize: varchar("footerFontSize", { length: 10 }).notNull().default("5pt"),
+    footerTop: varchar("footerTop", { length: 10 }).notNull().default("20mm"),
+    footerTextAlign: varchar("footerTextAlign", { length: 10 }).notNull().default("center"),
+    // Show/hide elements
+    showPrice: boolean("showPrice").notNull().default(true),
+    showIva: boolean("showIva").notNull().default(true),
+    showBarcode: boolean("showBarcode").notNull().default(true),
+    showBarcodeNumber: boolean("showBarcodeNumber").notNull().default(true),
+    showFooter: boolean("showFooter").notNull().default(true),
+    showDate: boolean("showDate").notNull().default(true),
+    footerText: varchar("footerText", { length: 100 }).notNull().default("American Outlet Los Chiles"),
+    rotation: int("rotation").notNull().default(180),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+// ============================================
+// TRANSFERS (Transferencias entre tiendas)
+// ============================================
+export const transfers = mysqlTable("transfers", {
+    id: serial("id").primaryKey(),
+    fromStoreId: bigint("fromStoreId", { mode: "number", unsigned: true }).notNull(),
+    toStoreId: bigint("toStoreId", { mode: "number", unsigned: true }).notNull(),
+    fecha: varchar("fecha", { length: 20 }).notNull(),
+    estado: varchar("estado", { length: 20 }).notNull().default("activo"),
+    completedAt: timestamp("completedAt"),
+    createdBy: varchar("createdBy", { length: 255 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export const transferItems = mysqlTable("transferItems", {
+    id: serial("id").primaryKey(),
+    transferId: bigint("transferId", { mode: "number", unsigned: true }).notNull(),
+    codigoBarras: varchar("codigoBarras", { length: 50 }),
+    nombre: varchar("nombre", { length: 255 }).notNull(),
+    precio: decimal("precio", { precision: 12, scale: 2 }).notNull(),
+    /** Snapshot of unit cost at transfer time */
+    costo: decimal("costo", { precision: 12, scale: 2 }),
+    cantidad: int("cantidad").default(1).notNull(),
+    orden: int("orden").default(1),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+// ============================================
+// INVENTORY MOVEMENTS (audit trail)
+// ============================================
+export const inventoryMovements = mysqlTable("inventory_movements", {
+    id: serial("id").primaryKey(),
+    storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+    toStoreId: bigint("toStoreId", { mode: "number", unsigned: true }),
+    movementType: varchar("movementType", { length: 40 }).notNull(),
+    refType: varchar("refType", { length: 40 }).notNull(),
+    refId: bigint("refId", { mode: "number", unsigned: true }).notNull(),
+    productId: bigint("productId", { mode: "number", unsigned: true }),
+    palletId: bigint("palletId", { mode: "number", unsigned: true }),
+    codigoBarras: varchar("codigoBarras", { length: 50 }),
+    nombre: varchar("nombre", { length: 255 }),
+    cantidad: int("cantidad").default(0).notNull(),
+    precio: decimal("precio", { precision: 12, scale: 2 }),
+    costo: decimal("costo", { precision: 12, scale: 2 }),
+    actorId: bigint("actorId", { mode: "number", unsigned: true }),
+    actorName: varchar("actorName", { length: 255 }),
+    note: varchar("note", { length: 500 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+// ============================================
+// PAYROLL (Planilla / Nómina)
+// ============================================
+export const payrollEmployees = mysqlTable("payrollEmployees", {
+    id: serial("id").primaryKey(),
+    storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+    cedula: varchar("cedula", { length: 50 }),
+    nombre: varchar("nombre", { length: 255 }).notNull(),
+    apellidos: varchar("apellidos", { length: 255 }).notNull(),
+    puesto: varchar("puesto", { length: 100 }).notNull(),
+    salarioBase: decimal("salarioBase", { precision: 12, scale: 2 }).notNull(),
+    tipoSalario: mysqlEnum("tipoSalario", ["quincenal", "mensual", "semanal", "hora"]).default("quincenal").notNull(),
+    fechaIngreso: varchar("fechaIngreso", { length: 20 }).notNull(),
+    telefono: varchar("telefono", { length: 50 }),
+    correo: varchar("correo", { length: 255 }),
+    cuentaBancaria: varchar("cuentaBancaria", { length: 100 }),
+    banco: varchar("banco", { length: 50 }),
+    estado: mysqlEnum("estado", ["activo", "inactivo", "suspendido"]).default("activo").notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+export const payrollPeriods = mysqlTable("payrollPeriods", {
+    id: serial("id").primaryKey(),
+    nombre: varchar("nombre", { length: 100 }).notNull(),
+    tipo: mysqlEnum("tipo", ["quincenal", "mensual", "semanal"]).default("quincenal").notNull(),
+    fechaInicio: varchar("fechaInicio", { length: 20 }).notNull(),
+    fechaFin: varchar("fechaFin", { length: 20 }).notNull(),
+    estado: mysqlEnum("estado", ["abierto", "cerrado", "procesando"]).default("abierto").notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export const payrollPayments = mysqlTable("payrollPayments", {
+    id: serial("id").primaryKey(),
+    employeeId: bigint("employeeId", { mode: "number", unsigned: true }).notNull(),
+    periodId: bigint("periodId", { mode: "number", unsigned: true }).notNull(),
+    salarioBase: decimal("salarioBase", { precision: 12, scale: 2 }).notNull(),
+    horasExtra: decimal("horasExtra", { precision: 10, scale: 2 }).default("0"),
+    montoHorasExtra: decimal("montoHorasExtra", { precision: 12, scale: 2 }).default("0"),
+    comisiones: decimal("comisiones", { precision: 12, scale: 2 }).default("0"),
+    aguinaldo: decimal("aguinaldo", { precision: 12, scale: 2 }).default("0"),
+    vacaciones: decimal("vacaciones", { precision: 12, scale: 2 }).default("0"),
+    totalIngresos: decimal("totalIngresos", { precision: 12, scale: 2 }).notNull(),
+    ccss: decimal("ccss", { precision: 12, scale: 2 }).default("0"),
+    renta: decimal("renta", { precision: 12, scale: 2 }).default("0"),
+    adelantos: decimal("adelantos", { precision: 12, scale: 2 }).default("0"),
+    ausencias: decimal("ausencias", { precision: 12, scale: 2 }).default("0"),
+    otrasDeducciones: decimal("otrasDeducciones", { precision: 12, scale: 2 }).default("0"),
+    totalDeducciones: decimal("totalDeducciones", { precision: 12, scale: 2 }).notNull(),
+    netoPagar: decimal("netoPagar", { precision: 12, scale: 2 }).notNull(),
+    formaPago: mysqlEnum("formaPago", ["transferencia", "cheque", "efectivo"]).default("transferencia").notNull(),
+    estado: mysqlEnum("estado", ["pendiente", "pagado", "anulado"]).default("pendiente").notNull(),
+    observaciones: text("observaciones"),
+    fechaPago: varchar("fechaPago", { length: 20 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
