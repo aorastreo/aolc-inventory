@@ -1,0 +1,194 @@
+import JsBarcode from "jsbarcode";
+
+/** Canonical ZD411 profile: 50×25 mm = 2×1 in. Single source of truth for UI + print. */
+export const LABEL_DEFAULTS = {
+  labelWidth: "50mm",
+  labelHeight: "25mm",
+  nameFontSize: "7pt",
+  nameTop: "0.5mm",
+  nameTextAlign: "center",
+  nameFontWeight: "normal",
+  nameFontFamily: "Arial Narrow",
+  priceFontSize: "26pt",
+  ivaFontSize: "12pt",
+  priceTop: "4mm",
+  priceTextAlign: "center",
+  priceFontWeight: "bold",
+  priceFontFamily: "Arial",
+  barcodeWidth: "46mm",
+  barcodeHeight: "8mm",
+  barcodeTop: "9mm",
+  barcodeAlign: "center",
+  barcodeNumberFontSize: "8.5pt",
+  barcodeNumberLetterSpacing: "0.5px",
+  barcodeNumberTop: "15.5mm",
+  barcodeNumberAlign: "center",
+  barcodeNumberFontWeight: "bold",
+  barcodeNumberFontFamily: "Courier New",
+  footerFontSize: "6pt",
+  footerTop: "19mm",
+  footerTextAlign: "center",
+  footerFontFamily: "Verdana",
+  showPrice: true,
+  showIva: true,
+  showBarcode: true,
+  showBarcodeNumber: true,
+  showFooter: true,
+  showDate: true,
+  footerText: "American Outlet Los Chiles",
+  /** 0 or 180 — Zebra media sometimes feeds upside-down */
+  rotation: 0,
+  /** Max chars per line for product name (2 lines) */
+  nameMaxCharsPerLine: 28,
+} as const;
+
+export type LabelConfigValues = {
+  [K in keyof typeof LABEL_DEFAULTS]: (typeof LABEL_DEFAULTS)[K] extends boolean
+    ? boolean
+    : (typeof LABEL_DEFAULTS)[K] extends number
+      ? number
+      : string;
+} & Record<string, string | boolean | number>;
+
+export type LabelPrintItem = {
+  nombre: string;
+  precio: string | number;
+  codigoBarras?: string | null;
+};
+
+export function mergeLabelConfig(raw?: Record<string, unknown> | null): LabelConfigValues {
+  const out: Record<string, string | boolean | number> = { ...LABEL_DEFAULTS };
+  if (!raw) return out as LabelConfigValues;
+  for (const key of Object.keys(LABEL_DEFAULTS) as (keyof typeof LABEL_DEFAULTS)[]) {
+    const v = raw[key];
+    if (v === undefined || v === null) continue;
+    if (typeof LABEL_DEFAULTS[key] === "boolean") out[key] = !!v;
+    else if (typeof LABEL_DEFAULTS[key] === "number") out[key] = Number(v) || 0;
+    else out[key] = String(v);
+  }
+  return out as LabelConfigValues;
+}
+
+export function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export function getLocalDateString() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Split name into up to 2 uppercase lines without breaking mid-word when possible. */
+export function formatLabelName(nombre: string, maxPerLine = 28): string[] {
+  const raw = (nombre || "").trim().toUpperCase().replace(/\s+/g, " ");
+  if (!raw) return [""];
+  if (raw.length <= maxPerLine) return [raw];
+
+  const words = raw.split(" ");
+  const line1: string[] = [];
+  const line2: string[] = [];
+  for (const w of words) {
+    const target = line1.join(" ").length + (line1.length ? 1 : 0) + w.length <= maxPerLine
+      ? line1
+      : line2;
+    if (target === line2 && line2.join(" ").length + (line2.length ? 1 : 0) + w.length > maxPerLine) {
+      // hard cut remaining into line2
+      const room = Math.max(0, maxPerLine - (line2.join(" ").length + (line2.length ? 1 : 0)));
+      if (room > 1) line2.push(w.slice(0, room - 1) + "…");
+      break;
+    }
+    target.push(w);
+  }
+  if (line1.length === 0) return [raw.slice(0, maxPerLine)];
+  if (line2.length === 0) {
+    // single long word
+    return [raw.slice(0, maxPerLine), raw.length > maxPerLine ? raw.slice(maxPerLine, maxPerLine * 2) : ""].filter(Boolean);
+  }
+  return [line1.join(" "), line2.join(" ")];
+}
+
+export function generateBarcodeSVG(code: string, heightPx = 50): string {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("style", "width:100%;height:100%;");
+  try {
+    JsBarcode(svg, code, {
+      format: "CODE128",
+      width: 2,
+      height: heightPx,
+      displayValue: false,
+      margin: 2,
+    });
+    return svg.outerHTML;
+  } catch {
+    return `<div style="font-size:8pt;text-align:center">${escapeHtml(code)}</div>`;
+  }
+}
+
+function justify(align: string) {
+  if (align === "left") return "flex-start";
+  if (align === "right") return "flex-end";
+  return "center";
+}
+
+/** One physical label HTML — same markup for preview and print. */
+export function buildLabelHtml(
+  item: LabelPrintItem,
+  cfg: LabelConfigValues,
+  opts?: { barcodeSvg?: string; forceShowPrice?: boolean },
+): string {
+  const showPrice = opts?.forceShowPrice !== undefined ? opts.forceShowPrice : !!cfg.showPrice;
+  const maxChars = Number(cfg.nameMaxCharsPerLine) || 28;
+  const lines = formatLabelName(String(item.nombre || ""), maxChars);
+  const nameHtml = lines
+    .map((ln) => `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(ln)}</div>`)
+    .join("");
+  const price = Math.round(Number(item.precio) || 0);
+  const code = item.codigoBarras || "";
+  const barcodeSvg = opts?.barcodeSvg ?? (code ? generateBarcodeSVG(code) : "");
+  const footer =
+    `${cfg.showDate ? getLocalDateString() + " - " : ""}${cfg.footerText || ""}`;
+  const rot = Number(cfg.rotation) === 180 ? 180 : 0;
+
+  return `
+    <div class="label-page" style="width:${cfg.labelWidth};height:${cfg.labelHeight};position:relative;background:white;margin:0;padding:0;box-sizing:border-box;overflow:hidden;font-family:${cfg.nameFontFamily || "Arial Narrow"};transform:rotate(${rot}deg);transform-origin:center center;">
+      <div style="position:absolute;top:${cfg.nameTop};left:1mm;right:1mm;font-size:${cfg.nameFontSize};font-weight:${cfg.nameFontWeight};font-family:${cfg.nameFontFamily};color:#000;letter-spacing:0.2px;line-height:1.15;text-align:${cfg.nameTextAlign};">${nameHtml}</div>
+      ${showPrice ? `
+      <div style="position:absolute;top:${cfg.priceTop};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${justify(String(cfg.priceTextAlign))};gap:1.5mm;">
+        <span style="font-size:${cfg.priceFontSize};font-weight:${cfg.priceFontWeight};font-family:${cfg.priceFontFamily};color:#000;letter-spacing:0.5px;line-height:1;">${price}</span>
+        ${cfg.showIva ? `<span style="font-size:${cfg.ivaFontSize};font-weight:bold;color:#000;">IVA</span>` : ""}
+      </div>` : ""}
+      ${cfg.showBarcode && code ? `
+      <div style="position:absolute;top:${cfg.barcodeTop};left:1mm;right:1mm;text-align:${cfg.barcodeAlign};height:${cfg.barcodeHeight};display:flex;align-items:center;justify-content:${justify(String(cfg.barcodeAlign))};">${barcodeSvg}</div>` : ""}
+      ${cfg.showBarcodeNumber && code ? `
+      <div style="position:absolute;top:${cfg.barcodeNumberTop};left:1mm;right:1mm;font-size:${cfg.barcodeNumberFontSize};font-weight:${cfg.barcodeNumberFontWeight};font-family:${cfg.barcodeNumberFontFamily};color:#000;letter-spacing:${cfg.barcodeNumberLetterSpacing};text-align:${cfg.barcodeNumberAlign};white-space:nowrap;">${escapeHtml(code)}</div>` : ""}
+      ${cfg.showFooter ? `
+      <div style="position:absolute;top:${cfg.footerTop};left:1mm;right:1mm;font-size:${cfg.footerFontSize};font-family:${cfg.footerFontFamily};color:#000;letter-spacing:0.2px;text-align:${cfg.footerTextAlign};white-space:nowrap;overflow:hidden;">${escapeHtml(footer)}</div>` : ""}
+    </div>
+  `;
+}
+
+export function buildPrintDocumentHtml(labelsHtml: string, cfg: LabelConfigValues): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>Etiquetas ZD411</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: ${cfg.labelWidth} ${cfg.labelHeight}; margin: 0; }
+    body { margin: 0; padding: 0; background: white; }
+    .label-page { page-break-after: always; break-after: page; }
+    .label-page:last-child { page-break-after: auto; break-after: auto; }
+  </style>
+</head>
+<body>
+  ${labelsHtml}
+</body>
+</html>`;
+}

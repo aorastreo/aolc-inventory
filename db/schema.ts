@@ -313,35 +313,29 @@ export type PrintedLabel = typeof printedLabels.$inferSelect;
 export const labelConfig = mysqlTable("labelConfig", {
   id: serial("id").primaryKey(),
   storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull().default(1),
-  // Label dimensions
+  // ZD411 canonical: 50×25 mm = 2×1 in
   labelWidth: varchar("labelWidth", { length: 20 }).notNull().default("50mm"),
   labelHeight: varchar("labelHeight", { length: 20 }).notNull().default("25mm"),
-  // Product name (absolute position Y=top)
-  nameFontSize: varchar("nameFontSize", { length: 10 }).notNull().default("5pt"),
-  nameTop: varchar("nameTop", { length: 10 }).notNull().default("1mm"),
+  nameFontSize: varchar("nameFontSize", { length: 10 }).notNull().default("7pt"),
+  nameTop: varchar("nameTop", { length: 10 }).notNull().default("0.5mm"),
   nameTextAlign: varchar("nameTextAlign", { length: 10 }).notNull().default("center"),
-  // Price (absolute position Y=top)
-  priceFontSize: varchar("priceFontSize", { length: 10 }).notNull().default("20pt"),
-  ivaFontSize: varchar("ivaFontSize", { length: 10 }).notNull().default("8pt"),
-  priceTop: varchar("priceTop", { length: 10 }).notNull().default("6mm"),
+  priceFontSize: varchar("priceFontSize", { length: 10 }).notNull().default("26pt"),
+  ivaFontSize: varchar("ivaFontSize", { length: 10 }).notNull().default("12pt"),
+  priceTop: varchar("priceTop", { length: 10 }).notNull().default("4mm"),
   priceTextAlign: varchar("priceTextAlign", { length: 10 }).notNull().default("center"),
-  // Barcode (absolute position Y=top)
-  barcodeWidth: varchar("barcodeWidth", { length: 10 }).notNull().default("35mm"),
-  barcodeHeight: varchar("barcodeHeight", { length: 10 }).notNull().default("7.5mm"),
+  barcodeWidth: varchar("barcodeWidth", { length: 10 }).notNull().default("46mm"),
+  barcodeHeight: varchar("barcodeHeight", { length: 10 }).notNull().default("8mm"),
   barcodeModuleWidth: varchar("barcodeModuleWidth", { length: 10 }).notNull().default("0.50"),
   barcodeBarHeight: varchar("barcodeBarHeight", { length: 10 }).notNull().default("9"),
-  barcodeTop: varchar("barcodeTop", { length: 10 }).notNull().default("12mm"),
+  barcodeTop: varchar("barcodeTop", { length: 10 }).notNull().default("9mm"),
   barcodeAlign: varchar("barcodeAlign", { length: 10 }).notNull().default("center"),
-  // Barcode number (absolute position Y=top)
-  barcodeNumberFontSize: varchar("barcodeNumberFontSize", { length: 10 }).notNull().default("8pt"),
-  barcodeNumberLetterSpacing: varchar("barcodeNumberLetterSpacing", { length: 10 }).notNull().default("2px"),
-  barcodeNumberTop: varchar("barcodeNumberTop", { length: 10 }).notNull().default("17mm"),
+  barcodeNumberFontSize: varchar("barcodeNumberFontSize", { length: 10 }).notNull().default("8.5pt"),
+  barcodeNumberLetterSpacing: varchar("barcodeNumberLetterSpacing", { length: 10 }).notNull().default("0.5px"),
+  barcodeNumberTop: varchar("barcodeNumberTop", { length: 10 }).notNull().default("15.5mm"),
   barcodeNumberAlign: varchar("barcodeNumberAlign", { length: 10 }).notNull().default("center"),
-  // Footer (absolute position Y=top)
-  footerFontSize: varchar("footerFontSize", { length: 10 }).notNull().default("5pt"),
-  footerTop: varchar("footerTop", { length: 10 }).notNull().default("20mm"),
+  footerFontSize: varchar("footerFontSize", { length: 10 }).notNull().default("6pt"),
+  footerTop: varchar("footerTop", { length: 10 }).notNull().default("19mm"),
   footerTextAlign: varchar("footerTextAlign", { length: 10 }).notNull().default("center"),
-  // Show/hide elements
   showPrice: boolean("showPrice").notNull().default(true),
   showIva: boolean("showIva").notNull().default(true),
   showBarcode: boolean("showBarcode").notNull().default(true),
@@ -349,7 +343,8 @@ export const labelConfig = mysqlTable("labelConfig", {
   showFooter: boolean("showFooter").notNull().default(true),
   showDate: boolean("showDate").notNull().default(true),
   footerText: varchar("footerText", { length: 100 }).notNull().default("American Outlet Los Chiles"),
-  rotation: int("rotation").notNull().default(180),
+  rotation: int("rotation").notNull().default(0),
+  nameMaxCharsPerLine: int("nameMaxCharsPerLine").notNull().default(28),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

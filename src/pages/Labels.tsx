@@ -10,7 +10,13 @@ import {
 } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Link } from "react-router";
-import JsBarcode from "jsbarcode";
+import {
+  mergeLabelConfig,
+  buildLabelHtml,
+  buildPrintDocumentHtml,
+  generateBarcodeSVG,
+  getLocalDateString,
+} from "@/lib/label-template";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
@@ -32,14 +38,6 @@ const LABEL_SIZES: Record<string, { w: string; h: string; label: string }> = {
   "38x25": { w: "38mm", h: "25mm", label: "38 x 25 mm · ~1.5 x 1 pulgadas — Zebra ZD411" },
   "57x32": { w: "57mm", h: "32mm", label: "57 x 32 mm · ~2.25 x 1.25 pulgadas — Generica" },
 };
-
-function getLocalDateString() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 function CustomDropdown({ label, value, onChange, options, placeholder }: {
   label: string;
@@ -114,23 +112,16 @@ function expandItems(items: LabelItem[], quantities: Record<number, number>, nam
   return result;
 }
 
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 /** ZPL for Zebra ZD411 (203 dpi). Sizes in mm → dots. */
 function buildZplBatch(
   items: LabelItem[],
-  opts: { widthMm: number; heightMm: number; showPrice: boolean; footer: string; showDate: boolean },
+  opts: { widthMm: number; heightMm: number; showPrice: boolean; footer: string; showDate: boolean; rotation?: number },
 ): string {
   const dpi = 203;
   const pw = Math.round((opts.widthMm / 25.4) * dpi);
   const ll = Math.round((opts.heightMm / 25.4) * dpi);
   const clean = (s: string) => s.replace(/[\^~\r\n]/g, " ").slice(0, 40);
+  const rot = Number(opts.rotation) === 180 ? "^POI" : "^PON";
   const parts: string[] = [];
   for (const item of items) {
     const name = clean(item.nombre.toUpperCase());
@@ -140,6 +131,7 @@ function buildZplBatch(
       `${opts.showDate ? getLocalDateString() + " - " : ""}${opts.footer}`,
     );
     parts.push(`^XA
+${rot}
 ^PW${pw}
 ^LL${ll}
 ^LH0,0
@@ -326,49 +318,32 @@ export default function LabelsPage() {
     });
   };
 
-  const generateBarcodeSVG = (code: string): string => {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("style", "width:100%;height:100%;");
-    try {
-      JsBarcode(svg, code, {
-        format: "CODE128",
-        width: 2,
-        height: 50,
-        displayValue: false,
-        margin: 2,
-      });
-      return svg.outerHTML;
-    } catch {
-      return `<div style="font-size:8pt;text-align:center">${escapeHtml(code)}</div>`;
-    }
-  };
-
   const resolvedSize = LABEL_SIZES[labelSize] || LABEL_SIZES["50x25"];
   const labelWidth = resolvedSize.w;
   const labelHeight = resolvedSize.h;
   const effectiveShowPrice = showPrice === "si";
+  const printCfg = useMemo(() => {
+    const merged = mergeLabelConfig(labelCfg as Record<string, unknown> | null);
+    return {
+      ...merged,
+      labelWidth,
+      labelHeight,
+      showPrice: effectiveShowPrice,
+    };
+  }, [labelCfg, labelWidth, labelHeight, effectiveShowPrice]);
 
   const openBrowserPrint = (items: LabelItem[], productIds: number[]) => {
     if (!refId) return;
-    const labelsHtml = items.map((item) => {
-      const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
-      return `
-        <div class="label-page" style="width:${labelWidth};height:${labelHeight};position:relative;background:white;margin:0;padding:0;box-sizing:border-box;overflow:hidden;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
-          <div style="position:absolute;top:0.5mm;left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "7pt"};font-weight:${labelCfg?.nameFontWeight || "normal"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.2;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${escapeHtml(item.nombre.toUpperCase())}</div>
-          ${effectiveShowPrice ? `
-          <div style="position:absolute;top:${labelCfg?.priceTop || "4mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
-            <span style="font-size:${labelCfg?.priceFontSize || "26pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
-            ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "12pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
-          </div>` : ""}
-          ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:${labelCfg?.barcodeTop || "9mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "8mm"};">${barcodeSvg}</div>` : ""}
-          ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "15.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "8.5pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${escapeHtml(item.codigoBarras)}</div>` : ""}
-          ${(labelCfg?.showFooter ?? true) ? `
-          <div style="position:absolute;top:${labelCfg?.footerTop || "19mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Verdana"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${escapeHtml(labelCfg?.footerText || "American Outlet Los Chiles")}</div>` : ""}
-        </div>
-      `;
-    }).join("");
+    const labelsHtml = items.map((item) =>
+      buildLabelHtml(
+        { nombre: item.nombre, precio: item.precio, codigoBarras: item.codigoBarras },
+        printCfg,
+        {
+          barcodeSvg: item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "",
+          forceShowPrice: effectiveShowPrice,
+        },
+      ),
+    ).join("");
 
     const payload = JSON.stringify({
       type: "aolc-labels-printed",
@@ -384,22 +359,10 @@ export default function LabelsPage() {
       setPrinting(false);
       return;
     }
-    popup.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Etiquetas ZD411</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          @page { size: ${labelWidth} ${labelHeight}; margin: 0; }
-          body { margin: 0; padding: 0; background: white; }
-          .label-page { page-break-after: always; break-after: page; }
-          .label-page:last-child { page-break-after: auto; break-after: auto; }
-        </style>
-      </head>
-      <body>
-        ${labelsHtml}
-        <script>
+    const doc = buildPrintDocumentHtml(labelsHtml, printCfg);
+    popup.document.write(doc.replace(
+      "</body>",
+      `<script>
           var payload = ${payload};
           var notified = false;
           function notifyParent() {
@@ -412,12 +375,9 @@ export default function LabelsPage() {
             setTimeout(function() { window.close(); }, 400);
           };
           setTimeout(function() { window.print(); }, 500);
-          // Fallback if onafterprint never fires (Safari/algunos drivers)
           setTimeout(function() { notifyParent(); }, 8000);
-        </script>
-      </body>
-      </html>
-    `);
+        </script></body>`,
+    ));
     popup.document.close();
   };
 
@@ -443,8 +403,9 @@ export default function LabelsPage() {
         widthMm,
         heightMm,
         showPrice: effectiveShowPrice,
-        footer: labelCfg?.footerText || "American Outlet Los Chiles",
-        showDate: labelCfg?.showDate ?? true,
+        footer: String(printCfg.footerText || "American Outlet Los Chiles"),
+        showDate: !!printCfg.showDate,
+        rotation: Number(printCfg.rotation) || 0,
       });
       const result = await tryZebraBrowserPrint(zpl);
       if (result.ok) {
