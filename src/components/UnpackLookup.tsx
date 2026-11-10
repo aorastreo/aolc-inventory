@@ -54,46 +54,54 @@ export default function UnpackLookup({ value, onChange }: Props) {
     },
   );
 
-  const suggestLink = trpc.inventory.suggestPriceFromLink.useMutation({
-    onSuccess: (res) => {
-      setError(null);
-      setNote(res.note);
-      onChange({
-        ...value,
-        nombre: res.nombre || value.nombre,
-        precio: res.precioSugeridoCrc != null ? String(res.precioSugeridoCrc) : value.precio,
-        precioRefUsd: res.usd != null ? String(res.usd) : value.precioRefUsd,
-        sourceUrl: link.trim() || value.sourceUrl,
+  const [band, setBand] = useState<{
+    mismo: number;
+    menos20: number;
+    unPocoMas: number;
+  } | null>(null);
+
+  const applySuggestion = (res: {
+    nombre?: string | null;
+    usd?: number | null;
+    precioSugeridoCrc?: number | null;
+    precioMismo?: number | null;
+    precioMenos20?: number | null;
+    precioUnPocoMas?: number | null;
+    codigoPosible?: string | null;
+    note?: string;
+    sourceUrl?: string;
+  }) => {
+    setError(null);
+    if (res.note) setNote(res.note);
+    if (res.precioMismo != null && res.precioMenos20 != null && res.precioUnPocoMas != null) {
+      setBand({
+        mismo: res.precioMismo,
+        menos20: res.precioMenos20,
+        unPocoMas: res.precioUnPocoMas,
       });
-    },
+    }
+    onChange({
+      ...value,
+      nombre: res.nombre || value.nombre,
+      precio: res.precioSugeridoCrc != null ? String(res.precioSugeridoCrc) : value.precio,
+      codigo: res.codigoPosible || value.codigo,
+      precioRefUsd: res.usd != null ? String(res.usd) : value.precioRefUsd,
+      sourceUrl: res.sourceUrl || value.sourceUrl,
+    });
+  };
+
+  const suggestLink = trpc.inventory.suggestPriceFromLink.useMutation({
+    onSuccess: (res) => applySuggestion({ ...res, sourceUrl: link.trim() }),
     onError: (e) => setError(e.message),
   });
 
   const suggestPhoto = trpc.inventory.suggestPriceFromPhoto.useMutation({
-    onSuccess: (res) => {
-      setError(null);
-      setNote(res.note);
-      onChange({
-        ...value,
-        nombre: res.nombre || value.nombre,
-        precio: res.precioSugeridoCrc != null ? String(res.precioSugeridoCrc) : value.precio,
-        codigo: res.codigoPosible || value.codigo,
-        precioRefUsd: res.usd != null ? String(res.usd) : value.precioRefUsd,
-      });
-    },
+    onSuccess: (res) => applySuggestion(res),
     onError: (e) => setError(e.message),
   });
 
   const suggestUsd = trpc.inventory.suggestPriceFromUsd.useMutation({
-    onSuccess: (res) => {
-      setError(null);
-      setNote(res.note);
-      onChange({
-        ...value,
-        precio: String(res.precioSugeridoCrc),
-        precioRefUsd: String(res.usd),
-      });
-    },
+    onSuccess: (res) => applySuggestion(res),
     onError: (e) => setError(e.message),
   });
 
@@ -285,9 +293,23 @@ export default function UnpackLookup({ value, onChange }: Props) {
         </div>
       )}
 
+      {band && (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => onChange({ ...value, precio: String(band.menos20) })} style={{ borderColor: "hsl(210 20% 88%)", color: BRAND_BLUE }}>
+            -20%: ₡{band.menos20.toLocaleString("es-CR")}
+          </Button>
+          <Button type="button" size="sm" onClick={() => onChange({ ...value, precio: String(band.mismo) })} style={{ background: BRAND_RED }}>
+            Mismo USA: ₡{band.mismo.toLocaleString("es-CR")}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => onChange({ ...value, precio: String(band.unPocoMas) })} style={{ borderColor: "hsl(210 20% 88%)", color: BRAND_BLUE }}>
+            +10%: ₡{band.unPocoMas.toLocaleString("es-CR")}
+          </Button>
+        </div>
+      )}
+
       {note && (
         <p className="text-xs rounded-md px-2 py-1.5" style={{ background: "rgba(27,58,92,0.08)", color: BRAND_BLUE }}>
-          {note}
+          {note} Mira el semáforo del contenedor: si vas en rojo, prefiere “Mismo” o “+10%”.
         </p>
       )}
       {error && (

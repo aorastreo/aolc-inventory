@@ -15,9 +15,7 @@ import {
   computeMarginProgress,
   fetchLinkSuggestion,
   suggestFromPhoto,
-  usdToSuggestedCrc,
-  getUsdToCrc,
-  getOutletOfUsFactor,
+  buildPriceBandFromUsd,
 } from "./lib/pricing";
 
 // Helper: format Date to YYYY-MM-DD string (local date, no timezone issues)
@@ -474,15 +472,7 @@ export const inventoryRouter = createRouter({
 
   suggestPriceFromUsd: managerQuery
     .input(z.object({ usd: z.number().positive() }))
-    .mutation(async ({ input }) => {
-      return {
-        usd: input.usd,
-        precioSugeridoCrc: usdToSuggestedCrc(input.usd),
-        usdToCrc: getUsdToCrc(),
-        outletFactor: getOutletOfUsFactor(),
-        note: `$${input.usd} × ₡${getUsdToCrc()} × ${getOutletOfUsFactor()} (outlet). Confirmar siempre.`,
-      };
-    }),
+    .mutation(async ({ input }) => buildPriceBandFromUsd(input.usd)),
 
   suggestPriceFromLink: managerQuery
     .input(z.object({ url: z.string().url() }))

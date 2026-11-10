@@ -3,26 +3,50 @@
 export const MARGIN_FLOOR_PCT = 40;
 export const MARGIN_TARGET_PCT = 50;
 
-/** CRC per 1 USD — override with USD_TO_CRC env */
+/** CRC per 1 USD — American Outlet uses 460. Override with USD_TO_CRC. */
 export function getUsdToCrc(): number {
-  const n = Number(process.env.USD_TO_CRC || "520");
-  return Number.isFinite(n) && n > 0 ? n : 520;
+  const n = Number(process.env.USD_TO_CRC || "460");
+  return Number.isFinite(n) && n > 0 ? n : 460;
 }
 
 /**
- * How much of the US retail (in CRC) becomes suggested CR outlet sell price.
- * Default 0.55 ≈ roughly mid outlet vs full US retail after FX.
- * Override with OUTLET_OF_US_FACTOR.
+ * Default pick among the band (mismo / -20% / +10%).
+ * 1.0 = same as US retail in CRC (most common for you).
+ * Override with OUTLET_OF_US_FACTOR if you want another default pick.
  */
 export function getOutletOfUsFactor(): number {
-  const n = Number(process.env.OUTLET_OF_US_FACTOR || "0.55");
-  return Number.isFinite(n) && n > 0 && n <= 2 ? n : 0.55;
+  const n = Number(process.env.OUTLET_OF_US_FACTOR || "1");
+  return Number.isFinite(n) && n > 0 && n <= 2 ? n : 1;
+}
+
+function roundCrc(n: number): number {
+  return Math.round(n / 100) * 100;
+}
+
+export function usdToCrcRaw(usd: number): number {
+  return usd * getUsdToCrc();
+}
+
+/** Band matching real American Outlet practice. */
+export function buildPriceBandFromUsd(usd: number) {
+  const base = usdToCrcRaw(usd); // same as US$ at your FX
+  const mismo = roundCrc(base);
+  const menos20 = roundCrc(base * 0.8);
+  const unPocoMas = roundCrc(base * 1.1);
+  const sugerido = roundCrc(base * getOutletOfUsFactor());
+  return {
+    usd,
+    usdToCrc: getUsdToCrc(),
+    precioMismo: mismo,
+    precioMenos20: menos20,
+    precioUnPocoMas: unPocoMas,
+    precioSugeridoCrc: sugerido,
+    note: `$${usd} × ₡${getUsdToCrc()} = ₡${mismo} (mismo). Opciones: -20% ₡${menos20} · +10% ₡${unPocoMas}. Elige según el artículo y el margen del contenedor.`,
+  };
 }
 
 export function usdToSuggestedCrc(usd: number): number {
-  const crc = usd * getUsdToCrc() * getOutletOfUsFactor();
-  // Round to nearest 100 CRC for shelf-friendly prices
-  return Math.round(crc / 100) * 100;
+  return buildPriceBandFromUsd(usd).precioSugeridoCrc;
 }
 
 export type MarginProgress = {
@@ -164,16 +188,19 @@ export async function fetchLinkSuggestion(url: string): Promise<{
         nombre: title,
         usd: null,
         precioSugeridoCrc: null,
+        precioMismo: null as number | null,
+        precioMenos20: null as number | null,
+        precioUnPocoMas: null as number | null,
         source: parsed.hostname,
         note: "No se pudo leer el precio del link (sitio bloqueado o dinamico). Pega el precio USA manualmente o usa foto.",
       };
     }
+    const band = buildPriceBandFromUsd(price.usd);
     return {
       nombre: title,
       usd: price.usd,
-      precioSugeridoCrc: usdToSuggestedCrc(price.usd),
+      ...band,
       source: parsed.hostname,
-      note: `Ref. USA $${price.usd} × ₡${getUsdToCrc()} × factor outlet ${getOutletOfUsFactor()}`,
     };
   } finally {
     clearTimeout(timer);
@@ -251,14 +278,23 @@ export async function suggestFromPhoto(opts: {
       ? parsed.usd_price_estimate
       : null;
 
+  if (usd == null) {
+    return {
+      nombre: typeof parsed.nombre === "string" ? parsed.nombre.slice(0, 255) : null,
+      usd: null,
+      precioSugeridoCrc: null,
+      precioMismo: null,
+      precioMenos20: null,
+      precioUnPocoMas: null,
+      codigoPosible: typeof parsed.codigo_articulo === "string" ? parsed.codigo_articulo.slice(0, 50) : null,
+      note: "No se estimó precio USA; completa manualmente. La foto puede ayudar con el nombre.",
+    };
+  }
+
+  const band = buildPriceBandFromUsd(usd);
   return {
     nombre: typeof parsed.nombre === "string" ? parsed.nombre.slice(0, 255) : null,
-    usd,
-    precioSugeridoCrc: usd != null ? usdToSuggestedCrc(usd) : null,
+    ...band,
     codigoPosible: typeof parsed.codigo_articulo === "string" ? parsed.codigo_articulo.slice(0, 50) : null,
-    note:
-      usd != null
-        ? `Estimacion USA $${usd} → sugerido outlet ₡${usdToSuggestedCrc(usd)} (confirmar siempre)`
-        : "No se estimó precio USA; completa manualmente. La foto puede ayudar con el nombre.",
   };
 }
