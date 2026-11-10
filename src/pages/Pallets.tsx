@@ -57,6 +57,7 @@ export default function PalletsPage() {
     if (!editingPallet) return;
     updatePallet.mutate({
       id: editingPallet.id,
+      storeId,
       palletId: editForm.palletId || undefined,
       description: editForm.description || undefined,
       costo: editForm.costo || undefined,

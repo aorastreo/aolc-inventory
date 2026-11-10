@@ -55,6 +55,7 @@ export default function CatalogPage() {
     if (!editingProduct) return;
     updateProduct.mutate({
       id: editingProduct.id,
+      storeId,
       nombre: editingProduct.nombre,
       precio: editingProduct.precio,
       codigoBarras: editingProduct.codigoBarras,
@@ -158,7 +159,7 @@ export default function CatalogPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => { if (confirm("Eliminar este producto del catalogo?")) deleteProduct.mutate({ id: product.id }); }}
+                        onClick={() => { if (confirm("Eliminar este producto del catalogo?")) deleteProduct.mutate({ id: product.id, storeId }); }}
                         className="hover:bg-red-50"
                       >
                         <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />

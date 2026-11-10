@@ -189,7 +189,7 @@ export default function ProductsPage() {
                         <TableCell className="py-2"><Input size="sm" value={editProductForm.codigoBarras} onChange={(e) => setEditProductForm({ ...editProductForm, codigoBarras: e.target.value })} className="h-8 text-sm font-mono" /></TableCell>
                         <TableCell className="py-2">
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => { updateProduct.mutate({ id: product.id, ...editProductForm }); }} className="hover:bg-green-50 h-8 w-8 p-0">
+                            <Button variant="ghost" size="sm" onClick={() => { updateProduct.mutate({ id: product.id, storeId, ...editProductForm }); }} className="hover:bg-green-50 h-8 w-8 p-0">
                               <Check className="w-4 h-4" style={{ color: "#16A34A" }} />
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => setEditingProductId(null)} className="hover:bg-gray-100 h-8 w-8 p-0">
@@ -216,7 +216,7 @@ export default function ProductsPage() {
                             <Button variant="ghost" size="sm" onClick={() => { setEditingProductId(product.id); setEditProductForm({ nombre: product.nombre, precio: String(product.precio), cantidad: product.cantidad, codigoBarras: product.codigoBarras || "" }); }} className="hover:bg-blue-50 h-8 w-8 p-0">
                               <Pencil className="w-4 h-4" style={{ color: "#1B3A5C" }} />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => deleteProduct.mutate({ id: product.id })} className="hover:bg-red-50 h-8 w-8 p-0">
+                            <Button variant="ghost" size="sm" onClick={() => deleteProduct.mutate({ id: product.id, storeId })} className="hover:bg-red-50 h-8 w-8 p-0">
                               <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
                             </Button>
                           </div>

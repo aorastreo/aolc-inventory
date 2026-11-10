@@ -24,49 +24,91 @@ const AUTO_BARCODE_MIN = 77000000;
 const AUTO_BARCODE_MAX = 77999999;
 const AUTO_BARCODE_START = 77001400; // Next after 77001399
 
-async function getNextAutoBarcode(db: any): Promise<string> {
-  // Search in products table
-  const pResult: any = await db.execute(
-    sql`SELECT codigoBarras FROM products 
-        WHERE codigoBarras REGEXP '^[0-9]+$' 
-        AND CAST(codigoBarras AS UNSIGNED) >= ${AUTO_BARCODE_MIN} 
-        AND CAST(codigoBarras AS UNSIGNED) <= ${AUTO_BARCODE_MAX}
-        ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
-  );
-  // Search in productDatabase table
-  const dResult: any = await db.execute(
-    sql`SELECT codigoBarras FROM productDatabase 
-        WHERE codigoBarras REGEXP '^[0-9]+$' 
-        AND CAST(codigoBarras AS UNSIGNED) >= ${AUTO_BARCODE_MIN} 
-        AND CAST(codigoBarras AS UNSIGNED) <= ${AUTO_BARCODE_MAX}
-        ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
-  );
-  // Search in adjustmentItems table
-  const aResult: any = await db.execute(
-    sql`SELECT codigoBarras FROM adjustmentItems 
-        WHERE codigoBarras REGEXP '^[0-9]+$' 
-        AND CAST(codigoBarras AS UNSIGNED) >= ${AUTO_BARCODE_MIN} 
-        AND CAST(codigoBarras AS UNSIGNED) <= ${AUTO_BARCODE_MAX}
-        ORDER BY CAST(codigoBarras AS UNSIGNED) DESC LIMIT 1`
-  );
+let barcodeSequenceReady = false;
 
+async function ensureBarcodeSequence(db: any) {
+  if (barcodeSequenceReady) return;
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS barcode_sequence (
+      id INT PRIMARY KEY,
+      nextVal BIGINT NOT NULL
+    )
+  `);
+
+  const existing: any = await db.execute(sql`SELECT nextVal FROM barcode_sequence WHERE id = 1 LIMIT 1`);
+  const rows = Array.isArray(existing) ? existing[0] : (existing.rows || existing);
+  if (Array.isArray(rows) && rows.length > 0) {
+    barcodeSequenceReady = true;
+    return;
+  }
+
+  // Seed from current max across tables so we never collide with history
+  const pResult: any = await db.execute(
+    sql`SELECT MAX(CAST(codigoBarras AS UNSIGNED)) AS m FROM products
+        WHERE codigoBarras REGEXP '^[0-9]+$'
+        AND CAST(codigoBarras AS UNSIGNED) >= ${AUTO_BARCODE_MIN}
+        AND CAST(codigoBarras AS UNSIGNED) <= ${AUTO_BARCODE_MAX}`,
+  );
+  const dResult: any = await db.execute(
+    sql`SELECT MAX(CAST(codigoBarras AS UNSIGNED)) AS m FROM productDatabase
+        WHERE codigoBarras REGEXP '^[0-9]+$'
+        AND CAST(codigoBarras AS UNSIGNED) >= ${AUTO_BARCODE_MIN}
+        AND CAST(codigoBarras AS UNSIGNED) <= ${AUTO_BARCODE_MAX}`,
+  );
+  const aResult: any = await db.execute(
+    sql`SELECT MAX(CAST(codigoBarras AS UNSIGNED)) AS m FROM adjustmentItems
+        WHERE codigoBarras REGEXP '^[0-9]+$'
+        AND CAST(codigoBarras AS UNSIGNED) >= ${AUTO_BARCODE_MIN}
+        AND CAST(codigoBarras AS UNSIGNED) <= ${AUTO_BARCODE_MAX}`,
+  );
   const pRows = Array.isArray(pResult) ? pResult[0] : (pResult.rows || pResult);
   const dRows = Array.isArray(dResult) ? dResult[0] : (dResult.rows || dResult);
   const aRows = Array.isArray(aResult) ? aResult[0] : (aResult.rows || aResult);
+  const pMax = (Array.isArray(pRows) && pRows[0]?.m != null) ? Number(pRows[0].m) : 0;
+  const dMax = (Array.isArray(dRows) && dRows[0]?.m != null) ? Number(dRows[0].m) : 0;
+  const aMax = (Array.isArray(aRows) && aRows[0]?.m != null) ? Number(aRows[0].m) : 0;
+  const seed = Math.max(pMax, dMax, aMax, AUTO_BARCODE_START - 1) + 1;
 
-  const pMax = (Array.isArray(pRows) && pRows.length > 0) ? parseInt(pRows[0].codigoBarras, 10) : 0;
-  const dMax = (Array.isArray(dRows) && dRows.length > 0) ? parseInt(dRows[0].codigoBarras, 10) : 0;
-  const aMax = (Array.isArray(aRows) && aRows.length > 0) ? parseInt(aRows[0].codigoBarras, 10) : 0;
+  await db.execute(sql`INSERT INTO barcode_sequence (id, nextVal) VALUES (1, ${seed})`);
+  barcodeSequenceReady = true;
+}
 
-  const lastAuto = Math.max(pMax, dMax, aMax);
-  const nextCode = lastAuto > 0 ? lastAuto + 1 : AUTO_BARCODE_START;
+/** Atomically allocate the next auto barcode (safe under concurrent creates). */
+async function getNextAutoBarcode(db: any): Promise<string> {
+  await ensureBarcodeSequence(db);
 
-  // Safety: don't exceed max range
-  if (nextCode > AUTO_BARCODE_MAX) {
-    throw new Error("Se agotaron los codigos automaticos en el rango 7700xxxx");
+  // MySQL: read current then advance under a named lock (nextVal = next code to issue)
+  await db.execute(sql`SELECT GET_LOCK('aolc_barcode_seq', 10)`);
+  try {
+    const result: any = await db.execute(sql`SELECT nextVal FROM barcode_sequence WHERE id = 1 LIMIT 1`);
+    const rows = Array.isArray(result) ? result[0] : (result.rows || result);
+    const nextCode = Number(Array.isArray(rows) && rows[0] ? rows[0].nextVal : 0);
+    if (!nextCode || nextCode > AUTO_BARCODE_MAX) {
+      throw new Error("Se agotaron los codigos automaticos en el rango 7700xxxx");
+    }
+    await db.execute(sql`UPDATE barcode_sequence SET nextVal = nextVal + 1 WHERE id = 1`);
+    return String(nextCode);
+  } finally {
+    await db.execute(sql`SELECT RELEASE_LOCK('aolc_barcode_seq')`);
   }
+}
 
-  return String(nextCode);
+async function assertPalletInStore(db: ReturnType<typeof getDb>, id: number, storeId: number) {
+  const [row] = await db.select().from(pallets).where(and(eq(pallets.id, id), eq(pallets.storeId, storeId))).limit(1);
+  if (!row) throw new Error("Contenedor no encontrado en esta tienda");
+  return row;
+}
+
+async function assertProductInStore(db: ReturnType<typeof getDb>, id: number, storeId: number) {
+  const [row] = await db.select().from(products).where(and(eq(products.id, id), eq(products.storeId, storeId))).limit(1);
+  if (!row) throw new Error("Articulo no encontrado en esta tienda");
+  return row;
+}
+
+async function assertProductDbInStore(db: ReturnType<typeof getDb>, id: number, storeId: number) {
+  const [row] = await db.select().from(productDatabase).where(and(eq(productDatabase.id, id), eq(productDatabase.storeId, storeId))).limit(1);
+  if (!row) throw new Error("Articulo de catalogo no encontrado en esta tienda");
+  return row;
 }
 
 const BODEGA_STORE_ID = 1;
@@ -152,24 +194,26 @@ export const inventoryRouter = createRouter({
     }),
 
   updatePallet: managerQuery
-    .input(z.object({ id: z.number(), palletId: z.string().optional(), description: z.string().optional(), costo: z.string().optional(), fecha: z.string().optional() }))
+    .input(z.object({ id: z.number(), storeId: z.number(), palletId: z.string().optional(), description: z.string().optional(), costo: z.string().optional(), fecha: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const { id, ...data } = input;
+      await assertPalletInStore(db, input.id, input.storeId);
+      const { id, storeId, ...data } = input;
       const setData: Record<string, any> = {};
       if (data.palletId !== undefined) setData.palletId = data.palletId;
       if (data.description !== undefined) setData.description = data.description;
       if (data.costo !== undefined) setData.costo = data.costo;
       if (data.fecha !== undefined) setData.fecha = data.fecha;
-      await db.update(pallets).set(setData).where(eq(pallets.id, id));
+      await db.update(pallets).set(setData).where(and(eq(pallets.id, id), eq(pallets.storeId, storeId)));
       return { success: true };
     }),
 
   deletePallet: managerQuery
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number(), storeId: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      await db.update(pallets).set({ isActive: false }).where(eq(pallets.id, input.id));
+      await assertPalletInStore(db, input.id, input.storeId);
+      await db.update(pallets).set({ isActive: false }).where(and(eq(pallets.id, input.id), eq(pallets.storeId, input.storeId)));
       return { success: true };
     }),
 
@@ -318,19 +362,21 @@ export const inventoryRouter = createRouter({
     }),
 
   updateProduct: managerQuery
-    .input(z.object({ id: z.number(), nombre: z.string().optional(), precio: z.string().optional(), cantidad: z.number().optional(), codigoBarras: z.string().optional() }))
+    .input(z.object({ id: z.number(), storeId: z.number(), nombre: z.string().optional(), precio: z.string().optional(), cantidad: z.number().optional(), codigoBarras: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const { id, ...data } = input;
-      await db.update(products).set(data).where(eq(products.id, id));
+      await assertProductInStore(db, input.id, input.storeId);
+      const { id, storeId, ...data } = input;
+      await db.update(products).set(data).where(and(eq(products.id, id), eq(products.storeId, storeId)));
       return { success: true };
     }),
 
   deleteProduct: managerQuery
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number(), storeId: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      await db.update(products).set({ isActive: false }).where(eq(products.id, input.id));
+      await assertProductInStore(db, input.id, input.storeId);
+      await db.update(products).set({ isActive: false }).where(and(eq(products.id, input.id), eq(products.storeId, input.storeId)));
       return { success: true };
     }),
 
@@ -379,19 +425,21 @@ export const inventoryRouter = createRouter({
     }),
 
   updateProductDB: managerQuery
-    .input(z.object({ id: z.number(), nombre: z.string().optional(), precio: z.string().optional(), codigoBarras: z.string().optional(), categoria: z.string().optional() }))
+    .input(z.object({ id: z.number(), storeId: z.number(), nombre: z.string().optional(), precio: z.string().optional(), codigoBarras: z.string().optional(), categoria: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const { id, ...data } = input;
-      await db.update(productDatabase).set(data).where(eq(productDatabase.id, id));
+      await assertProductDbInStore(db, input.id, input.storeId);
+      const { id, storeId, ...data } = input;
+      await db.update(productDatabase).set(data).where(and(eq(productDatabase.id, id), eq(productDatabase.storeId, storeId)));
       return { success: true };
     }),
 
   deleteProductDB: managerQuery
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number(), storeId: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      await db.update(productDatabase).set({ isActive: false }).where(eq(productDatabase.id, input.id));
+      await assertProductDbInStore(db, input.id, input.storeId);
+      await db.update(productDatabase).set({ isActive: false }).where(and(eq(productDatabase.id, input.id), eq(productDatabase.storeId, input.storeId)));
       return { success: true };
     }),
 
