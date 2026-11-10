@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
-  Search, Link2, Camera, Barcode, Hash, Package, Sparkles,
+  Search, Link2, Camera, Barcode, Hash, Package, Sparkles, ImagePlus,
 } from "lucide-react";
 import { useRef, useState } from "react";
 
@@ -37,7 +37,9 @@ export default function UnpackLookup({ value, onChange }: Props) {
   const [usdManual, setUsdManual] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const uploadRef = useRef<HTMLInputElement>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const lookupMode =
     mode === "codigo" ? "codigo" as const
@@ -119,13 +121,19 @@ export default function UnpackLookup({ value, onChange }: Props) {
 
   const onPhotoSelected = async (file: File | null) => {
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Selecciona una imagen (jpg, png, etc.)");
+      return;
+    }
     setError(null);
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result || "");
+      setPhotoPreview(dataUrl);
       const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
       suggestPhoto.mutate({ imageBase64: base64, mimeType: file.type || "image/jpeg" });
     };
+    reader.onerror = () => setError("No se pudo leer la imagen");
     reader.readAsDataURL(file);
   };
 
@@ -243,29 +251,65 @@ export default function UnpackLookup({ value, onChange }: Props) {
       )}
 
       {mode === "foto" && (
-        <div>
+        <div className="space-y-2">
           <Label className="text-xs">Foto del articulo (caja o producto)</Label>
+          {/* Cámara — capture fuerza la cámara en móvil */}
           <input
-            ref={fileRef}
+            ref={cameraRef}
             type="file"
             accept="image/*"
             capture="environment"
             className="hidden"
-            onChange={(e) => onPhotoSelected(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              onPhotoSelected(e.target.files?.[0] || null);
+              e.target.value = "";
+            }}
           />
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-1 w-full"
-            disabled={busy}
-            onClick={() => fileRef.current?.click()}
-            style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}
-          >
-            <Camera className="w-4 h-4 mr-2" />
-            {suggestPhoto.isPending ? "Analizando foto..." : "Tomar / subir foto"}
-          </Button>
-          <p className="text-[10px] mt-1" style={{ color: "hsl(207 20% 55%)" }}>
-            Requiere OPENAI_API_KEY en el servidor. La sugerencia es referencia USA → outlet; confirma el precio.
+          {/* Galería / archivos — sin capture para poder cargar */}
+          <input
+            ref={uploadRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              onPhotoSelected(e.target.files?.[0] || null);
+              e.target.value = "";
+            }}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-11"
+              disabled={busy}
+              onClick={() => cameraRef.current?.click()}
+              style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}
+            >
+              <Camera className="w-4 h-4 mr-2" />
+              Tomar foto
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-11"
+              disabled={busy}
+              onClick={() => uploadRef.current?.click()}
+              style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}
+            >
+              <ImagePlus className="w-4 h-4 mr-2" />
+              Cargar foto
+            </Button>
+          </div>
+          {suggestPhoto.isPending && (
+            <p className="text-xs font-medium" style={{ color: BRAND_BLUE }}>Analizando foto...</p>
+          )}
+          {photoPreview && (
+            <div className="rounded-md border overflow-hidden" style={{ borderColor: "hsl(210 20% 90%)" }}>
+              <img src={photoPreview} alt="Vista previa" className="max-h-40 w-full object-contain bg-white" />
+            </div>
+          )}
+          <p className="text-[10px]" style={{ color: "hsl(207 20% 55%)" }}>
+            En el celular: “Tomar foto” abre la cámara; “Cargar foto” abre la galería. Confirma siempre el precio.
           </p>
         </div>
       )}
