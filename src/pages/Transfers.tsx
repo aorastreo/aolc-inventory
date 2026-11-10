@@ -31,8 +31,26 @@ export default function TransfersPage() {
   const createTransfer = trpc.inventory.createTransfer.useMutation({
     onSuccess: () => { utils.inventory.getTransfers.invalidate(); setShowCreate(false); },
   });
+  const focusScanInput = () => {
+    // Defer so React can re-enable the field / finish paint; scanners need focus ready now
+    requestAnimationFrame(() => {
+      const el = barcodeRef.current;
+      if (!el) return;
+      el.focus();
+      el.select();
+    });
+  };
+
   const addItem = trpc.inventory.addTransferItem.useMutation({
-    onSuccess: () => { utils.inventory.getTransferItems.invalidate(); setBarcode(""); setScannedProduct(null); setScanQty(1); barcodeRef.current?.focus(); },
+    onSuccess: () => {
+      utils.inventory.getTransferItems.invalidate();
+      setBarcode("");
+      setScannedProduct(null);
+      setScanQty(1);
+      setLookupError(null);
+      focusScanInput();
+      setTimeout(focusScanInput, 50);
+    },
   });
   const removeItem = trpc.inventory.removeTransferItem.useMutation({
     onSuccess: () => utils.inventory.getTransferItems.invalidate(),
@@ -100,12 +118,20 @@ export default function TransfersPage() {
     setLookupError(null);
   }, [viewingTransfer]);
 
+  // Keep pistol ready: always return focus to scan field while transfer is active
+  useEffect(() => {
+    if (!viewingTransfer || currentTransfer?.estado !== "activo") return;
+    if (completeConfirmOpen || cancelConfirmOpen) return;
+    focusScanInput();
+  }, [viewingTransfer, currentTransfer?.estado, transferDetail?.length, completeConfirmOpen, cancelConfirmOpen, lookupBusy, addItem.isPending]);
+
   const lookupBarcode = async (raw: string, autoAdd: boolean) => {
     const code = raw.trim().replace(/[\r\n]+/g, "");
     if (!viewingTransfer || currentTransfer?.estado !== "activo") return;
     if (code.length < 4) {
       setLookupError("Codigo muy corto");
       setScannedProduct(null);
+      focusScanInput();
       return;
     }
     setLookupBusy(true);
@@ -118,18 +144,22 @@ export default function TransfersPage() {
       });
       if (!found) {
         setScannedProduct(null);
+        setBarcode("");
         setLookupError("No hay stock en Bodega con ese codigo. Confirma que el articulo este en un contenedor activo (no solo en catalogo/ajuste).");
         return;
       }
-      setScannedProduct(found);
-      setScanQty(1);
-      setBarcode(String(found.codigoBarras || code));
       const available = Number(found.cantidad || 0);
       if (available < 1) {
+        setScannedProduct(found);
         setLookupError("Encontrado, pero stock en Bodega es 0.");
+        setBarcode("");
         return;
       }
       if (autoAdd && viewingTransfer) {
+        // Clear immediately so next pistol shot isn't appended to old digits
+        setBarcode("");
+        setScannedProduct(null);
+        setScanQty(1);
         addItem.mutate({
           transferId: viewingTransfer,
           codigoBarras: found.codigoBarras || code,
@@ -139,13 +169,18 @@ export default function TransfersPage() {
           orden: (transferDetail?.length || 0) + 1,
           ...(found.costo != null ? { costo: String(found.costo) } : {}),
         } as Parameters<typeof addItem.mutate>[0]);
+      } else {
+        setScannedProduct(found);
+        setScanQty(1);
+        setBarcode(String(found.codigoBarras || code));
       }
     } catch (err: any) {
       setScannedProduct(null);
+      setBarcode("");
       setLookupError(err?.message || "Error al buscar el codigo");
     } finally {
       setLookupBusy(false);
-      barcodeRef.current?.focus();
+      focusScanInput();
     }
   };
 
@@ -307,15 +342,24 @@ export default function TransfersPage() {
                   <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "hsl(207 20% 55%)" }} />
                   <Input
                     ref={barcodeRef}
-                    placeholder="Escanea codigo de barras y Enter..."
+                    placeholder="Pistoléa aquí — se agrega solo (no hace falta volver a hacer clic)"
                     value={barcode}
                     onChange={(e) => handleBarcodeChange(e.target.value)}
                     onKeyDown={handleKeyDown}
                     className="pl-10 h-12 text-lg font-mono"
                     autoFocus
-                    disabled={lookupBusy || addItem.isPending}
+                    onBlur={() => {
+                      // If focus left for a dialog, don't steal it back
+                      if (completeConfirmOpen || cancelConfirmOpen) return;
+                      if (currentTransfer?.estado !== "activo") return;
+                      setTimeout(focusScanInput, 30);
+                    }}
                   />
                 </div>
+
+                <p className="text-xs" style={{ color: "hsl(207 20% 50%)" }}>
+                  Modo continuo: escanea uno tras otro; el cursor se queda en este campo.
+                </p>
 
                 {lookupBusy && (
                   <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>Buscando en stock de Bodega...</p>
