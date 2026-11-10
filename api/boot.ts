@@ -49,6 +49,8 @@ async function seedDefaultEmployee() {
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
+// Plain health endpoint for Railway (avoid tRPC batch quirks during deploy checks)
+app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now() }));
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
 // Init data route (must be before catch-all)
 const { initRoute } = await import("./init-route.ts");

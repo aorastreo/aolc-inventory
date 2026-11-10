@@ -23,11 +23,12 @@ const requireAuth = t.middleware(async (opts) => {
   return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
-/** Employees may only touch their own storeId. Admin/manager may switch stores in the UI. */
+/** Employees may only touch their own storeId. Admin may switch stores in the UI. */
 const enforceEmployeeStoreScope = t.middleware(async (opts) => {
-  const { ctx, rawInput, next } = opts;
+  const { ctx, next, getRawInput } = opts;
   const user = ctx.user;
   if (user && user.role === "employee" && user.storeId != null) {
+    const rawInput = await getRawInput();
     const input = rawInput as Record<string, unknown> | undefined;
     if (input && typeof input === "object" && "storeId" in input) {
       const requested = Number(input.storeId);
