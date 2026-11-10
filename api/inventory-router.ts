@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, authedQuery, authedQuery, adminQuery, managerQuery } from "./middleware";
+import { createRouter, publicQuery, authedQuery, adminQuery, managerQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import {
   stores, pallets, products, productDatabase,
