@@ -49,12 +49,14 @@ export default function PalletsPage() {
       description: pallet.description || "",
       costo: String(pallet.costo || "0"),
       fecha: pallet.fecha || "",
+      cajasAprox: pallet.cajasAprox != null ? String(pallet.cajasAprox) : "",
     });
     setEditDialogOpen(true);
   };
 
   const handleEditSave = () => {
     if (!editingPallet) return;
+    const cajas = editForm.cajasAprox.trim() ? Number(editForm.cajasAprox) : null;
     updatePallet.mutate({
       id: editingPallet.id,
       storeId,
@@ -62,12 +64,13 @@ export default function PalletsPage() {
       description: editForm.description || undefined,
       costo: editForm.costo || undefined,
       fecha: editForm.fecha || undefined,
+      cajasAprox: cajas != null && Number.isFinite(cajas) && cajas > 0 ? cajas : null,
     });
     setEditDialogOpen(false);
     setEditingPallet(null);
   };
 
-  const [newPallet, setNewPallet] = useState({ palletId: "", description: "", costo: "" });
+  const [newPallet, setNewPallet] = useState({ palletId: "", description: "", costo: "", cajasAprox: "" });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -75,7 +78,7 @@ export default function PalletsPage() {
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingPallet, setEditingPallet] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ palletId: "", description: "", costo: "", fecha: "" });
+  const [editForm, setEditForm] = useState({ palletId: "", description: "", costo: "", fecha: "", cajasAprox: "" });
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -101,14 +104,16 @@ export default function PalletsPage() {
 
   const handleCreate = () => {
     if (!newPallet.palletId || !newPallet.description) return;
+    const cajas = newPallet.cajasAprox.trim() ? Number(newPallet.cajasAprox) : undefined;
     createPallet.mutate({
       storeId,
       palletId: newPallet.palletId,
       description: newPallet.description,
       costo: newPallet.costo || "0",
       fecha: new Date().toISOString().split("T")[0],
+      ...(cajas != null && Number.isFinite(cajas) && cajas > 0 ? { cajasAprox: cajas } : {}),
     });
-    setNewPallet({ palletId: "", description: "", costo: "" });
+    setNewPallet({ palletId: "", description: "", costo: "", cajasAprox: "" });
     setDialogOpen(false);
   };
 
@@ -153,6 +158,20 @@ export default function PalletsPage() {
                 <Label htmlFor="costo">Costo del Contenedor (₡)</Label>
                 <Input id="costo" type="number" placeholder="ej: 1500000" value={newPallet.costo} onChange={(e) => setNewPallet({ ...newPallet, costo: e.target.value })} />
               </div>
+              <div>
+                <Label htmlFor="cajasAprox">Cajas aproximadas</Label>
+                <Input
+                  id="cajasAprox"
+                  type="number"
+                  min={1}
+                  placeholder="ej: 120"
+                  value={newPallet.cajasAprox}
+                  onChange={(e) => setNewPallet({ ...newPallet, cajasAprox: e.target.value })}
+                />
+                <p className="text-[11px] mt-1" style={{ color: "hsl(207 20% 55%)" }}>
+                  Para guiar el promedio de venta por caja (piso 40% / meta 50%).
+                </p>
+              </div>
               <Button onClick={handleCreate} className="w-full font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
                 Crear Contenedor
               </Button>
@@ -185,6 +204,17 @@ export default function PalletsPage() {
               <div>
                 <Label htmlFor="edit-fecha">Fecha</Label>
                 <Input id="edit-fecha" type="date" value={editForm.fecha} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} />
+              </div>
+              <div>
+                <Label htmlFor="edit-cajasAprox">Cajas aproximadas</Label>
+                <Input
+                  id="edit-cajasAprox"
+                  type="number"
+                  min={1}
+                  placeholder="ej: 120"
+                  value={editForm.cajasAprox}
+                  onChange={(e) => setEditForm({ ...editForm, cajasAprox: e.target.value })}
+                />
               </div>
               <Button onClick={handleEditSave} className="w-full font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
                 Guardar Cambios

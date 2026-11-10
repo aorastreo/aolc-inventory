@@ -62,12 +62,19 @@ export type MarginProgress = {
   faltaParaMeta: number;
   status: "rojo" | "amarillo" | "verde" | "sin_costo";
   statusLabel: string;
+  cajasAprox: number | null;
+  promedioMetaPorCaja: number | null;
+  promedioPisoPorCaja: number | null;
+  promedioActualPorCaja: number | null;
+  unidadesProyectadas: number;
 };
 
 export function computeMarginProgress(opts: {
   palletCosto: number;
   ventasActuales: number;
   ventasEnAjuste?: number;
+  cajasAprox?: number | null;
+  unidadesProyectadas?: number;
 }): MarginProgress {
   const palletCosto = Math.max(0, Number(opts.palletCosto) || 0);
   const ventasActuales = Math.max(0, Number(opts.ventasActuales) || 0);
@@ -80,6 +87,15 @@ export function computeMarginProgress(opts: {
   // margen sobre ventas: 40% ⇒ ventas = costo / 0.60 ; 50% ⇒ ventas = costo / 0.50
   const ventasPiso40 = palletCosto > 0 ? palletCosto / (1 - MARGIN_FLOOR_PCT / 100) : 0;
   const ventasMeta50 = palletCosto > 0 ? palletCosto / (1 - MARGIN_TARGET_PCT / 100) : 0;
+
+  const cajasAprox =
+    opts.cajasAprox != null && Number(opts.cajasAprox) > 0 ? Number(opts.cajasAprox) : null;
+  const unidadesProyectadas = Math.max(0, Number(opts.unidadesProyectadas) || 0);
+
+  const promedioMetaPorCaja = cajasAprox ? ventasMeta50 / cajasAprox : null;
+  const promedioPisoPorCaja = cajasAprox ? ventasPiso40 / cajasAprox : null;
+  const promedioActualPorCaja =
+    cajasAprox && ventasProyectadas > 0 ? ventasProyectadas / cajasAprox : null;
 
   let status: MarginProgress["status"] = "sin_costo";
   let statusLabel = "Sin costo de contenedor";
@@ -109,7 +125,51 @@ export function computeMarginProgress(opts: {
     faltaParaMeta: Math.max(0, ventasMeta50 - ventasProyectadas),
     status,
     statusLabel,
+    cajasAprox,
+    promedioMetaPorCaja,
+    promedioPisoPorCaja,
+    promedioActualPorCaja,
+    unidadesProyectadas,
   };
+}
+
+/** Warn if a unit price is far below the per-box target average. */
+export function priceVsContainerHint(opts: {
+  unitPrice: number;
+  promedioPisoPorCaja: number | null;
+  promedioMetaPorCaja: number | null;
+  status: MarginProgress["status"];
+}): { level: "ok" | "bajo" | "muy_bajo"; message: string } {
+  const price = Number(opts.unitPrice) || 0;
+  const piso = opts.promedioPisoPorCaja;
+  const meta = opts.promedioMetaPorCaja;
+
+  if (opts.status === "rojo" && price > 0) {
+    if (piso != null && price < piso * 0.7) {
+      return {
+        level: "muy_bajo",
+        message: `Contenedor en rojo y este precio (₡${Math.round(price).toLocaleString("es-CR")}) está muy bajo vs promedio piso por caja (₡${Math.round(piso).toLocaleString("es-CR")}). Prefiere Mismo o +10%.`,
+      };
+    }
+    return {
+      level: "bajo",
+      message: "Contenedor en rojo: evita -20% en lo que sigue; prioriza Mismo o +10%.",
+    };
+  }
+
+  if (piso != null && price > 0 && price < piso * 0.6) {
+    return {
+      level: "muy_bajo",
+      message: `Precio muy bajo vs promedio necesario por caja (piso ~₡${Math.round(piso).toLocaleString("es-CR")}).`,
+    };
+  }
+  if (meta != null && price > 0 && price < meta * 0.5) {
+    return {
+      level: "bajo",
+      message: `Precio por debajo de la mitad del promedio meta por caja (~₡${Math.round(meta).toLocaleString("es-CR")}).`,
+    };
+  }
+  return { level: "ok", message: "Precio alineado con la guía del contenedor." };
 }
 
 /** Pull a USD (or plain) price from retailer HTML / OG tags. */

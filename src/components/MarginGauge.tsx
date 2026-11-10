@@ -73,6 +73,23 @@ export default function MarginGauge({
             {data.faltaParaMeta > 0 && <span>Falta para meta 50%: <strong>{fmt(data.faltaParaMeta)}</strong></span>}
             {data.faltaParaMeta <= 0 && data.palletCosto > 0 && <span className="font-semibold" style={{ color: "#16A34A" }}>Meta alcanzada</span>}
           </div>
+          {data.cajasAprox != null && data.cajasAprox > 0 && (
+            <div
+              className="flex flex-wrap gap-x-4 gap-y-1 text-xs pt-1 border-t"
+              style={{ color: "hsl(207 20% 45%)", borderColor: "hsl(210 20% 92%)" }}
+            >
+              <span>~<strong>{data.cajasAprox}</strong> cajas</span>
+              {data.promedioPisoPorCaja != null && (
+                <span>Promedio piso/caja: <strong>{fmt(data.promedioPisoPorCaja)}</strong></span>
+              )}
+              {data.promedioMetaPorCaja != null && (
+                <span>Promedio meta/caja: <strong>{fmt(data.promedioMetaPorCaja)}</strong></span>
+              )}
+              {data.promedioActualPorCaja != null && (
+                <span>Actual/caja: <strong>{fmt(data.promedioActualPorCaja)}</strong></span>
+              )}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

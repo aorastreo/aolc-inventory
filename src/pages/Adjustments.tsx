@@ -35,6 +35,7 @@ const emptyItem = (): UnpackFields => ({
   costo: "",
   precioRefUsd: "",
   sourceUrl: "",
+  priceSource: undefined,
 });
 
 export default function AdjustmentsPage() {
@@ -68,6 +69,7 @@ export default function AdjustmentsPage() {
       utils.inventory.adjustmentItems.invalidate();
       utils.inventory.adjustments.invalidate();
       utils.inventory.palletMarginProgress.invalidate();
+      utils.inventory.lookupPriceHistory.invalidate();
     },
   });
   const removeItem = trpc.inventory.removeAdjustmentItem.useMutation({
@@ -159,6 +161,7 @@ export default function AdjustmentsPage() {
       ...(newItem.costo ? { costo: newItem.costo } : {}),
       ...(newItem.precioRefUsd ? { precioRefUsd: newItem.precioRefUsd } : {}),
       ...(newItem.sourceUrl ? { sourceUrl: newItem.sourceUrl } : {}),
+      priceSource: newItem.priceSource || "manual",
     });
     setNewItem(emptyItem());
   };
@@ -251,7 +254,7 @@ export default function AdjustmentsPage() {
                 Estacion de armado — buscar y poner precio
               </h3>
               <div className="space-y-4">
-                <UnpackLookup value={newItem} onChange={setNewItem} />
+                <UnpackLookup value={newItem} onChange={setNewItem} palletId={adjDetail.palletId} />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
@@ -260,7 +263,12 @@ export default function AdjustmentsPage() {
                   </div>
                   <div>
                     <Label>Precio venta ₡ (confirmar)</Label>
-                    <Input type="number" placeholder="0" value={newItem.precio} onChange={(e) => setNewItem({ ...newItem, precio: e.target.value })} />
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={newItem.precio}
+                      onChange={(e) => setNewItem({ ...newItem, precio: e.target.value, priceSource: newItem.priceSource || "manual" })}
+                    />
                   </div>
                   <div>
                     <Label>Codigo articulo</Label>

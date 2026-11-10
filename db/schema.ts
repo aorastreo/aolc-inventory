@@ -89,6 +89,8 @@ export const pallets = mysqlTable("pallets", {
   fecha: varchar("fecha", { length: 20 }),
   description: varchar("description", { length: 255 }).notNull(),
   costo: decimal("costo", { precision: 12, scale: 2 }).default("0"),
+  /** Approximate number of boxes/cases in the container (for avg price guidance). */
+  cajasAprox: int("cajasAprox"),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
@@ -96,6 +98,24 @@ export const pallets = mysqlTable("pallets", {
 
 export type Pallet = typeof pallets.$inferSelect;
 export type InsertPallet = typeof pallets.$inferInsert;
+
+// ============================================
+// PRICE HISTORY (outlet pricing memory)
+// ============================================
+export const priceHistory = mysqlTable("price_history", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  codigo: varchar("codigo", { length: 50 }),
+  codigoBarras: varchar("codigoBarras", { length: 50 }),
+  nombre: varchar("nombre", { length: 255 }).notNull(),
+  precio: decimal("precio", { precision: 12, scale: 2 }).notNull(),
+  precioRefUsd: decimal("precioRefUsd", { precision: 12, scale: 2 }),
+  source: varchar("source", { length: 40 }).default("manual"),
+  palletId: bigint("palletId", { mode: "number", unsigned: true }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PriceHistory = typeof priceHistory.$inferSelect;
 
 // ============================================
 // PRODUCTS (Articles/Items in pallets)

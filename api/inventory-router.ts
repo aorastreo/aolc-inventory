@@ -6,7 +6,7 @@ import {
   adjustments, adjustmentItems, closings, assemblers, assemblyAssignments, employees, printedLabels,
   transfers, transferItems, storeConfig, storeEmployees,
   payrollEmployees, payrollPeriods, payrollPayments,
-  inventoryMovements,
+  inventoryMovements, priceHistory,
 } from "@db/schema";
 import { eq, and, desc, like, sql, count, or, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -16,6 +16,7 @@ import {
   fetchLinkSuggestion,
   suggestFromPhoto,
   buildPriceBandFromUsd,
+  priceVsContainerHint,
 } from "./lib/pricing";
 
 // Helper: format Date to YYYY-MM-DD string (local date, no timezone issues)
@@ -211,25 +212,42 @@ export const inventoryRouter = createRouter({
     }),
 
   createPallet: managerQuery
-    .input(z.object({ storeId: z.number(), palletId: z.string(), description: z.string(), fecha: z.string().optional(), costo: z.string().optional() }))
+    .input(z.object({
+      storeId: z.number(),
+      palletId: z.string(),
+      description: z.string(),
+      fecha: z.string().optional(),
+      costo: z.string().optional(),
+      cajasAprox: z.number().int().positive().optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
       const fecha = input.fecha || new Date().toISOString().split("T")[0];
       const costo = input.costo || "0";
+      const cajas = input.cajasAprox ?? null;
 
-      // Single clean INSERT — let the real error surface if something fails
       const result: any = await db.execute(sql`
-        INSERT INTO pallets (storeId, palletId, description, fecha, costo)
-        VALUES (${input.storeId}, ${input.palletId}, ${input.description}, ${fecha}, ${costo})
+        INSERT INTO pallets (storeId, palletId, description, fecha, costo, cajasAprox)
+        VALUES (${input.storeId}, ${input.palletId}, ${input.description}, ${fecha}, ${costo}, ${cajas})
       `);
       const insertResult = Array.isArray(result) ? result[0] : (result.rows || result);
       return { id: Number(insertResult?.insertId || 0) };
     }),
 
   updatePallet: managerQuery
-    .input(z.object({ id: z.number(), storeId: z.number(), palletId: z.string().optional(), description: z.string().optional(), costo: z.string().optional(), fecha: z.string().optional() }))
+    .input(z.object({
+      id: z.number(),
+      storeId: z.number(),
+      palletId: z.string().optional(),
+      description: z.string().optional(),
+      costo: z.string().optional(),
+      fecha: z.string().optional(),
+      cajasAprox: z.number().int().positive().nullable().optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
       await assertPalletInStore(db, input.id, input.storeId);
       const { id, storeId, ...data } = input;
       const setData: Record<string, any> = {};
@@ -237,6 +255,7 @@ export const inventoryRouter = createRouter({
       if (data.description !== undefined) setData.description = data.description;
       if (data.costo !== undefined) setData.costo = data.costo;
       if (data.fecha !== undefined) setData.fecha = data.fecha;
+      if (data.cajasAprox !== undefined) setData.cajasAprox = data.cajasAprox;
       await db.update(pallets).set(setData).where(and(eq(pallets.id, id), eq(pallets.storeId, storeId)));
       return { success: true };
     }),
@@ -513,8 +532,10 @@ export const inventoryRouter = createRouter({
         (s, r) => s + Number(r.precio || 0) * Number(r.cantidad || 0),
         0,
       );
+      let unidadesActuales = rows.reduce((s, r) => s + Number(r.cantidad || 0), 0);
 
       let ventasEnAjuste = 0;
+      let unidadesEnAjuste = 0;
       if (input.includeActiveAdjustments) {
         const openAdjs = await db.select().from(adjustments).where(and(
           eq(adjustments.storeId, input.storeId),
@@ -529,6 +550,7 @@ export const inventoryRouter = createRouter({
             (s, i) => s + Number(i.precio || 0) * Number(i.cantidad || 0),
             0,
           );
+          unidadesEnAjuste += items.reduce((s, i) => s + Number(i.cantidad || 0), 0);
         }
       }
 
@@ -537,9 +559,101 @@ export const inventoryRouter = createRouter({
           palletCosto: Number(pallet.costo || 0),
           ventasActuales,
           ventasEnAjuste,
+          cajasAprox: pallet.cajasAprox != null ? Number(pallet.cajasAprox) : null,
+          unidadesProyectadas: unidadesActuales + unidadesEnAjuste,
         }),
         palletLabel: pallet.palletId,
         description: pallet.description,
+      };
+    }),
+
+  /** Lookup past sell prices by codigo / barcode / name for outlet memory. */
+  lookupPriceHistory: authedQuery
+    .input(z.object({
+      storeId: z.number(),
+      query: z.string().min(1),
+      mode: z.enum(["auto", "codigo", "barcode", "nombre"]).default("auto"),
+    }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const q = input.query.trim();
+      if (!q) return { last: null as any, average: null as number | null, count: 0, rows: [] as any[] };
+
+      const all = await db.select().from(priceHistory)
+        .where(eq(priceHistory.storeId, input.storeId))
+        .orderBy(desc(priceHistory.createdAt))
+        .limit(500);
+
+      const qLower = q.toLowerCase();
+      const matched = all.filter((r) => {
+        const byCodigo = !!r.codigo && r.codigo.toLowerCase().includes(qLower);
+        const byBarcode = !!r.codigoBarras && r.codigoBarras.toLowerCase().includes(qLower);
+        const byNombre = r.nombre.toLowerCase().includes(qLower);
+        if (input.mode === "codigo") return byCodigo;
+        if (input.mode === "barcode") return byBarcode;
+        if (input.mode === "nombre") return byNombre;
+        return byCodigo || byBarcode || byNombre;
+      });
+
+      if (matched.length === 0) {
+        return { last: null, average: null, count: 0, rows: [] };
+      }
+
+      const prices = matched.map((r) => Number(r.precio || 0)).filter((n) => n > 0);
+      const average = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
+      return {
+        last: matched[0],
+        average,
+        count: matched.length,
+        rows: matched.slice(0, 8),
+      };
+    }),
+
+  evaluateUnitPrice: authedQuery
+    .input(z.object({
+      storeId: z.number(),
+      palletId: z.number(),
+      unitPrice: z.number(),
+    }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const pallet = await assertPalletInStore(db, input.palletId, input.storeId);
+      const live = await db.select().from(products).where(and(
+        eq(products.storeId, input.storeId),
+        eq(products.palletId, input.palletId),
+        eq(products.isActive, true),
+      ));
+      const ventasActuales = live.reduce((s, r) => s + Number(r.precio || 0) * Number(r.cantidad || 0), 0);
+      let ventasEnAjuste = 0;
+      const openAdjs = await db.select().from(adjustments).where(and(
+        eq(adjustments.storeId, input.storeId),
+        eq(adjustments.palletId, input.palletId),
+        eq(adjustments.estado, "activo"),
+        eq(adjustments.isActive, true),
+      ));
+      for (const adj of openAdjs) {
+        const items = await db.select().from(adjustmentItems).where(eq(adjustmentItems.adjustmentId, adj.id));
+        ventasEnAjuste += items.reduce((s, i) => s + Number(i.precio || 0) * Number(i.cantidad || 0), 0);
+      }
+      const full = computeMarginProgress({
+        palletCosto: Number(pallet.costo || 0),
+        ventasActuales,
+        ventasEnAjuste,
+        cajasAprox: pallet.cajasAprox != null ? Number(pallet.cajasAprox) : null,
+      });
+      return {
+        ...priceVsContainerHint({
+          unitPrice: input.unitPrice,
+          promedioPisoPorCaja: full.promedioPisoPorCaja,
+          promedioMetaPorCaja: full.promedioMetaPorCaja,
+          status: full.status,
+        }),
+        promedioPisoPorCaja: full.promedioPisoPorCaja,
+        promedioMetaPorCaja: full.promedioMetaPorCaja,
+        status: full.status,
+        cajasAprox: full.cajasAprox,
       };
     }),
 
@@ -765,12 +879,13 @@ export const inventoryRouter = createRouter({
       costo: z.string().optional(),
       precioRefUsd: z.string().optional(),
       sourceUrl: z.string().optional(),
+      priceSource: z.string().optional(), // historial | usa | manual
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
       await ensureEnterpriseSchema();
-      await assertAdjustmentActive(db, input.adjustmentId);
-      let { codigoBarras, costo, codigo, precioRefUsd, sourceUrl, ...rest } = input;
+      const adj = await assertAdjustmentActive(db, input.adjustmentId);
+      let { codigoBarras, costo, codigo, precioRefUsd, sourceUrl, priceSource, ...rest } = input;
 
       if (!codigoBarras || codigoBarras.trim() === "") {
         codigoBarras = await getNextAutoBarcode(db);
@@ -784,6 +899,23 @@ export const inventoryRouter = createRouter({
         precioRefUsd: precioRefUsd && precioRefUsd.trim() !== "" ? precioRefUsd : null,
         sourceUrl: sourceUrl?.trim() || null,
       });
+
+      // Remember confirmed sell price for next time (outlet memory)
+      try {
+        await db.insert(priceHistory).values({
+          storeId: adj.storeId,
+          codigo: codigo?.trim() || null,
+          codigoBarras: codigoBarras || null,
+          nombre: input.nombre,
+          precio: input.precio,
+          precioRefUsd: precioRefUsd && precioRefUsd.trim() !== "" ? precioRefUsd : null,
+          source: priceSource || "manual",
+          palletId: adj.palletId,
+        });
+      } catch {
+        // non-fatal
+      }
+
       return { id: Number(result[0].insertId), codigoBarras };
     }),
 
