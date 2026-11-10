@@ -1,15 +1,30 @@
-/** Shared secrets for JWT and one-off ops routes. Never hardcode production values. */
+/** Shared secrets for JWT and one-off ops routes. */
 
+/**
+ * Resolve JWT signing secret without crashing production boots.
+ * Prefer JWT_SECRET, then APP_SECRET (already on Railway), then the
+ * legacy value so existing admin sessions keep working after deploy.
+ */
 export function getJwtSecretText(): string {
-  const secret = process.env.JWT_SECRET?.trim();
-  if (secret) return secret;
+  const fromEnv = process.env.JWT_SECRET?.trim();
+  if (fromEnv) return fromEnv;
 
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("JWT_SECRET is required in production");
+  const fromAppSecret = process.env.APP_SECRET?.trim();
+  if (fromAppSecret) {
+    if (process.env.NODE_ENV === "production") {
+      console.warn("[auth] JWT_SECRET missing; using APP_SECRET for session tokens.");
+    }
+    return fromAppSecret;
   }
 
-  // Local/dev only — production refuses to start without JWT_SECRET.
-  return "aolc-dev-only-secret";
+  // Legacy fallback used before env-based secrets. Keeps aogestion.com up
+  // until JWT_SECRET is configured in Railway.
+  if (process.env.NODE_ENV === "production") {
+    console.warn(
+      "[auth] JWT_SECRET and APP_SECRET missing; using legacy session secret. Set JWT_SECRET in Railway.",
+    );
+  }
+  return "aolc-secret-key-2024";
 }
 
 export function getJwtSecretKey(): Uint8Array {

@@ -3,39 +3,16 @@ import { useLocalAuth } from "@/hooks/useLocalAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogIn, Store, UserCog } from "lucide-react";
-import { trpc } from "@/providers/trpc";
+import { LogIn, Store } from "lucide-react";
 
 const BRAND_RED = "#B22234";
 
 export default function LoginLocalPage() {
-  const { login, loginByStore, error } = useLocalAuth();
-  const [mode, setMode] = useState<"store" | "admin">("store");
-  const [storeId, setStoreId] = useState<string>("");
+  const { login, error } = useLocalAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [localError, setLocalError] = useState("");
-
-  const { data: stores } = trpc.inventory.allStores.useQuery();
-
-  const handleStoreLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!storeId) {
-      setLocalError("Selecciona una tienda");
-      return;
-    }
-    setLoading(true);
-    setLocalError("");
-    try {
-      await loginByStore(Number(storeId), password);
-      window.location.href = "/";
-    } catch (err: any) {
-      setLocalError(err.message || "Error al iniciar sesion");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,11 +28,8 @@ export default function LoginLocalPage() {
     }
   };
 
-  const tiendas = stores?.filter((s) => s.id !== 1) || [];
-
   return (
     <div className="min-h-screen flex">
-      {/* Left side - Brand */}
       <div
         className="hidden lg:flex lg:w-1/2 relative overflow-hidden"
         style={{
@@ -96,18 +70,16 @@ export default function LoginLocalPage() {
 
           <div className="mt-12 flex items-center gap-2 text-white/40 text-sm">
             <div className="w-2 h-2 rounded-full bg-green-400" />
-            Sistema en linea
+            Acceso administrador
           </div>
         </div>
       </div>
 
-      {/* Right side - Login form */}
       <div
         className="flex-1 flex items-center justify-center p-8"
         style={{ background: "hsl(0 0% 97%)" }}
       >
         <div className="w-full max-w-sm">
-          {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
             <img
               src="/logo.jpg"
@@ -132,171 +104,76 @@ export default function LoginLocalPage() {
                 Bienvenido
               </h2>
               <p className="text-sm mt-1" style={{ color: "hsl(207 20% 45%)" }}>
-                {mode === "store"
-                  ? "Selecciona tu tienda e ingresa la contrasena"
-                  : "Ingresa tus credenciales de administrador"}
+                Ingresa tus credenciales de administrador
               </p>
             </div>
 
-            {mode === "store" ? (
-              <form onSubmit={handleStoreLogin} className="space-y-5">
-                <div>
-                  <Label
-                    className="text-sm font-medium"
-                    style={{ color: "hsl(207 55% 15%)" }}
-                  >
-                    Tienda
-                  </Label>
-                  <select
-                    className="w-full h-11 mt-1.5 rounded-md border border-input bg-background px-3 text-sm"
-                    value={storeId}
-                    onChange={(e) => setStoreId(e.target.value)}
-                    required
-                  >
-                    <option value="">Seleccionar tienda...</option>
-                    {tiendas.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+            <form onSubmit={handleAdminLogin} className="space-y-5">
+              <div>
+                <Label
+                  htmlFor="username"
+                  className="text-sm font-medium"
+                  style={{ color: "hsl(207 55% 15%)" }}
+                >
+                  Usuario
+                </Label>
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="Tu usuario"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  className="mt-1.5 h-11"
+                  autoComplete="username"
+                />
+              </div>
 
-                <div>
-                  <Label
-                    htmlFor="password"
-                    className="text-sm font-medium"
-                    style={{ color: "hsl(207 55% 15%)" }}
-                  >
-                    Contrasena
-                  </Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Tu contrasena"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="mt-1.5 h-11"
-                  />
-                </div>
+              <div>
+                <Label
+                  htmlFor="password"
+                  className="text-sm font-medium"
+                  style={{ color: "hsl(207 55% 15%)" }}
+                >
+                  Contrasena
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Tu contrasena"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="mt-1.5 h-11"
+                  autoComplete="current-password"
+                />
+              </div>
 
-                {(error || localError) && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                    {error || localError}
+              {(error || localError) && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {error || localError}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full h-11 text-base font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90"
+                style={{ background: BRAND_RED }}
+              >
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Cargando...
                   </div>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4 mr-2" />
+                    Iniciar Sesion
+                  </>
                 )}
-
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full h-11 text-base font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90"
-                  style={{ background: BRAND_RED }}
-                >
-                  {loading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Cargando...
-                    </div>
-                  ) : (
-                    <>
-                      <LogIn className="w-4 h-4 mr-2" />
-                      Iniciar Sesion
-                    </>
-                  )}
-                </Button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("admin");
-                    setLocalError("");
-                  }}
-                  className="w-full text-center text-sm mt-3"
-                  style={{ color: "hsl(207 20% 55%)" }}
-                >
-                  <UserCog className="w-3.5 h-3.5 inline mr-1" />
-                  Soy administrador
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleAdminLogin} className="space-y-5">
-                <div>
-                  <Label
-                    htmlFor="username"
-                    className="text-sm font-medium"
-                    style={{ color: "hsl(207 55% 15%)" }}
-                  >
-                    Usuario
-                  </Label>
-                  <Input
-                    id="username"
-                    type="text"
-                    placeholder="Tu usuario"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                    className="mt-1.5 h-11"
-                  />
-                </div>
-
-                <div>
-                  <Label
-                    htmlFor="password"
-                    className="text-sm font-medium"
-                    style={{ color: "hsl(207 55% 15%)" }}
-                  >
-                    Contrasena
-                  </Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Tu contrasena"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="mt-1.5 h-11"
-                  />
-                </div>
-
-                {(error || localError) && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                    {error || localError}
-                  </div>
-                )}
-
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full h-11 text-base font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90"
-                  style={{ background: BRAND_RED }}
-                >
-                  {loading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Cargando...
-                    </div>
-                  ) : (
-                    <>
-                      <LogIn className="w-4 h-4 mr-2" />
-                      Iniciar Sesion
-                    </>
-                  )}
-                </Button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("store");
-                    setLocalError("");
-                  }}
-                  className="w-full text-center text-sm mt-3"
-                  style={{ color: "hsl(207 20% 55%)" }}
-                >
-                  Volver a login de tienda
-                </button>
-              </form>
-            )}
+              </Button>
+            </form>
           </div>
 
           <p

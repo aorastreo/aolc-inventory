@@ -47,12 +47,11 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
   return <AppLayout>{children}</AppLayout>;
 }
 
-// Redirect root based on role
+// Admin console home
 function RootRedirect() {
-  const { user, isLoading, isEmployee } = useLocalAuth();
+  const { user, isLoading } = useLocalAuth();
   if (isLoading) return <div className="flex items-center justify-center h-screen">Cargando...</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (isEmployee) return <Navigate to="/closings" replace />;
   return <DashboardPage />;
 }
 
