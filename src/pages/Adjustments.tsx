@@ -64,13 +64,17 @@ export default function AdjustmentsPage() {
     },
   });
   const cancelAdj = trpc.inventory.cancelAdjustment.useMutation({ onSuccess: () => utils.inventory.adjustments.invalidate() });
+  const [stationKey, setStationKey] = useState(0);
   const addItem = trpc.inventory.addAdjustmentItem.useMutation({
     onSuccess: () => {
       utils.inventory.adjustmentItems.invalidate();
       utils.inventory.adjustments.invalidate();
       utils.inventory.palletMarginProgress.invalidate();
       utils.inventory.lookupPriceHistory.invalidate();
+      setNewItem(emptyItem());
+      setStationKey((k) => k + 1); // reset UnpackLookup local state (band, foto, query)
     },
+    onError: (err) => alert("No se pudo agregar el articulo: " + err.message),
   });
   const removeItem = trpc.inventory.removeAdjustmentItem.useMutation({
     onSuccess: () => {
@@ -149,12 +153,23 @@ export default function AdjustmentsPage() {
   };
 
   const handleAddItem = () => {
-    if (!viewingAdj || !newItem.nombre || !newItem.precio) return;
+    if (!viewingAdj || !newItem.nombre.trim() || !newItem.precio) return;
+    const precioNum = Number(newItem.precio);
+    if (!Number.isFinite(precioNum) || precioNum <= 0) {
+      alert("Ingresa un precio de venta mayor a 0.");
+      return;
+    }
+    const cantidad = Number(newItem.cantidad);
+    if (!Number.isFinite(cantidad) || cantidad < 1) {
+      alert("La cantidad debe ser al menos 1.");
+      return;
+    }
+    if (addItem.isPending) return;
     addItem.mutate({
       adjustmentId: viewingAdj,
-      nombre: newItem.nombre,
-      precio: newItem.precio,
-      cantidad: newItem.cantidad,
+      nombre: newItem.nombre.trim(),
+      precio: String(precioNum),
+      cantidad,
       codigoBarras: newItem.codigoBarras || undefined,
       codigo: newItem.codigo || undefined,
       orden: (adjItems?.length || 0) + 1,
@@ -163,7 +178,6 @@ export default function AdjustmentsPage() {
       ...(newItem.sourceUrl ? { sourceUrl: newItem.sourceUrl } : {}),
       priceSource: newItem.priceSource || "manual",
     });
-    setNewItem(emptyItem());
   };
 
   const formatCurrency = (value: string) => Number(value || 0).toLocaleString("es-CR", { style: "currency", currency: "CRC" });
@@ -254,7 +268,7 @@ export default function AdjustmentsPage() {
                 Estacion de armado — buscar y poner precio
               </h3>
               <div className="space-y-4">
-                <UnpackLookup value={newItem} onChange={setNewItem} palletId={adjDetail.palletId} />
+                <UnpackLookup key={stationKey} value={newItem} onChange={setNewItem} palletId={adjDetail.palletId} />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
@@ -280,7 +294,13 @@ export default function AdjustmentsPage() {
                   </div>
                   <div>
                     <Label>Cantidad</Label>
-                    <Input type="number" placeholder="1" value={newItem.cantidad} onChange={(e) => setNewItem({ ...newItem, cantidad: Number(e.target.value) })} />
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="1"
+                      value={newItem.cantidad}
+                      onChange={(e) => setNewItem({ ...newItem, cantidad: Math.max(1, Number(e.target.value) || 1) })}
+                    />
                   </div>
                   <div>
                     <Label>Ref. USA $ (opcional)</Label>
@@ -288,9 +308,14 @@ export default function AdjustmentsPage() {
                   </div>
                 </div>
 
-                <Button onClick={handleAddItem} className="font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90" style={{ background: BRAND_RED }}>
+                <Button
+                  onClick={handleAddItem}
+                  disabled={addItem.isPending || !newItem.nombre.trim() || !newItem.precio}
+                  className="font-medium transition-all duration-200 hover:shadow-lg hover:opacity-90"
+                  style={{ background: BRAND_RED }}
+                >
                   <Plus className="w-4 h-4 mr-2" />
-                  Agregar al Ajuste
+                  {addItem.isPending ? "Agregando..." : "Agregar al Ajuste"}
                 </Button>
               </div>
             </CardContent>

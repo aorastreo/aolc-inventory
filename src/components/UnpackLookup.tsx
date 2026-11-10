@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   Search, Link2, Camera, Barcode, Hash, Package, Sparkles, ImagePlus,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
@@ -101,7 +101,12 @@ export default function UnpackLookup({ value, onChange, palletId }: Props) {
     nota?: string | null;
   }>>([]);
   const [fuentePrincipal, setFuentePrincipal] = useState<string | null>(null);
-  const [needsManualUsd, setNeedsManualUsd] = useState(false);
+
+  // Keep latest form values for async suggestion callbacks (avoid stale overwrite).
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { valueRef.current = value; }, [value]);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   const applySuggestion = (res: {
     nombre?: string | null;
@@ -118,11 +123,11 @@ export default function UnpackLookup({ value, onChange, palletId }: Props) {
     needsManualUsd?: boolean;
     priceSource?: string;
   }) => {
+    const current = valueRef.current;
     setError(null);
     if (res.note) setNote(res.note);
     setReferencias(res.referencias || []);
     setFuentePrincipal(res.fuentePrincipal || null);
-    setNeedsManualUsd(!!res.needsManualUsd || res.precioSugeridoCrc == null);
     if (res.precioMismo != null && res.precioMenos20 != null && res.precioUnPocoMas != null) {
       setBand({
         mismo: res.precioMismo,
@@ -133,15 +138,15 @@ export default function UnpackLookup({ value, onChange, palletId }: Props) {
       setBand(null);
     }
     const primaryRefUrl = res.referencias?.find((r) => r.url)?.url;
-    onChange({
-      ...value,
-      nombre: res.nombre || value.nombre,
+    onChangeRef.current({
+      ...current,
+      nombre: res.nombre || current.nombre,
       // Only fill price when we have a real suggestion (printed on box / converted USD)
-      precio: res.precioSugeridoCrc != null ? String(res.precioSugeridoCrc) : value.precio,
-      codigo: res.codigoPosible || value.codigo,
-      precioRefUsd: res.usd != null ? String(res.usd) : value.precioRefUsd,
-      sourceUrl: res.sourceUrl || primaryRefUrl || value.sourceUrl,
-      priceSource: res.priceSource || (res.precioSugeridoCrc != null ? "usa" : value.priceSource),
+      precio: res.precioSugeridoCrc != null ? String(res.precioSugeridoCrc) : current.precio,
+      codigo: res.codigoPosible || current.codigo,
+      precioRefUsd: res.usd != null ? String(res.usd) : current.precioRefUsd,
+      sourceUrl: res.sourceUrl || primaryRefUrl || current.sourceUrl,
+      priceSource: res.priceSource || (res.precioSugeridoCrc != null ? "usa" : current.priceSource),
     });
   };
 
@@ -156,6 +161,9 @@ export default function UnpackLookup({ value, onChange, palletId }: Props) {
   });
 
   const applyHit = (hit: { nombre: string; precio: number; codigoBarras: string | null; codigo: string | null }) => {
+    setBand(null);
+    setReferencias([]);
+    setFuentePrincipal(null);
     onChange({
       ...value,
       nombre: hit.nombre,
@@ -175,6 +183,9 @@ export default function UnpackLookup({ value, onChange, palletId }: Props) {
     codigo: string | null;
     precioRefUsd?: string | number | null;
   }) => {
+    setBand(null);
+    setReferencias([]);
+    setFuentePrincipal(null);
     onChange({
       ...value,
       nombre: row.nombre,
@@ -204,7 +215,6 @@ export default function UnpackLookup({ value, onChange, palletId }: Props) {
       setPhotoPreview(dataUrl);
       setPhotoBase64(dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl);
       setPhotoMime(file.type || "image/jpeg");
-      setNeedsManualUsd(true);
       setNote("Foto lista. Pulsa “Google Lens” para buscar el producto real. Luego pega el $ USA aqui.");
     };
     reader.onerror = () => setError("No se pudo leer la imagen");
@@ -402,7 +412,10 @@ export default function UnpackLookup({ value, onChange, palletId }: Props) {
                 type="button"
                 disabled={busy || !Number(usdManual)}
                 onClick={() => {
-                  onChange({ ...value, sourceUrl: link.trim() || value.sourceUrl });
+                  const sourceUrl = link.trim() || value.sourceUrl;
+                  // Seed ref before async so suggestion merge keeps the link
+                  valueRef.current = { ...valueRef.current, sourceUrl };
+                  onChange({ ...value, sourceUrl });
                   suggestUsd.mutate({ usd: Number(usdManual) });
                 }}
                 style={{ background: BRAND_RED }}
