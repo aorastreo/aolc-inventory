@@ -1676,15 +1676,30 @@ export const inventoryRouter = createRouter({
     }))
     .query(async ({ input }) => {
       const db = getDb();
+      const raw = String(input.barcode || "").trim();
+      const normalized = raw.replace(/[\s\r\n]+/g, "");
+      if (!normalized) return null;
 
-      // Prefer real stock: sum active product rows with this barcode
-      const prodRows = await db.select()
-        .from(products)
-        .where(and(eq(products.storeId, input.storeId), eq(products.codigoBarras, input.barcode), eq(products.isActive, true)));
+      // Real stock in store: tolerate scanner whitespace / trim mismatches
+      const stockRows: any = await db.execute(sql`
+        SELECT * FROM products
+        WHERE storeId = ${input.storeId}
+          AND isActive = 1
+          AND codigoBarras IS NOT NULL
+          AND (
+            codigoBarras = ${raw}
+            OR codigoBarras = ${normalized}
+            OR TRIM(codigoBarras) = ${normalized}
+            OR REPLACE(codigoBarras, ' ', '') = ${normalized}
+          )
+      `);
+      const prodRows: any[] = Array.isArray(stockRows)
+        ? (Array.isArray(stockRows[0]) ? stockRows[0] : stockRows)
+        : (stockRows?.rows || []);
       if (prodRows.length > 0) {
         const cantidad = prodRows.reduce((sum, row) => sum + Number(row.cantidad || 0), 0);
         const first = prodRows[0];
-        return { ...first, cantidad, source: "products" as const };
+        return { ...first, cantidad, codigoBarras: first.codigoBarras || normalized, source: "products" as const };
       }
 
       if (input.productsOnly) return null;
@@ -1692,7 +1707,13 @@ export const inventoryRouter = createRouter({
       // Catalog (for name/price autocomplete only — not transferable stock)
       const dbRows = await db.select()
         .from(productDatabase)
-        .where(and(eq(productDatabase.storeId, input.storeId), eq(productDatabase.codigoBarras, input.barcode)))
+        .where(and(
+          eq(productDatabase.storeId, input.storeId),
+          or(
+            eq(productDatabase.codigoBarras, raw),
+            eq(productDatabase.codigoBarras, normalized),
+          ),
+        ))
         .limit(1);
       if (dbRows.length > 0) {
         const row = dbRows[0];
@@ -1700,7 +1721,11 @@ export const inventoryRouter = createRouter({
       }
 
       const adjRows: any = await db.execute(
-        sql`SELECT ai.* FROM adjustmentItems ai JOIN adjustments a ON ai.adjustmentId = a.id WHERE ai.codigoBarras = ${input.barcode} AND a.storeId = ${input.storeId} ORDER BY ai.id DESC LIMIT 1`
+        sql`SELECT ai.* FROM adjustmentItems ai JOIN adjustments a ON ai.adjustmentId = a.id
+            WHERE a.storeId = ${input.storeId}
+              AND ai.codigoBarras IS NOT NULL
+              AND (ai.codigoBarras = ${raw} OR ai.codigoBarras = ${normalized} OR TRIM(ai.codigoBarras) = ${normalized})
+            ORDER BY ai.id DESC LIMIT 1`,
       );
       const adjItems = Array.isArray(adjRows) ? adjRows[0] : (adjRows.rows || adjRows);
       if (Array.isArray(adjItems) && adjItems.length > 0) {

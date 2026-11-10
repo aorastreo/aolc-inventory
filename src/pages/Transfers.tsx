@@ -82,32 +82,72 @@ export default function TransfersPage() {
   );
   const currentTransfer = transfersList?.find(t => t.id === viewingTransfer);
 
-  // Scanning
+  // Scanning — lookup on Enter (scanner) or pause, not on every keystroke
   const [barcode, setBarcode] = useState("");
   const [scannedProduct, setScannedProduct] = useState<any>(null);
   const [scanQty, setScanQty] = useState(1);
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
-
-  // Search real Bodega stock only (never catalog placeholders)
-  const { data: foundProduct } = trpc.inventory.searchProductByBarcode.useQuery(
-    { storeId: BODEGA_STORE_ID, barcode, productsOnly: true },
-    { enabled: barcode.length >= 5 && !!viewingTransfer && currentTransfer?.estado === "activo" }
-  );
-
-  useEffect(() => {
-    if (foundProduct && barcode.length >= 5) {
-      setScannedProduct(foundProduct);
-      setScanQty(1);
-    } else if (barcode.length >= 5) {
-      setScannedProduct(null);
-    }
-  }, [foundProduct, barcode]);
+  const lookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setCompleteSummary(null);
     setCompleteConfirmOpen(false);
     setCancelConfirmOpen(false);
+    setBarcode("");
+    setScannedProduct(null);
+    setLookupError(null);
   }, [viewingTransfer]);
+
+  const lookupBarcode = async (raw: string, autoAdd: boolean) => {
+    const code = raw.trim().replace(/[\r\n]+/g, "");
+    if (!viewingTransfer || currentTransfer?.estado !== "activo") return;
+    if (code.length < 4) {
+      setLookupError("Codigo muy corto");
+      setScannedProduct(null);
+      return;
+    }
+    setLookupBusy(true);
+    setLookupError(null);
+    try {
+      const found = await utils.inventory.searchProductByBarcode.fetch({
+        storeId: BODEGA_STORE_ID,
+        barcode: code,
+        productsOnly: true,
+      });
+      if (!found) {
+        setScannedProduct(null);
+        setLookupError("No hay stock en Bodega con ese codigo. Confirma que el articulo este en un contenedor activo (no solo en catalogo/ajuste).");
+        return;
+      }
+      setScannedProduct(found);
+      setScanQty(1);
+      setBarcode(String(found.codigoBarras || code));
+      const available = Number(found.cantidad || 0);
+      if (available < 1) {
+        setLookupError("Encontrado, pero stock en Bodega es 0.");
+        return;
+      }
+      if (autoAdd && viewingTransfer) {
+        addItem.mutate({
+          transferId: viewingTransfer,
+          codigoBarras: found.codigoBarras || code,
+          nombre: found.nombre,
+          precio: String(found.precio),
+          cantidad: 1,
+          orden: (transferDetail?.length || 0) + 1,
+          ...(found.costo != null ? { costo: String(found.costo) } : {}),
+        } as Parameters<typeof addItem.mutate>[0]);
+      }
+    } catch (err: any) {
+      setScannedProduct(null);
+      setLookupError(err?.message || "Error al buscar el codigo");
+    } finally {
+      setLookupBusy(false);
+      barcodeRef.current?.focus();
+    }
+  };
 
   const handleAddItem = () => {
     if (!viewingTransfer || !scannedProduct || scanQty < 1) return;
@@ -128,10 +168,28 @@ export default function TransfersPage() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && scannedProduct) {
-      e.preventDefault();
-      handleAddItem();
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (lookupTimerRef.current) {
+      clearTimeout(lookupTimerRef.current);
+      lookupTimerRef.current = null;
     }
+    // Scanner sends digits + Enter → buscar y agregar 1
+    void lookupBarcode(barcode, true);
+  };
+
+  const handleBarcodeChange = (value: string) => {
+    setBarcode(value);
+    setLookupError(null);
+    if (value.trim().length < 4) {
+      setScannedProduct(null);
+      return;
+    }
+    // Manual typing: lookup after short pause (no auto-add)
+    if (lookupTimerRef.current) clearTimeout(lookupTimerRef.current);
+    lookupTimerRef.current = setTimeout(() => {
+      void lookupBarcode(value, false);
+    }, 350);
   };
 
   const handleCreate = () => {
@@ -249,14 +307,23 @@ export default function TransfersPage() {
                   <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "hsl(207 20% 55%)" }} />
                   <Input
                     ref={barcodeRef}
-                    placeholder="Escanea codigo de barras..."
+                    placeholder="Escanea codigo de barras y Enter..."
                     value={barcode}
-                    onChange={(e) => { setBarcode(e.target.value); if (e.target.value.length < 5) setScannedProduct(null); }}
+                    onChange={(e) => handleBarcodeChange(e.target.value)}
                     onKeyDown={handleKeyDown}
                     className="pl-10 h-12 text-lg font-mono"
                     autoFocus
+                    disabled={lookupBusy || addItem.isPending}
                   />
                 </div>
+
+                {lookupBusy && (
+                  <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>Buscando en stock de Bodega...</p>
+                )}
+
+                {lookupError && !lookupBusy && (
+                  <p className="text-sm px-3 py-2 rounded-md bg-red-50 text-red-700 border border-red-200">{lookupError}</p>
+                )}
 
                 {scannedProduct && (
                   <div className="p-4 rounded-lg border" style={{ background: "hsl(0 0% 98%)", borderColor: stockExceeded ? "#FCA5A5" : "hsl(210 20% 90%)" }}>
@@ -292,9 +359,6 @@ export default function TransfersPage() {
                   </div>
                 )}
 
-                {barcode.length >= 5 && !scannedProduct && (
-                  <p className="text-sm" style={{ color: "#DC2626" }}>Producto no encontrado en Bodega</p>
-                )}
               </div>
             </CardContent>
           </Card>
