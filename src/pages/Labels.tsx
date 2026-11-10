@@ -5,17 +5,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Tag, Package, ClipboardList, Printer, Wifi, ScanBarcode,
-  Search, CheckSquare, Square, List, Layers, WifiOff,
-  AlertCircle, ChevronDown, Check,
+  Tag, Printer, Search, CheckSquare, Square, List, Layers,
+  AlertCircle, ChevronDown, Check, Link as LinkIcon,
 } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
+import { Link } from "react-router";
 import JsBarcode from "jsbarcode";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
 
-type ViewMode = "detallada" | "agrupada" | "offline";
+type ViewMode = "detallada" | "agrupada";
+type PrintFilter = "todos" | "pendientes" | "impresos";
 
 interface LabelItem {
   id: number;
@@ -26,7 +27,12 @@ interface LabelItem {
   printed: boolean;
 }
 
-// Get today's date in YYYY-MM-DD using local timezone
+const LABEL_SIZES: Record<string, { w: string; h: string; label: string }> = {
+  "50x25": { w: "50mm", h: "25mm", label: "50 x 25 mm (2x1) — Zebra ZD411" },
+  "38x25": { w: "38mm", h: "25mm", label: "38 x 25 mm — Zebra ZD411" },
+  "57x32": { w: "57mm", h: "32mm", label: "57 x 32 mm — Generica" },
+};
+
 function getLocalDateString() {
   const now = new Date();
   const y = now.getFullYear();
@@ -35,10 +41,6 @@ function getLocalDateString() {
   return `${y}-${m}-${d}`;
 }
 
-// Barcode using JsBarcode - generates REAL scannable SVG
-
-
-// Custom Dropdown Component
 function CustomDropdown({ label, value, onChange, options, placeholder }: {
   label: string;
   value: string;
@@ -63,6 +65,7 @@ function CustomDropdown({ label, value, onChange, options, placeholder }: {
     <div ref={ref} className="relative">
       <Label className="text-sm font-medium mb-1.5 block">{label}</Label>
       <button
+        type="button"
         onClick={() => setOpen(!open)}
         className="w-full h-10 border rounded-md px-3 text-sm bg-white flex items-center justify-between text-left"
         style={{ borderColor: "hsl(210 20% 88%)" }}
@@ -75,6 +78,7 @@ function CustomDropdown({ label, value, onChange, options, placeholder }: {
       {open && (
         <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-64 overflow-y-auto" style={{ borderColor: "hsl(210 20% 88%)" }}>
           <button
+            type="button"
             className="w-full text-left px-3 py-2 text-sm text-gray-400 hover:bg-gray-50 border-b"
             style={{ borderColor: "hsl(210 20% 94%)" }}
             onClick={() => { onChange(""); setOpen(false); }}
@@ -83,6 +87,7 @@ function CustomDropdown({ label, value, onChange, options, placeholder }: {
           </button>
           {options.map((opt) => (
             <button
+              type="button"
               key={opt.value}
               className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between ${value === opt.value ? "bg-red-50" : ""}`}
               onClick={() => { onChange(opt.value); setOpen(false); }}
@@ -97,22 +102,102 @@ function CustomDropdown({ label, value, onChange, options, placeholder }: {
   );
 }
 
-// Expand items based on quantity
 function expandItems(items: LabelItem[], quantities: Record<number, number>, names: Record<number, string>): LabelItem[] {
   const result: LabelItem[] = [];
   for (const item of items) {
     const qty = quantities[item.id] !== undefined ? quantities[item.id] : item.cantidad;
     const name = names[item.id] !== undefined ? names[item.id] : item.nombre;
-    for (let i = 0; i < qty; i++) {
-      result.push({ ...item, nombre: name });
+    for (let i = 0; i < Math.max(0, qty); i++) {
+      result.push({ ...item, nombre: name, cantidad: 1 });
     }
   }
   return result;
 }
 
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** ZPL for Zebra ZD411 (203 dpi). Sizes in mm → dots. */
+function buildZplBatch(
+  items: LabelItem[],
+  opts: { widthMm: number; heightMm: number; showPrice: boolean; footer: string; showDate: boolean },
+): string {
+  const dpi = 203;
+  const pw = Math.round((opts.widthMm / 25.4) * dpi);
+  const ll = Math.round((opts.heightMm / 25.4) * dpi);
+  const clean = (s: string) => s.replace(/[\^~]/n/g, " ").slice(0, 40);
+  const parts: string[] = [];
+  for (const item of items) {
+    const name = clean(item.nombre.toUpperCase());
+    const price = String(Math.round(Number(item.precio) || 0));
+    const code = (item.codigoBarras || "").replace(/[^\w-]/g, "");
+    const footer = clean(
+      `${opts.showDate ? getLocalDateString() + " - " : ""}${opts.footer}`,
+    );
+    parts.push(`^XA
+^PW${pw}
+^LL${ll}
+^LH0,0
+^FO16,8^A0N,22,22^FD${name}^FS
+${opts.showPrice ? `^FO16,36^A0N,56,56^FD${price}^FS^FO${Math.min(pw - 70, 200)},48^A0N,28,28^FDIVA^FS` : ""}
+${code ? `^FO16,100^BY2^BCN,55,N,N,N^FD${code}^FS^FO16,160^A0N,20,20^FD${code}^FS` : ""}
+^FO16,${ll - 28}^A0N,16,16^FD${footer}^FS
+^XZ`);
+  }
+  return parts.join("\n");
+}
+
+async function tryZebraBrowserPrint(zpl: string): Promise<{ ok: boolean; message: string }> {
+  // Official Zebra Browser Print local service (if installed on the PC)
+  const endpoints = [
+    "http://127.0.0.1:9100/write",
+    "http://localhost:9100/write",
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: zpl,
+      });
+      if (res.ok || res.status === 200) {
+        return { ok: true, message: "Enviado a Zebra Browser Print (ZD411)." };
+      }
+    } catch {
+      // service not running
+    }
+  }
+
+  // Legacy BrowserPrint JS global, if the SDK script is present
+  const bp = (window as any).BrowserPrint;
+  if (bp?.getDefaultDevice) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        bp.getDefaultDevice("printer", (device: any) => {
+          if (!device) return reject(new Error("No hay impresora Zebra por defecto"));
+          device.send(zpl, resolve, (err: any) => reject(err || new Error("Error Zebra")));
+        }, reject);
+      });
+      return { ok: true, message: "Enviado a la Zebra ZD411 via Browser Print." };
+    } catch (e: any) {
+      return { ok: false, message: e?.message || "Browser Print fallo" };
+    }
+  }
+
+  return {
+    ok: false,
+    message:
+      "No se detecto Zebra Browser Print en este PC. Se usara el dialogo de impresion: elige Zebra ZD411, papel 50x25, sin margenes.",
+  };
+}
+
 export default function LabelsPage() {
   const { storeId } = useActiveStore();
-  const { data: pallets } = trpc.inventory.pallets.useQuery({ storeId });
   const { data: adjustments } = trpc.inventory.adjustmentsWithStats.useQuery({ storeId });
   const { data: palletsWithStats } = trpc.inventory.palletsWithStats.useQuery({ storeId });
   const utils = trpc.useUtils();
@@ -120,26 +205,30 @@ export default function LabelsPage() {
   const [selectedPallet, setSelectedPallet] = useState<string>("");
   const [selectedAdjustment, setSelectedAdjustment] = useState<string>("");
   const [viewMode, setViewMode] = useState<ViewMode>("detallada");
+  const [printFilter, setPrintFilter] = useState<PrintFilter>("todos");
   const [search, setSearch] = useState("");
   const [selectedProducts, setSelectedProducts] = useState<Set<number>>(new Set());
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd, setRangeEnd] = useState("");
   const [labelSize, setLabelSize] = useState("50x25");
   const [showPrice, setShowPrice] = useState("si");
-  // Editable quantities and names per product
   const [labelQuantities, setLabelQuantities] = useState<Record<number, number>>({});
   const [labelNames, setLabelNames] = useState<Record<number, string>>({});
+  const [printNote, setPrintNote] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   const palletIdNum = selectedPallet ? Number(selectedPallet) : null;
   const adjustmentIdNum = selectedAdjustment ? Number(selectedAdjustment) : null;
+  const sourceType = adjustmentIdNum ? "adjustment" as const : "pallet" as const;
+  const refId = adjustmentIdNum || palletIdNum;
 
   const { data: palletProducts, isLoading: loadingPallet } = trpc.inventory.productsForLabels.useQuery(
     { storeId, palletId: palletIdNum! },
-    { enabled: !!palletIdNum }
+    { enabled: !!palletIdNum },
   );
   const { data: adjustmentProducts, isLoading: loadingAdj } = trpc.inventory.adjustmentItemsForLabels.useQuery(
     { storeId, adjustmentId: adjustmentIdNum! },
-    { enabled: !!adjustmentIdNum }
+    { enabled: !!adjustmentIdNum },
   );
 
   const products = adjustmentIdNum ? adjustmentProducts : palletProducts;
@@ -150,10 +239,59 @@ export default function LabelsPage() {
       utils.inventory.productsForLabels.invalidate();
       utils.inventory.adjustmentItemsForLabels.invalidate();
     },
+    onError: (err) => alert("No se pudo marcar como impresas: " + err.message),
   });
 
-  // Load label configuration from DB
+  const unmarkPrinted = trpc.inventory.unmarkLabelPrinted.useMutation({
+    onSuccess: () => {
+      utils.inventory.productsForLabels.invalidate();
+      utils.inventory.adjustmentItemsForLabels.invalidate();
+    },
+  });
+
   const { data: labelCfg } = trpc.labelConfig.get.useQuery({ storeId });
+
+  // Sync showPrice from saved config once
+  useEffect(() => {
+    if (labelCfg && typeof labelCfg.showPrice === "boolean") {
+      setShowPrice(labelCfg.showPrice ? "si" : "no");
+    }
+    if (labelCfg?.labelWidth && labelCfg?.labelHeight) {
+      const key = `${parseInt(String(labelCfg.labelWidth), 10)}x${parseInt(String(labelCfg.labelHeight), 10)}`;
+      if (LABEL_SIZES[key]) setLabelSize(key);
+    }
+  }, [labelCfg?.showPrice, labelCfg?.labelWidth, labelCfg?.labelHeight]);
+
+  // After print dialog: ask before marking (cancel in dialog must not auto-mark)
+  useEffect(() => {
+    const onMsg = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== "aolc-labels-printed") return;
+      const ids: number[] = Array.isArray(data.productIds) ? data.productIds : [];
+      const rId = Number(data.refId);
+      const src = data.sourceType === "adjustment" ? "adjustment" : "pallet";
+      setPrinting(false);
+      if (!ids.length || !rId) return;
+      const ok = window.confirm(
+        `¿Se imprimieron bien las etiquetas en la Zebra ZD411?\n\nOK = marcar ${ids.length} articulo(s) como impresos.`,
+      );
+      if (!ok) {
+        setPrintNote("No se marco como impresa. Puedes reimprimir cuando quieras.");
+        return;
+      }
+      markPrinted.mutate({
+        storeId,
+        refId: rId,
+        sourceType: src,
+        productIds: ids,
+        copies: Number(data.copies) || 1,
+      });
+      setPrintNote("Etiquetas marcadas como impresas.");
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [storeId]);
 
   const toggleProduct = (id: number) => {
     setSelectedProducts(prev => {
@@ -167,8 +305,8 @@ export default function LabelsPage() {
   const handleSelectRange = () => {
     const start = Number(rangeStart);
     const end = Number(rangeEnd);
-    if (!start || !end || !filtered) return;
-    const toSelect = filtered.slice(start - 1, end).map(p => p.id);
+    if (!start || !end || !displayRows.length) return;
+    const toSelect = displayRows.slice(start - 1, end).flatMap(p => p.memberIds);
     setSelectedProducts(prev => {
       const next = new Set(prev);
       toSelect.forEach(id => next.add(id));
@@ -179,8 +317,8 @@ export default function LabelsPage() {
   const handleDeselectRange = () => {
     const start = Number(rangeStart);
     const end = Number(rangeEnd);
-    if (!start || !end || !filtered) return;
-    const toDeselect = filtered.slice(start - 1, end).map(p => p.id);
+    if (!start || !end || !displayRows.length) return;
+    const toDeselect = displayRows.slice(start - 1, end).flatMap(p => p.memberIds);
     setSelectedProducts(prev => {
       const next = new Set(prev);
       toDeselect.forEach(id => next.delete(id));
@@ -188,7 +326,6 @@ export default function LabelsPage() {
     });
   };
 
-  // Generate barcode SVG using JsBarcode
   const generateBarcodeSVG = (code: string): string => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("style", "width:100%;height:100%;");
@@ -202,23 +339,23 @@ export default function LabelsPage() {
       });
       return svg.outerHTML;
     } catch {
-      return `<div style="font-size:8pt;text-align:center">${code}</div>`;
+      return `<div style="font-size:8pt;text-align:center">${escapeHtml(code)}</div>`;
     }
   };
 
-  const handlePrint = () => {
-    if (selectedProducts.size === 0) return;
-    const targetId = adjustmentIdNum || palletIdNum;
-    if (!targetId) return;
-    markPrinted.mutate({ storeId, palletId: targetId, productIds: Array.from(selectedProducts) });
+  const resolvedSize = LABEL_SIZES[labelSize] || LABEL_SIZES["50x25"];
+  const labelWidth = resolvedSize.w;
+  const labelHeight = resolvedSize.h;
+  const effectiveShowPrice = showPrice === "si";
 
-    // Build label HTML for popup
-    const labelsHtml = expandedItems.map((item) => {
+  const openBrowserPrint = (items: LabelItem[], productIds: number[]) => {
+    if (!refId) return;
+    const labelsHtml = items.map((item) => {
       const barcodeSvg = item.codigoBarras ? generateBarcodeSVG(item.codigoBarras) : "";
       return `
-        <div class="label-page" style="width:50mm;height:25mm;position:relative;background:white;margin:0;padding:0;box-sizing:border-box;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
-          <div style="position:absolute;top:0.5mm;left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "7pt"};font-weight:${labelCfg?.nameFontWeight || "normal"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.3;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${item.nombre.toUpperCase()}</div>
-          ${(labelCfg?.showPrice ?? true) ? `
+        <div class="label-page" style="width:${labelWidth};height:${labelHeight};position:relative;background:white;margin:0;padding:0;box-sizing:border-box;overflow:hidden;font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};">
+          <div style="position:absolute;top:0.5mm;left:1mm;right:1mm;font-size:${labelCfg?.nameFontSize || "7pt"};font-weight:${labelCfg?.nameFontWeight || "normal"};font-family:${labelCfg?.nameFontFamily || "Arial Narrow"};color:#000;text-transform:uppercase;letter-spacing:0.2px;line-height:1.2;text-align:${labelCfg?.nameTextAlign || "center"};white-space:nowrap;overflow:hidden;">${escapeHtml(item.nombre.toUpperCase())}</div>
+          ${effectiveShowPrice ? `
           <div style="position:absolute;top:${labelCfg?.priceTop || "4mm"};left:1mm;right:1mm;display:flex;align-items:baseline;justify-content:${(labelCfg?.priceTextAlign || "center") === "left" ? "flex-start" : (labelCfg?.priceTextAlign || "center") === "right" ? "flex-end" : "center"};gap:1.5mm;">
             <span style="font-size:${labelCfg?.priceFontSize || "26pt"};font-weight:${labelCfg?.priceFontWeight || "bold"};font-family:${labelCfg?.priceFontFamily || "Arial"};color:#000;letter-spacing:0.5px;line-height:1;">${Math.round(Number(item.precio))}</span>
             ${(labelCfg?.showIva ?? true) ? `<span style="font-size:${labelCfg?.ivaFontSize || "12pt"};font-weight:bold;color:#000;">IVA</span>` : ""}
@@ -226,23 +363,35 @@ export default function LabelsPage() {
           ${(labelCfg?.showBarcode ?? true) && item.codigoBarras ? `
           <div style="position:absolute;top:${labelCfg?.barcodeTop || "9mm"};left:1mm;right:1mm;text-align:${labelCfg?.barcodeAlign || "center"};height:${labelCfg?.barcodeHeight || "8mm"};">${barcodeSvg}</div>` : ""}
           ${(labelCfg?.showBarcodeNumber ?? true) && item.codigoBarras ? `
-          <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "15.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "8.5pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${item.codigoBarras}</div>` : ""}
+          <div style="position:absolute;top:${labelCfg?.barcodeNumberTop || "15.5mm"};left:1mm;right:1mm;font-size:${labelCfg?.barcodeNumberFontSize || "8.5pt"};font-weight:${labelCfg?.barcodeNumberFontWeight || "bold"};font-family:${labelCfg?.barcodeNumberFontFamily || "Courier New"};color:#000;letter-spacing:${labelCfg?.barcodeNumberLetterSpacing || "0.5px"};text-align:${labelCfg?.barcodeNumberAlign || "center"};white-space:nowrap;">${escapeHtml(item.codigoBarras)}</div>` : ""}
           ${(labelCfg?.showFooter ?? true) ? `
-          <div style="position:absolute;top:${labelCfg?.footerTop || "19mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Verdana"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${labelCfg?.footerText || "American Outlet Los Chiles"}</div>` : ""}
+          <div style="position:absolute;top:${labelCfg?.footerTop || "19mm"};left:1mm;right:1mm;font-size:${labelCfg?.footerFontSize || "6pt"};font-family:${labelCfg?.footerFontFamily || "Verdana"};color:#000;letter-spacing:0.2px;text-align:${labelCfg?.footerTextAlign || "center"};white-space:nowrap;">${(labelCfg?.showDate ?? true) ? getLocalDateString() + " - " : ""}${escapeHtml(labelCfg?.footerText || "American Outlet Los Chiles")}</div>` : ""}
         </div>
       `;
     }).join("");
 
-    const popup = window.open("", "_blank", "width=300,height=400");
-    if (!popup) return;
+    const payload = JSON.stringify({
+      type: "aolc-labels-printed",
+      productIds,
+      refId,
+      sourceType,
+      copies: items.length,
+    });
+
+    const popup = window.open("", "_blank", "width=420,height=560");
+    if (!popup) {
+      setPrintNote("El navegador bloqueo la ventana de impresion. Permite popups e intenta de nuevo.");
+      setPrinting(false);
+      return;
+    }
     popup.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Etiquetas</title>
+        <title>Etiquetas ZD411</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          @page { margin: 0; }
+          @page { size: ${labelWidth} ${labelHeight}; margin: 0; }
           body { margin: 0; padding: 0; background: white; }
           .label-page { page-break-after: always; break-after: page; }
           .label-page:last-child { page-break-after: auto; break-after: auto; }
@@ -251,7 +400,20 @@ export default function LabelsPage() {
       <body>
         ${labelsHtml}
         <script>
-          setTimeout(function() { window.print(); setTimeout(function() { window.close(); }, 1000); }, 600);
+          var payload = ${payload};
+          var notified = false;
+          function notifyParent() {
+            if (notified) return;
+            notified = true;
+            try { window.opener && window.opener.postMessage(payload, window.location.origin); } catch (e) {}
+          }
+          window.onafterprint = function() {
+            notifyParent();
+            setTimeout(function() { window.close(); }, 400);
+          };
+          setTimeout(function() { window.print(); }, 500);
+          // Fallback if onafterprint never fires (Safari/algunos drivers)
+          setTimeout(function() { notifyParent(); }, 8000);
         </script>
       </body>
       </html>
@@ -259,45 +421,144 @@ export default function LabelsPage() {
     popup.document.close();
   };
 
-  const filtered = products?.filter(p =>
-    p.nombre.toLowerCase().includes(search.toLowerCase()) ||
-    (p.codigoBarras && p.codigoBarras.includes(search))
-  ) || [];
+  const handlePrint = async (preferZebraDirect: boolean) => {
+    if (selectedProducts.size === 0 || !refId) return;
+    setPrinting(true);
+    setPrintNote(null);
 
-  // No sort — use backend order (last added first via desc(id))
+    const selectedItemsList = sorted.filter(p => selectedProducts.has(p.id));
+    const expanded = expandItems(selectedItemsList, labelQuantities, labelNames);
+    if (expanded.length === 0) {
+      setPrintNote("Cantidad de etiquetas en 0. Sube la cantidad antes de imprimir.");
+      setPrinting(false);
+      return;
+    }
+
+    const productIds = Array.from(selectedProducts);
+    const widthMm = parseInt(labelWidth, 10) || 50;
+    const heightMm = parseInt(labelHeight, 10) || 25;
+
+    if (preferZebraDirect) {
+      const zpl = buildZplBatch(expanded, {
+        widthMm,
+        heightMm,
+        showPrice: effectiveShowPrice,
+        footer: labelCfg?.footerText || "American Outlet Los Chiles",
+        showDate: labelCfg?.showDate ?? true,
+      });
+      const result = await tryZebraBrowserPrint(zpl);
+      if (result.ok) {
+        markPrinted.mutate({
+          storeId,
+          refId,
+          sourceType,
+          productIds,
+          copies: expanded.length,
+        });
+        setPrintNote(result.message);
+        setPrinting(false);
+        return;
+      }
+      setPrintNote(result.message);
+    }
+
+    openBrowserPrint(expanded, productIds);
+  };
+
+  const filtered = useMemo(() => {
+    const list = products || [];
+    return list.filter(p => {
+      const q = search.toLowerCase();
+      const matchesSearch =
+        !q
+        || p.nombre.toLowerCase().includes(q)
+        || (!!p.codigoBarras && p.codigoBarras.includes(search));
+      if (!matchesSearch) return false;
+      if (printFilter === "pendientes") return !p.printed;
+      if (printFilter === "impresos") return !!p.printed;
+      return true;
+    });
+  }, [products, search, printFilter]);
+
   const sorted = filtered;
 
-  // Selected items expanded by quantity
+  type DisplayRow = LabelItem & { memberIds: number[] };
+
+  // Agrupada: merge same barcode (or name+price); selecting a group selects all members
+  const displayRows: DisplayRow[] = useMemo(() => {
+    if (viewMode !== "agrupada") {
+      return sorted.map((p) => ({ ...p, memberIds: [p.id] }));
+    }
+    const map = new Map<string, DisplayRow>();
+    for (const p of sorted) {
+      const key = p.codigoBarras || `${p.nombre}|${p.precio}`;
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, { ...p, memberIds: [p.id] });
+      } else {
+        map.set(key, {
+          ...existing,
+          cantidad: existing.cantidad + p.cantidad,
+          printed: existing.printed && p.printed,
+          memberIds: [...existing.memberIds, p.id],
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [sorted, viewMode]);
+
+  const toggleGroup = (row: DisplayRow) => {
+    setSelectedProducts((prev) => {
+      const next = new Set(prev);
+      const allSelected = row.memberIds.every((id) => next.has(id));
+      if (allSelected) row.memberIds.forEach((id) => next.delete(id));
+      else row.memberIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
   const selectedItemsList = sorted.filter(p => selectedProducts.has(p.id));
-  const expandedItems = expandItems(selectedItemsList, labelQuantities, labelNames);
+  const totalLabels = selectedItemsList.reduce((t, p) => {
+    const q = labelQuantities[p.id] !== undefined ? labelQuantities[p.id] : p.cantidad;
+    return t + Math.max(0, q);
+  }, 0);
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2" style={{ color: "hsl(207 55% 15%)" }}>
-          <Tag className="w-6 h-6" style={{ color: BRAND_RED }} />
-          Imprimir Etiquetas
-        </h1>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2" style={{ color: "hsl(207 55% 15%)" }}>
+            <Tag className="w-6 h-6" style={{ color: BRAND_RED }} />
+            Imprimir Etiquetas
+          </h1>
+          <p className="text-sm mt-1" style={{ color: "hsl(207 20% 45%)" }}>
+            Optimizado para Zebra ZD411 · selecciona impresora ZD411 y papel sin margenes
+          </p>
+        </div>
+        <Link to="/label-config" className="text-sm font-medium underline" style={{ color: BRAND_BLUE }}>
+          Configurar diseno de etiqueta
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* LEFT PANEL */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Seleccionar Origen */}
           <Card className="border shadow-sm">
             <CardContent className="p-5">
               <h3 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: "hsl(207 55% 15%)" }}>
                 <Tag className="w-4 h-4" style={{ color: BRAND_RED }} />
                 Seleccionar Origen
               </h3>
-
-              {/* Contenedor */}
               <div className="mb-4">
                 <CustomDropdown
                   label="Contenedor"
                   value={selectedPallet}
-                  onChange={(val) => { setSelectedPallet(val); setSelectedAdjustment(""); setSelectedProducts(new Set()); setLabelQuantities({}); setLabelNames({}); }}
+                  onChange={(val) => {
+                    setSelectedPallet(val);
+                    setSelectedAdjustment("");
+                    setSelectedProducts(new Set());
+                    setLabelQuantities({});
+                    setLabelNames({});
+                  }}
                   placeholder="Seleccione un contenedor"
                   options={(palletsWithStats || []).map(p => ({
                     value: String(p.id),
@@ -305,13 +566,17 @@ export default function LabelsPage() {
                   }))}
                 />
               </div>
-
-              {/* O Ajuste */}
               <div>
                 <CustomDropdown
                   label="O Ajuste"
                   value={selectedAdjustment}
-                  onChange={(val) => { setSelectedAdjustment(val); setSelectedPallet(""); setSelectedProducts(new Set()); setLabelQuantities({}); setLabelNames({}); }}
+                  onChange={(val) => {
+                    setSelectedAdjustment(val);
+                    setSelectedPallet("");
+                    setSelectedProducts(new Set());
+                    setLabelQuantities({});
+                    setLabelNames({});
+                  }}
                   placeholder="Seleccione un ajuste (opcional)"
                   options={(adjustments || []).map(a => ({
                     value: String(a.id),
@@ -322,72 +587,102 @@ export default function LabelsPage() {
             </CardContent>
           </Card>
 
-          {/* Configuracion de Etiqueta */}
           <Card className="border shadow-sm">
             <CardContent className="p-5">
-              <h3 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: "hsl(207 55% 15%)" }}>
-                <Tag className="w-4 h-4" style={{ color: "#DC2626" }} />
+              <h3 className="text-sm font-semibold mb-4" style={{ color: "hsl(207 55% 15%)" }}>
                 Configuracion de Etiqueta
               </h3>
-
               <div className="space-y-4">
                 <div>
-                  <Label className="text-sm font-medium mb-1.5 block">Tamano de Etiqueta</Label>
-                  <select className="w-full h-10 border rounded-md px-3 text-sm bg-white" style={{ borderColor: "hsl(210 20% 88%)" }} value={labelSize} onChange={(e) => setLabelSize(e.target.value)}>
-                    <option value="50x25">50 x 25 mm (2x1) - Zebra ZD411</option>
-                    <option value="38x25">38 x 25 mm - Zebra ZD410</option>
-                    <option value="57x32">57 x 32 mm - Generica</option>
+                  <Label className="text-sm font-medium mb-1.5 block">Tamano (ZD411)</Label>
+                  <select
+                    className="w-full h-10 border rounded-md px-3 text-sm bg-white"
+                    style={{ borderColor: "hsl(210 20% 88%)" }}
+                    value={labelSize}
+                    onChange={(e) => setLabelSize(e.target.value)}
+                  >
+                    {Object.entries(LABEL_SIZES).map(([k, v]) => (
+                      <option key={k} value={k}>{v.label}</option>
+                    ))}
                   </select>
                 </div>
-
                 <div>
                   <Label className="text-sm font-medium mb-1.5 block">Mostrar Precio</Label>
-                  <select className="w-full h-10 border rounded-md px-3 text-sm bg-white" style={{ borderColor: "hsl(210 20% 88%)" }} value={showPrice} onChange={(e) => setShowPrice(e.target.value)}>
+                  <select
+                    className="w-full h-10 border rounded-md px-3 text-sm bg-white"
+                    style={{ borderColor: "hsl(210 20% 88%)" }}
+                    value={showPrice}
+                    onChange={(e) => setShowPrice(e.target.value)}
+                  >
                     <option value="si">Si</option>
                     <option value="no">No</option>
                   </select>
                 </div>
+                <p className="text-[11px]" style={{ color: "hsl(207 20% 55%)" }}>
+                  Tipografia y posiciones finas:{" "}
+                  <Link to="/label-config" className="underline" style={{ color: BRAND_BLUE }}>Configuracion de etiquetas</Link>
+                </p>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* RIGHT PANEL */}
         <div className="lg:col-span-3">
           <Card className="border shadow-sm">
             <CardContent className="p-5">
-              {/* Header with tabs */}
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                 <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "hsl(207 55% 15%)" }}>
                   <List className="w-4 h-4" style={{ color: BRAND_RED }} />
                   Articulos a Imprimir
                 </h3>
-                <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-                  <button className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${viewMode === "detallada" ? "bg-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`} onClick={() => setViewMode("detallada")}><List className="w-3.5 h-3.5 inline mr-1" />Detallada</button>
-                  <button className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${viewMode === "agrupada" ? "bg-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`} onClick={() => setViewMode("agrupada")}><Layers className="w-3.5 h-3.5 inline mr-1" />Agrupada</button>
-                  <button className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${viewMode === "offline" ? "bg-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`} onClick={() => setViewMode("offline")}><WifiOff className="w-3.5 h-3.5 inline mr-1" />Sin conexion</button>
+                <div className="flex flex-wrap items-center gap-1">
+                  <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                    <button type="button" className={`px-3 py-1.5 rounded-md text-xs font-medium ${viewMode === "detallada" ? "bg-white shadow-sm" : "text-gray-500"}`} onClick={() => setViewMode("detallada")}>
+                      <List className="w-3.5 h-3.5 inline mr-1" />Detallada
+                    </button>
+                    <button type="button" className={`px-3 py-1.5 rounded-md text-xs font-medium ${viewMode === "agrupada" ? "bg-white shadow-sm" : "text-gray-500"}`} onClick={() => setViewMode("agrupada")}>
+                      <Layers className="w-3.5 h-3.5 inline mr-1" />Agrupada
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                    {([
+                      ["todos", "Todos"],
+                      ["pendientes", "Pendientes"],
+                      ["impresos", "Impresos"],
+                    ] as const).map(([k, lab]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        className={`px-2.5 py-1.5 rounded-md text-xs font-medium ${printFilter === k ? "bg-white shadow-sm" : "text-gray-500"}`}
+                        onClick={() => setPrintFilter(k)}
+                      >
+                        {lab}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Search */}
               <div className="flex items-center gap-2 mb-3">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "hsl(207 20% 60%)" }} />
-                  <Input placeholder="Buscar articulo por nombre..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-10" />
+                  <Input placeholder="Buscar por nombre o codigo..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-10" />
                 </div>
               </div>
 
-              {/* Range selector */}
               <div className="flex items-center gap-2 mb-3 p-3 rounded-lg border" style={{ background: "hsl(0 0% 98%)", borderColor: "hsl(210 20% 92%)" }}>
-                <span className="text-xs font-medium" style={{ color: "hsl(207 20% 45%)" }}><List className="w-3.5 h-3.5 inline mr-1" />Seleccionar Rango</span>
+                <span className="text-xs font-medium" style={{ color: "hsl(207 20% 45%)" }}>Seleccionar rango</span>
                 <Input placeholder="Desd" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} className="h-8 w-16 text-center text-sm" />
                 <span className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>a</span>
                 <Input placeholder="Hast" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} className="h-8 w-16 text-center text-sm" />
-                <Button size="sm" className="h-8 text-xs font-medium" style={{ background: BRAND_RED }} onClick={handleSelectRange}><CheckSquare className="w-3.5 h-3.5 mr-1" />Seleccionar</Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleDeselectRange}><Square className="w-3.5 h-3.5 mr-1" />Deseleccionar</Button>
+                <Button size="sm" className="h-8 text-xs font-medium" style={{ background: BRAND_RED }} onClick={handleSelectRange}>
+                  <CheckSquare className="w-3.5 h-3.5 mr-1" />Seleccionar
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleDeselectRange}>
+                  <Square className="w-3.5 h-3.5 mr-1" />Deseleccionar
+                </Button>
               </div>
 
-              {/* Info del ajuste/contenedor seleccionado */}
               {(selectedPallet || selectedAdjustment) && (
                 <div className="mb-3 p-3 rounded-lg border flex items-center gap-3" style={{ background: "rgba(178,34,52,0.04)", borderColor: "rgba(178,34,52,0.12)" }}>
                   <Tag className="w-4 h-4" style={{ color: BRAND_RED }} />
@@ -396,29 +691,31 @@ export default function LabelsPage() {
                       {selectedAdjustment && adjustments?.find(a => String(a.id) === selectedAdjustment)
                         ? `${adjustments.find(a => String(a.id) === selectedAdjustment)!.adjustmentId} - ${adjustments.find(a => String(a.id) === selectedAdjustment)!.fecha}`
                         : selectedPallet && palletsWithStats?.find(p => String(p.id) === selectedPallet)
-                        ? `${palletsWithStats.find(p => String(p.id) === selectedPallet)!.palletId} - ${palletsWithStats.find(p => String(p.id) === selectedPallet)!.description}`
-                        : "..."}
+                          ? `${palletsWithStats.find(p => String(p.id) === selectedPallet)!.palletId} - ${palletsWithStats.find(p => String(p.id) === selectedPallet)!.description}`
+                          : "..."}
                     </p>
-                    <p className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>{sorted.length} articulo{sorted.length !== 1 ? "s" : ""}</p>
+                    <p className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>
+                      {displayRows.length} fila{displayRows.length !== 1 ? "s" : ""}
+                      {viewMode === "agrupada" ? " (agrupadas)" : ""}
+                    </p>
                   </div>
                 </div>
               )}
 
-              {/* Products TABLE */}
               <div className="min-h-[300px] max-h-[500px] overflow-y-auto border rounded-lg" style={{ borderColor: "hsl(210 20% 92%)" }}>
                 {!selectedPallet && !selectedAdjustment ? (
                   <div className="flex flex-col items-center justify-center h-64">
-                    <Wifi className="w-12 h-12 mb-3 opacity-20" />
-                    <p className="text-sm" style={{ color: "hsl(207 20% 55%)" }}>Seleccione un contenedor o ajuste para ver sus articulos</p>
+                    <Tag className="w-12 h-12 mb-3 opacity-20" />
+                    <p className="text-sm" style={{ color: "hsl(207 20% 55%)" }}>Seleccione un contenedor o ajuste</p>
                   </div>
                 ) : isLoading ? (
                   <div className="flex items-center justify-center h-64">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: BRAND_RED }} />
                   </div>
-                ) : sorted.length === 0 ? (
+                ) : displayRows.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-64">
                     <Tag className="w-10 h-10 mb-3 opacity-30" />
-                    <p className="text-sm" style={{ color: "hsl(207 20% 55%)" }}>No hay articulos</p>
+                    <p className="text-sm" style={{ color: "hsl(207 20% 55%)" }}>No hay articulos con este filtro</p>
                   </div>
                 ) : (
                   <table className="w-full">
@@ -426,77 +723,148 @@ export default function LabelsPage() {
                       <tr className="border-b" style={{ borderColor: "hsl(210 20% 94%)" }}>
                         <th className="px-3 py-2 w-8"></th>
                         <th className="px-2 py-2 text-[10px] font-semibold uppercase text-left" style={{ color: BRAND_BLUE }}>N°</th>
+                        <th className="px-2 py-2 text-[10px] font-semibold uppercase text-left" style={{ color: BRAND_BLUE }}>Estado</th>
                         <th className="px-2 py-2 text-[10px] font-semibold uppercase text-left" style={{ color: BRAND_BLUE }}>Cod. Barra</th>
-                        <th className="px-2 py-2 text-[10px] font-semibold uppercase text-left" style={{ color: BRAND_BLUE }}>Nombre para Etiqueta</th>
-                        <th className="px-2 py-2 text-[10px] font-semibold uppercase text-center w-20" style={{ color: BRAND_BLUE }}>Cant. Etiq.</th>
+                        <th className="px-2 py-2 text-[10px] font-semibold uppercase text-left" style={{ color: BRAND_BLUE }}>Nombre</th>
+                        <th className="px-2 py-2 text-[10px] font-semibold uppercase text-center w-20" style={{ color: BRAND_BLUE }}>Cant.</th>
                         <th className="px-2 py-2 text-[10px] font-semibold uppercase text-right" style={{ color: BRAND_BLUE }}>Precio</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y" style={{ borderColor: "hsl(210 20% 94%)" }}>
-                      {sorted.map((product, idx) => (
-                        <tr key={product.id} className={`transition-colors hover:bg-gray-50 ${selectedProducts.has(product.id) ? "bg-red-50" : ""}`}>
-                          {/* Checkbox */}
+                      {displayRows.map((product, idx) => {
+                        const rowSelected = product.memberIds.every((id) => selectedProducts.has(id));
+                        return (
+                        <tr key={`${product.id}-${product.memberIds.join("-")}`} className={`transition-colors hover:bg-gray-50 ${rowSelected ? "bg-red-50" : ""}`}>
                           <td className="px-3 py-2">
-                            <button onClick={() => toggleProduct(product.id)} className={`w-5 h-5 rounded border-2 flex items-center justify-center ${selectedProducts.has(product.id) ? "border-transparent" : "border-gray-300"}`} style={selectedProducts.has(product.id) ? { background: BRAND_RED } : {}}>
-                              {selectedProducts.has(product.id) && <CheckSquare className="w-3.5 h-3.5 text-white" />}
+                            <button
+                              type="button"
+                              onClick={() => (viewMode === "agrupada" ? toggleGroup(product) : toggleProduct(product.id))}
+                              className={`w-5 h-5 rounded border-2 flex items-center justify-center ${rowSelected ? "border-transparent" : "border-gray-300"}`}
+                              style={rowSelected ? { background: BRAND_RED } : {}}
+                            >
+                              {rowSelected && <CheckSquare className="w-3.5 h-3.5 text-white" />}
                             </button>
                           </td>
-                          {/* N° */}
                           <td className="px-2 py-2 text-xs font-mono" style={{ color: "hsl(207 20% 55%)" }}>{idx + 1}</td>
-                          {/* Cod. Barra */}
+                          <td className="px-2 py-2">
+                            {product.printed ? (
+                              <button
+                                type="button"
+                                title="Clic para marcar como pendiente"
+                                className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded"
+                                style={{ background: "rgba(22,163,74,0.12)", color: "#15803D" }}
+                                onClick={() => {
+                                  if (!refId) return;
+                                  if (confirm("Marcar esta etiqueta como pendiente (no impresa)?")) {
+                                    unmarkPrinted.mutate({
+                                      storeId,
+                                      refId,
+                                      sourceType,
+                                      productId: product.id,
+                                    });
+                                  }
+                                }}
+                              >
+                                Impresa
+                              </button>
+                            ) : (
+                              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded" style={{ background: "rgba(217,119,6,0.12)", color: "#B45309" }}>
+                                Pendiente
+                              </span>
+                            )}
+                          </td>
                           <td className="px-2 py-2 text-xs font-mono" style={{ color: "hsl(207 20% 55%)" }}>{product.codigoBarras || "-"}</td>
-                          {/* Nombre editable */}
                           <td className="px-2 py-2">
-                            <input type="text" className="w-full text-sm border rounded px-2 py-1 focus:outline-none focus:ring-1" style={{ borderColor: "hsl(210 20% 88%)", color: "hsl(207 55% 15%)" }} value={labelNames[product.id] !== undefined ? labelNames[product.id] : product.nombre} onChange={(e) => setLabelNames(prev => ({ ...prev, [product.id]: e.target.value }))} />
+                            <input
+                              type="text"
+                              className="w-full text-sm border rounded px-2 py-1 focus:outline-none focus:ring-1"
+                              style={{ borderColor: "hsl(210 20% 88%)", color: "hsl(207 55% 15%)" }}
+                              value={labelNames[product.id] !== undefined ? labelNames[product.id] : product.nombre}
+                              onChange={(e) => setLabelNames(prev => ({ ...prev, [product.id]: e.target.value }))}
+                            />
                           </td>
-                          {/* Cant. Etiq. editable */}
                           <td className="px-2 py-2">
-                            <input type="number" min={0} className="w-full text-sm text-center border rounded px-1 py-1 focus:outline-none focus:ring-1 font-semibold" style={{ borderColor: "hsl(210 20% 88%)", color: BRAND_RED }} value={labelQuantities[product.id] !== undefined ? labelQuantities[product.id] : product.cantidad} onChange={(e) => { const val = Number(e.target.value); setLabelQuantities(prev => ({ ...prev, [product.id]: val })); if (val > 0) { setSelectedProducts(prev => { const n = new Set(prev); n.add(product.id); return n; }); } }} />
+                            <input
+                              type="number"
+                              min={0}
+                              className="w-full text-sm text-center border rounded px-1 py-1 focus:outline-none focus:ring-1 font-semibold"
+                              style={{ borderColor: "hsl(210 20% 88%)", color: BRAND_RED }}
+                              value={labelQuantities[product.id] !== undefined ? labelQuantities[product.id] : product.cantidad}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setLabelQuantities(prev => ({ ...prev, [product.id]: val }));
+                                if (val > 0) {
+                                  setSelectedProducts(prev => {
+                                    const n = new Set(prev);
+                                    n.add(product.id);
+                                    return n;
+                                  });
+                                }
+                              }}
+                            />
                           </td>
-                          {/* Precio */}
                           <td className="px-2 py-2 text-sm font-bold text-right" style={{ color: BRAND_RED }}>
                             ₡{Number(product.precio).toLocaleString("es-CR")}
                           </td>
                         </tr>
-                      ))}
+                      );})}
                     </tbody>
                   </table>
                 )}
               </div>
 
-              {/* Selected count */}
               {selectedProducts.size > 0 && (
                 <p className="text-xs mt-2 font-medium" style={{ color: "hsl(207 20% 55%)" }}>
-                  {selectedProducts.size} articulo{selectedProducts.size !== 1 ? "s" : ""} seleccionado{selectedProducts.size !== 1 ? "s" : ""}
-                  {(() => { let t = 0; selectedProducts.forEach(id => { const p = sorted.find(x => x.id === id); if (p) t += labelQuantities[id] !== undefined ? labelQuantities[id] : p.cantidad; }); return ` — ${t} etiqueta${t !== 1 ? "s" : ""} en total`; })()}
+                  {selectedProducts.size} articulo{selectedProducts.size !== 1 ? "s" : ""} · {totalLabels} etiqueta{totalLabels !== 1 ? "s" : ""} · {labelWidth}×{labelHeight}
                 </p>
               )}
             </CardContent>
           </Card>
 
-          {/* Action Buttons */}
           <div className="mt-4 space-y-3">
-            <div className="flex items-center gap-3">
-              <Button className="flex-1 h-11 font-medium transition-all hover:shadow-lg" style={{ background: "#16A34A" }} onClick={handlePrint} disabled={selectedProducts.size === 0}>
-                <Printer className="w-4 h-4 mr-2" />Imprimir Etiquetas
+            <div className="flex flex-col sm:flex-row items-stretch gap-3">
+              <Button
+                className="flex-1 h-11 font-medium"
+                style={{ background: BRAND_RED }}
+                onClick={() => handlePrint(false)}
+                disabled={selectedProducts.size === 0 || printing}
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                {printing ? "Preparando..." : "Imprimir (dialogo del sistema)"}
               </Button>
-              <Button className="flex-1 h-11 font-medium transition-all hover:shadow-lg" style={{ background: "#7C3AED" }} disabled={selectedProducts.size === 0}>
-                <Wifi className="w-4 h-4 mr-2" />Conectar Zebra ZD411
-              </Button>
-              <Button className="flex-1 h-11 font-medium transition-all hover:shadow-lg" style={{ background: "#16A34A" }} disabled={selectedProducts.size === 0}>
-                <ScanBarcode className="w-4 h-4 mr-2" />QUPOS
+              <Button
+                className="flex-1 h-11 font-medium"
+                style={{ background: "#1B3A5C" }}
+                onClick={() => handlePrint(true)}
+                disabled={selectedProducts.size === 0 || printing}
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Enviar a Zebra ZD411
               </Button>
             </div>
 
+            {printNote && (
+              <div className="p-3 rounded-lg border text-xs" style={{ background: "rgba(27,58,92,0.06)", borderColor: "hsl(210 20% 88%)", color: BRAND_BLUE }}>
+                {printNote}
+              </div>
+            )}
+
             <div className="p-4 rounded-lg border text-xs space-y-2" style={{ background: "hsl(0 0% 98%)", borderColor: "hsl(210 20% 92%)" }}>
-              <p style={{ color: "hsl(207 20% 45%)" }}><AlertCircle className="w-3.5 h-3.5 inline mr-1" style={{ color: "#B45309" }} /><strong style={{ color: "#B45309" }}>Imprimir Etiquetas:</strong> Abre la ventana de impresion del sistema. Selecciona tu Zebra ZD411 y listo! Funciona siempre.</p>
-              <p style={{ color: "hsl(207 20% 45%)" }}><strong>Conectar Zebra ZD411:</strong> Solo para Chrome/Edge. Si da error "Access denied", usa "Imprimir Etiquetas".</p>
-              <p style={{ color: "hsl(207 20% 45%)" }}>Para exportar a QUPOS, ve a la seccion Contenedores y usa el boton verde en cada contenedor.</p>
+              <p style={{ color: "hsl(207 20% 45%)" }}>
+                <AlertCircle className="w-3.5 h-3.5 inline mr-1" style={{ color: "#B45309" }} />
+                <strong>Dialogo del sistema:</strong> elige <strong>Zebra ZD411</strong>, tamano de pagina {labelWidth}×{labelHeight}, margenes en 0. Se marca “impresa” al cerrar el dialogo.
+              </p>
+              <p style={{ color: "hsl(207 20% 45%)" }}>
+                <strong>Enviar a Zebra ZD411:</strong> usa Zebra Browser Print si esta instalado en la PC (ZPL directo). Si no, cae al dialogo del sistema.
+              </p>
+              <p style={{ color: "hsl(207 20% 45%)" }}>
+                <LinkIcon className="w-3.5 h-3.5 inline mr-1" />
+                Export CSV QUPOS: desde el ajuste o contenedor (no desde esta pantalla).
+              </p>
             </div>
           </div>
         </div>
       </div>
-
     </div>
   );
 }

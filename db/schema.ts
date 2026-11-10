@@ -296,8 +296,12 @@ export type AssemblyAssignment = typeof assemblyAssignments.$inferSelect;
 export const printedLabels = mysqlTable("printedLabels", {
   id: serial("id").primaryKey(),
   storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  /** Ref id: pallet id or adjustment id depending on sourceType */
   palletId: bigint("palletId", { mode: "number", unsigned: true }).notNull(),
   productId: bigint("productId", { mode: "number", unsigned: true }).notNull(),
+  /** pallet | adjustment — avoids id collisions between sources */
+  sourceType: varchar("sourceType", { length: 20 }).notNull().default("pallet"),
+  copies: int("copies").default(1),
   printedAt: timestamp("printedAt").defaultNow().notNull(),
 });
 

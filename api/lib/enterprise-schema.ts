@@ -30,6 +30,15 @@ export async function ensureEnterpriseSchema() {
     await tryExec(conn, "ALTER TABLE adjustmentItems ADD COLUMN sourceUrl VARCHAR(500) NULL");
     await tryExec(conn, "ALTER TABLE productDatabase ADD COLUMN codigo VARCHAR(50) NULL");
     await tryExec(conn, "ALTER TABLE pallets ADD COLUMN cajasAprox INT NULL");
+    await tryExec(
+      conn,
+      "ALTER TABLE printedLabels ADD COLUMN sourceType VARCHAR(20) NOT NULL DEFAULT 'pallet'",
+    );
+    await tryExec(conn, "ALTER TABLE printedLabels ADD COLUMN copies INT NULL DEFAULT 1");
+    await tryExec(
+      conn,
+      "CREATE INDEX idx_printed_store_source_ref ON printedLabels (storeId, sourceType, palletId)",
+    );
     await tryExec(conn, "ALTER TABLE transferItems ADD COLUMN costo DECIMAL(12,2) NULL");
     await tryExec(conn, "ALTER TABLE transfers ADD COLUMN completedAt TIMESTAMP NULL");
     await tryExec(conn, "ALTER TABLE transfers ADD COLUMN createdBy VARCHAR(255) NULL");

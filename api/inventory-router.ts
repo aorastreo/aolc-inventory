@@ -1465,6 +1465,7 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number(), adjustmentId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
       const items = await db.select().from(adjustmentItems)
         .where(eq(adjustmentItems.adjustmentId, input.adjustmentId))
         .orderBy(desc(adjustmentItems.id));
@@ -1472,7 +1473,11 @@ export const inventoryRouter = createRouter({
       let printedSet = new Set<number>();
       try {
         const printed = await db.select().from(printedLabels)
-          .where(and(eq(printedLabels.storeId, input.storeId), eq(printedLabels.palletId, input.adjustmentId)));
+          .where(and(
+            eq(printedLabels.storeId, input.storeId),
+            eq(printedLabels.palletId, input.adjustmentId),
+            eq(printedLabels.sourceType, "adjustment"),
+          ));
         printedSet = new Set(printed.map(p => p.productId));
       } catch { /* table doesn't exist yet */ }
 
@@ -1490,7 +1495,7 @@ export const inventoryRouter = createRouter({
     .input(z.object({ storeId: z.number(), palletId: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
-      // Get all products for this pallet - last added first
+      await ensureEnterpriseSchema();
       const productList = await db.select().from(products)
         .where(and(
           eq(products.storeId, input.storeId),
@@ -1502,7 +1507,11 @@ export const inventoryRouter = createRouter({
       let printedSet = new Set<number>();
       try {
         const printed = await db.select().from(printedLabels)
-          .where(and(eq(printedLabels.storeId, input.storeId), eq(printedLabels.palletId, input.palletId)));
+          .where(and(
+            eq(printedLabels.storeId, input.storeId),
+            eq(printedLabels.palletId, input.palletId),
+            eq(printedLabels.sourceType, "pallet"),
+          ));
         printedSet = new Set(printed.map(p => p.productId));
       } catch { /* table doesn't exist yet */ }
 
@@ -1517,39 +1526,62 @@ export const inventoryRouter = createRouter({
     }),
 
   markLabelsPrinted: authedQuery
-    .input(z.object({ storeId: z.number(), palletId: z.number(), productIds: z.array(z.number()) }))
+    .input(z.object({
+      storeId: z.number(),
+      refId: z.number(),
+      sourceType: z.enum(["pallet", "adjustment"]).default("pallet"),
+      productIds: z.array(z.number()).min(1),
+      copies: z.number().int().positive().optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
       for (const productId of input.productIds) {
-        // Check if already exists
         const existing = await db.select().from(printedLabels)
           .where(and(
             eq(printedLabels.storeId, input.storeId),
-            eq(printedLabels.palletId, input.palletId),
-            eq(printedLabels.productId, productId)
+            eq(printedLabels.palletId, input.refId),
+            eq(printedLabels.productId, productId),
+            eq(printedLabels.sourceType, input.sourceType),
           ))
           .limit(1);
 
         if (existing.length === 0) {
           await db.insert(printedLabels).values({
             storeId: input.storeId,
-            palletId: input.palletId,
+            palletId: input.refId,
             productId,
+            sourceType: input.sourceType,
+            copies: input.copies ?? 1,
           });
+        } else {
+          await db.update(printedLabels)
+            .set({
+              printedAt: new Date(),
+              copies: input.copies ?? existing[0].copies ?? 1,
+            })
+            .where(eq(printedLabels.id, existing[0].id));
         }
       }
       return { success: true, count: input.productIds.length };
     }),
 
   unmarkLabelPrinted: authedQuery
-    .input(z.object({ storeId: z.number(), palletId: z.number(), productId: z.number() }))
+    .input(z.object({
+      storeId: z.number(),
+      refId: z.number(),
+      sourceType: z.enum(["pallet", "adjustment"]).default("pallet"),
+      productId: z.number(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      await ensureEnterpriseSchema();
       await db.delete(printedLabels)
         .where(and(
           eq(printedLabels.storeId, input.storeId),
-          eq(printedLabels.palletId, input.palletId),
-          eq(printedLabels.productId, input.productId)
+          eq(printedLabels.palletId, input.refId),
+          eq(printedLabels.productId, input.productId),
+          eq(printedLabels.sourceType, input.sourceType),
         ));
       return { success: true };
     }),
