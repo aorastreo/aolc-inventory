@@ -28,9 +28,9 @@ interface LabelItem {
 }
 
 const LABEL_SIZES: Record<string, { w: string; h: string; label: string }> = {
-  "50x25": { w: "50mm", h: "25mm", label: "50 x 25 mm (2x1) — Zebra ZD411" },
-  "38x25": { w: "38mm", h: "25mm", label: "38 x 25 mm — Zebra ZD411" },
-  "57x32": { w: "57mm", h: "32mm", label: "57 x 32 mm — Generica" },
+  "50x25": { w: "50mm", h: "25mm", label: "50 x 25 mm · 2 x 1 pulgadas — Zebra ZD411" },
+  "38x25": { w: "38mm", h: "25mm", label: "38 x 25 mm · ~1.5 x 1 pulgadas — Zebra ZD411" },
+  "57x32": { w: "57mm", h: "32mm", label: "57 x 32 mm · ~2.25 x 1.25 pulgadas — Generica" },
 };
 
 function getLocalDateString() {
@@ -532,7 +532,7 @@ export default function LabelsPage() {
             Imprimir Etiquetas
           </h1>
           <p className="text-sm mt-1" style={{ color: "hsl(207 20% 45%)" }}>
-            Optimizado para Zebra ZD411 · selecciona impresora ZD411 y papel sin margenes
+            Zebra ZD411 · etiqueta estandar 50×25 mm (2×1 pulgadas) · sin margenes
           </p>
         </div>
         <Link to="/label-config" className="text-sm font-medium underline" style={{ color: BRAND_BLUE }}>
