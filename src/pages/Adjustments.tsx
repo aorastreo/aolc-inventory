@@ -335,17 +335,17 @@ export default function AdjustmentsPage() {
           </div>
         )}
 
-        {/* Items table */}
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden mb-6">
-          <table className="w-full">
+        {/* Items table — overflow-x so mobile can scroll; edit uses full-width stacked form */}
+        <div className="bg-white rounded-xl border shadow-sm mb-6 overflow-x-auto overscroll-x-contain touch-pan-x">
+          <table className="w-full min-w-[36rem]">
             <thead style={{ background: "hsl(0 0% 98%)" }}>
               <tr className="border-b" style={{ borderColor: "hsl(210 20% 94%)" }}>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>#</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>Nombre</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>Precio</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>Cant</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>Cod. Barras</th>
-                {adjDetail.estado !== "cancelado" && <th className="w-12"></th>}
+                <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>#</th>
+                <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>Nombre</th>
+                <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>Precio</th>
+                <th className="text-right px-3 sm:px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>Cant</th>
+                <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND_BLUE }}>Cod. Barras</th>
+                {adjDetail.estado !== "cancelado" && <th className="w-20"></th>}
               </tr>
             </thead>
             <tbody>
@@ -357,47 +357,119 @@ export default function AdjustmentsPage() {
                   String(item.precio).includes(q);
               }).map((item, idx) => {
                 const isEditing = editingItemId === item.id;
+                const colSpan = adjDetail.estado !== "cancelado" ? 6 : 5;
+                if (isEditing) {
+                  return (
+                    <tr key={item.id} className="border-b" style={{ borderColor: "hsl(210 20% 94%)", background: "hsl(210 40% 98%)" }}>
+                      <td colSpan={colSpan} className="p-3 sm:p-4">
+                        <p className="text-xs font-semibold mb-3" style={{ color: BRAND_BLUE }}>
+                          Editando artículo #{idx + 1}
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="sm:col-span-2">
+                            <Label className="text-xs">Nombre</Label>
+                            <Input
+                              value={editItemForm.nombre}
+                              onChange={(e) => setEditItemForm({ ...editItemForm, nombre: e.target.value })}
+                              className="h-11 text-base sm:text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Precio</Label>
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              value={editItemForm.precio}
+                              onChange={(e) => setEditItemForm({ ...editItemForm, precio: e.target.value })}
+                              className="h-11 text-base sm:text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Cantidad</Label>
+                            <Input
+                              type="number"
+                              inputMode="numeric"
+                              min={1}
+                              value={editItemForm.cantidad}
+                              onChange={(e) => setEditItemForm({ ...editItemForm, cantidad: Number(e.target.value) })}
+                              className="h-11 text-base sm:text-sm"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <Label className="text-xs">Código de barras</Label>
+                            <Input
+                              value={editItemForm.codigoBarras}
+                              onChange={(e) => setEditItemForm({ ...editItemForm, codigoBarras: e.target.value })}
+                              className="h-11 text-base sm:text-sm font-mono"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-col-reverse sm:flex-row gap-2 mt-4">
+                          <Button
+                            variant="outline"
+                            className="h-11 w-full sm:w-auto"
+                            onClick={() => setEditingItemId(null)}
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Cancelar
+                          </Button>
+                          <Button
+                            className="h-11 w-full sm:w-auto font-medium"
+                            style={{ background: "#16A34A" }}
+                            disabled={updateItem.isPending}
+                            onClick={() => {
+                              updateItem.mutate({
+                                id: item.id,
+                                nombre: editItemForm.nombre,
+                                precio: editItemForm.precio,
+                                cantidad: editItemForm.cantidad,
+                                codigoBarras: editItemForm.codigoBarras,
+                              });
+                            }}
+                          >
+                            <Check className="w-4 h-4 mr-2" />
+                            {updateItem.isPending ? "Guardando..." : "Guardar"}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
                 return (
                   <tr key={item.id} className="border-b hover:bg-gray-50/50 transition-colors" style={{ borderColor: "hsl(210 20% 94%)" }}>
-                    <td className="px-4 py-3 text-sm" style={{ color: "hsl(207 20% 55%)" }}>{idx + 1}</td>
-                    {isEditing ? (
-                      <>
-                        <td className="px-4 py-2"><Input size="sm" value={editItemForm.nombre} onChange={(e) => setEditItemForm({ ...editItemForm, nombre: e.target.value })} className="h-8 text-sm" /></td>
-                        <td className="px-4 py-2"><Input type="number" size="sm" value={editItemForm.precio} onChange={(e) => setEditItemForm({ ...editItemForm, precio: e.target.value })} className="h-8 text-sm text-right" /></td>
-                        <td className="px-4 py-2"><Input type="number" size="sm" value={editItemForm.cantidad} onChange={(e) => setEditItemForm({ ...editItemForm, cantidad: Number(e.target.value) })} className="h-8 text-sm text-right" min={1} /></td>
-                        <td className="px-4 py-2"><Input size="sm" value={editItemForm.codigoBarras} onChange={(e) => setEditItemForm({ ...editItemForm, codigoBarras: e.target.value })} className="h-8 text-sm font-mono" /></td>
-                        <td className="px-4 py-2">
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => { updateItem.mutate({ id: item.id, ...editItemForm }); }} className="hover:bg-green-50 h-8 w-8 p-0">
-                              <Check className="w-4 h-4" style={{ color: "#16A34A" }} />
+                    <td className="px-3 sm:px-4 py-3 text-sm" style={{ color: "hsl(207 20% 55%)" }}>{idx + 1}</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{item.nombre}</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-right font-medium whitespace-nowrap">{formatCurrency(String(item.precio))}</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm text-right">{item.cantidad}</td>
+                    <td className="px-3 sm:px-4 py-3 text-sm font-mono text-xs" style={{ color: "hsl(207 20% 55%)" }}>{item.codigoBarras || "-"}</td>
+                    {adjDetail.estado !== "cancelado" && (
+                      <td className="px-3 sm:px-4 py-3">
+                        <div className="flex gap-1 justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingItemId(item.id);
+                              setEditItemForm({
+                                nombre: item.nombre,
+                                precio: String(item.precio),
+                                cantidad: item.cantidad,
+                                codigoBarras: item.codigoBarras || "",
+                                costo: "",
+                                codigo: "",
+                              });
+                            }}
+                            className="hover:bg-blue-50 h-10 w-10 p-0"
+                          >
+                            <Pencil className="w-4 h-4" style={{ color: "#1B3A5C" }} />
+                          </Button>
+                          {adjDetail.estado === "activo" && (
+                            <Button variant="ghost" size="sm" onClick={() => removeItem.mutate({ id: item.id })} className="hover:bg-red-50 h-10 w-10 p-0">
+                              <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setEditingItemId(null)} className="hover:bg-gray-100 h-8 w-8 p-0">
-                              <X className="w-4 h-4" style={{ color: "hsl(207 20% 55%)" }} />
-                            </Button>
-                          </div>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-4 py-3 text-sm font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{item.nombre}</td>
-                        <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(String(item.precio))}</td>
-                        <td className="px-4 py-3 text-sm text-right">{item.cantidad}</td>
-                        <td className="px-4 py-3 text-sm font-mono text-xs" style={{ color: "hsl(207 20% 55%)" }}>{item.codigoBarras || "-"}</td>
-                        {adjDetail.estado !== "cancelado" && (
-                          <td className="px-4 py-3">
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="sm" onClick={() => { setEditingItemId(item.id); setEditItemForm({ nombre: item.nombre, precio: String(item.precio), cantidad: item.cantidad, codigoBarras: item.codigoBarras || "" }); }} className="hover:bg-blue-50 h-8 w-8 p-0">
-                                <Pencil className="w-4 h-4" style={{ color: "#1B3A5C" }} />
-                              </Button>
-                              {adjDetail.estado === "activo" && (
-                                <Button variant="ghost" size="sm" onClick={() => removeItem.mutate({ id: item.id })} className="hover:bg-red-50 h-8 w-8 p-0">
-                                  <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        )}
-                      </>
+                          )}
+                        </div>
+                      </td>
                     )}
                   </tr>
                 );
