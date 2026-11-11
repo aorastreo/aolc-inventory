@@ -3,6 +3,7 @@ import { localAuthRouter } from "./local-auth-router";
 import { inventoryRouter } from "./inventory-router";
 import { initDataRouter } from "./init-data-router";
 import { labelConfigRouter } from "./routers/labelConfig";
+import { financeRouter } from "./routers/finance";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -12,6 +13,7 @@ export const appRouter = createRouter({
   inventory: inventoryRouter,
   initData: initDataRouter,
   labelConfig: labelConfigRouter,
+  finance: financeRouter,
 });
 
 export type AppRouter = typeof appRouter;

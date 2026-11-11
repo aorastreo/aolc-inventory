@@ -16,6 +16,7 @@ import CatalogPage from "@/pages/Catalog";
 import LabelsPage from "@/pages/Labels";
 import LabelConfigPage from "@/pages/LabelConfig";
 import PayrollPage from "@/pages/Payroll";
+import FinancePage from "@/pages/Finance";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { useState } from "react";
@@ -74,6 +75,7 @@ function App() {
           <Route path="/catalog" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><CatalogPage /></ProtectedRoute>} />
           <Route path="/labels" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><LabelsPage /></ProtectedRoute>} />
           <Route path="/payroll" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><PayrollPage /></ProtectedRoute>} />
+          <Route path="/finance" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><FinancePage /></ProtectedRoute>} />
           <Route path="*" element={<ProtectedRoute><NotFoundPage /></ProtectedRoute>} />
         </Routes>
       </ActiveStoreProvider>

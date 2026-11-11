@@ -1,0 +1,330 @@
+import { z } from "zod";
+import { createRouter, authedQuery, managerQuery, adminQuery } from "../middleware";
+import { getDb } from "../queries/connection";
+import { financeEntries, stores } from "@db/schema";
+import { and, desc, eq, gte, lte, ne } from "drizzle-orm";
+import { ensureEnterpriseSchema } from "../lib/enterprise-schema";
+
+const BODEGA_STORE_ID = 1;
+
+export const FINANCE_CATEGORIES = {
+  ingreso: [
+    { id: "ventas", label: "Ventas" },
+    { id: "otros_ingresos", label: "Otros ingresos" },
+  ],
+  egreso: [
+    { id: "compras_mercaderia", label: "Compras de mercaderia / contenedores" },
+    { id: "planilla", label: "Planilla" },
+    { id: "alquiler", label: "Alquiler" },
+    { id: "servicios", label: "Servicios (luz, agua, internet)" },
+    { id: "transporte", label: "Transporte / fletes" },
+    { id: "mantenimiento", label: "Mantenimiento" },
+    { id: "varios", label: "Varios / otros gastos" },
+  ],
+} as const;
+
+const metodoEnum = z.enum(["efectivo", "sinpe", "tarjeta", "transferencia", "otro"]);
+const tipoEnum = z.enum(["ingreso", "egreso"]);
+
+function shiftDate(yyyyMmDd: string, days: number): string {
+  const d = new Date(`${yyyyMmDd}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function daysBetween(a: string, b: string): number {
+  const da = new Date(`${a}T12:00:00`).getTime();
+  const db = new Date(`${b}T12:00:00`).getTime();
+  return Math.max(1, Math.round((db - da) / 86400000) + 1);
+}
+
+function sumBy(
+  rows: { tipo: string; categoria: string; monto: string | number; storeId: number }[],
+  pred: (r: (typeof rows)[0]) => boolean,
+) {
+  return rows.filter(pred).reduce((s, r) => s + Number(r.monto || 0), 0);
+}
+
+export const financeRouter = createRouter({
+  categories: authedQuery.query(() => FINANCE_CATEGORIES),
+
+  /** Retail stores only — Bodega is excluded from the cash book. */
+  financeStores: authedQuery.query(async () => {
+    const db = getDb();
+    await ensureEnterpriseSchema();
+    const rows = await db.select().from(stores).where(and(eq(stores.isActive, true), ne(stores.id, BODEGA_STORE_ID)));
+    return rows.sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }),
+
+  list: authedQuery
+    .input(z.object({
+      storeId: z.number().optional(),
+      desde: z.string().optional(),
+      hasta: z.string().optional(),
+      tipo: tipoEnum.optional(),
+    }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const conditions = [eq(financeEntries.isActive, true), ne(financeEntries.storeId, BODEGA_STORE_ID)];
+      if (input.storeId != null) conditions.push(eq(financeEntries.storeId, input.storeId));
+      if (input.desde) conditions.push(gte(financeEntries.fecha, input.desde));
+      if (input.hasta) conditions.push(lte(financeEntries.fecha, input.hasta));
+      if (input.tipo) conditions.push(eq(financeEntries.tipo, input.tipo));
+      return db.select().from(financeEntries).where(and(...conditions)).orderBy(desc(financeEntries.fecha), desc(financeEntries.id));
+    }),
+
+  create: managerQuery
+    .input(z.object({
+      storeId: z.number(),
+      tipo: tipoEnum,
+      categoria: z.string().min(1),
+      monto: z.number().positive(),
+      fecha: z.string().min(8),
+      metodoPago: metodoEnum.default("efectivo"),
+      descripcion: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      if (input.storeId === BODEGA_STORE_ID) {
+        throw new Error("Finanzas solo aplica a tiendas (Los Chiles, Pavon, Santa Rosa), no a Bodega");
+      }
+      const allowed = input.tipo === "ingreso"
+        ? FINANCE_CATEGORIES.ingreso.map((c) => c.id)
+        : FINANCE_CATEGORIES.egreso.map((c) => c.id);
+      if (!allowed.includes(input.categoria as any)) {
+        throw new Error("Categoria no valida para este tipo");
+      }
+      const result = await db.insert(financeEntries).values({
+        storeId: input.storeId,
+        tipo: input.tipo,
+        categoria: input.categoria,
+        monto: String(input.monto),
+        fecha: input.fecha,
+        metodoPago: input.metodoPago,
+        descripcion: input.descripcion || null,
+        createdBy: ctx.user?.name || ctx.user?.unionId || null,
+      });
+      return { id: Number(result[0].insertId) };
+    }),
+
+  update: managerQuery
+    .input(z.object({
+      id: z.number(),
+      storeId: z.number().optional(),
+      tipo: tipoEnum.optional(),
+      categoria: z.string().optional(),
+      monto: z.number().positive().optional(),
+      fecha: z.string().optional(),
+      metodoPago: metodoEnum.optional(),
+      descripcion: z.string().max(500).nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const { id, ...rest } = input;
+      const patch: Record<string, unknown> = {};
+      if (rest.storeId != null) {
+        if (rest.storeId === BODEGA_STORE_ID) throw new Error("No se puede asignar a Bodega");
+        patch.storeId = rest.storeId;
+      }
+      if (rest.tipo != null) patch.tipo = rest.tipo;
+      if (rest.categoria != null) patch.categoria = rest.categoria;
+      if (rest.monto != null) patch.monto = String(rest.monto);
+      if (rest.fecha != null) patch.fecha = rest.fecha;
+      if (rest.metodoPago != null) patch.metodoPago = rest.metodoPago;
+      if (rest.descripcion !== undefined) patch.descripcion = rest.descripcion;
+      if (Object.keys(patch).length === 0) return { success: true };
+      await db.update(financeEntries).set(patch).where(and(eq(financeEntries.id, id), eq(financeEntries.isActive, true)));
+      return { success: true };
+    }),
+
+  remove: managerQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      await db.update(financeEntries).set({ isActive: false }).where(eq(financeEntries.id, input.id));
+      return { success: true };
+    }),
+
+  /** Owner cockpit: totals + guidance alerts (manual book only). */
+  summary: authedQuery
+    .input(z.object({
+      storeId: z.number().optional(),
+      desde: z.string(),
+      hasta: z.string(),
+    }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const conditions = [
+        eq(financeEntries.isActive, true),
+        ne(financeEntries.storeId, BODEGA_STORE_ID),
+        gte(financeEntries.fecha, input.desde),
+        lte(financeEntries.fecha, input.hasta),
+      ];
+      if (input.storeId != null) conditions.push(eq(financeEntries.storeId, input.storeId));
+
+      const rows = await db.select().from(financeEntries).where(and(...conditions));
+      const ingresos = sumBy(rows, (r) => r.tipo === "ingreso");
+      const egresos = sumBy(rows, (r) => r.tipo === "egreso");
+      const ventas = sumBy(rows, (r) => r.tipo === "ingreso" && r.categoria === "ventas");
+      const otrosIngresos = sumBy(rows, (r) => r.tipo === "ingreso" && r.categoria !== "ventas");
+      const comprasMercaderia = sumBy(rows, (r) => r.tipo === "egreso" && r.categoria === "compras_mercaderia");
+      const gastosOperativos = egresos - comprasMercaderia;
+      const netoCaja = ingresos - egresos;
+      const utilidadOperativa = ventas + otrosIngresos - gastosOperativos;
+
+      const byCategory: Record<string, number> = {};
+      for (const r of rows) {
+        const key = `${r.tipo}:${r.categoria}`;
+        byCategory[key] = (byCategory[key] || 0) + Number(r.monto || 0);
+      }
+
+      const retailStores = await db.select().from(stores).where(and(eq(stores.isActive, true), ne(stores.id, BODEGA_STORE_ID)));
+      const storeName = (id: number) => retailStores.find((s) => s.id === id)?.name || `Tienda #${id}`;
+      const storeIds = input.storeId != null
+        ? [input.storeId]
+        : retailStores.map((s) => s.id);
+
+      const byStore = storeIds.map((id) => {
+        const sIn = sumBy(rows, (r) => r.storeId === id && r.tipo === "ingreso");
+        const sOut = sumBy(rows, (r) => r.storeId === id && r.tipo === "egreso");
+        const sVentas = sumBy(rows, (r) => r.storeId === id && r.tipo === "ingreso" && r.categoria === "ventas");
+        const sCompras = sumBy(rows, (r) => r.storeId === id && r.tipo === "egreso" && r.categoria === "compras_mercaderia");
+        return {
+          storeId: id,
+          name: storeName(id),
+          ingresos: sIn,
+          egresos: sOut,
+          neto: sIn - sOut,
+          ventas: sVentas,
+          comprasMercaderia: sCompras,
+        };
+      }).sort((a, b) => a.name.localeCompare(b.name, "es"));
+
+      // Previous period of equal length (for sales trend)
+      const span = daysBetween(input.desde, input.hasta);
+      const prevHasta = shiftDate(input.desde, -1);
+      const prevDesde = shiftDate(prevHasta, -(span - 1));
+      const prevConditions = [
+        eq(financeEntries.isActive, true),
+        ne(financeEntries.storeId, BODEGA_STORE_ID),
+        gte(financeEntries.fecha, prevDesde),
+        lte(financeEntries.fecha, prevHasta),
+      ];
+      if (input.storeId != null) prevConditions.push(eq(financeEntries.storeId, input.storeId));
+      const prevRows = await db.select().from(financeEntries).where(and(...prevConditions));
+      const prevVentas = sumBy(prevRows, (r) => r.tipo === "ingreso" && r.categoria === "ventas");
+      const ventasDeltaPct = prevVentas > 0 ? ((ventas - prevVentas) / prevVentas) * 100 : null;
+
+      type Alert = { level: "critical" | "warning" | "ok"; code: string; title: string; detail: string };
+      const alerts: Alert[] = [];
+
+      if (rows.length === 0) {
+        alerts.push({
+          level: "warning",
+          code: "sin_datos",
+          title: "Sin movimientos en este periodo",
+          detail: "Digitá ingresos y egresos para que el sistema pueda guiarte.",
+        });
+      } else {
+        if (netoCaja < 0) {
+          alerts.push({
+            level: "critical",
+            code: "caja_roja",
+            title: "Estás gastando más de lo que entra",
+            detail: `Egresos ₡${egresos.toLocaleString("es-CR")} vs ingresos ₡${ingresos.toLocaleString("es-CR")}. Caja neta: ₡${netoCaja.toLocaleString("es-CR")}.`,
+          });
+        } else if (netoCaja === 0 && egresos > 0) {
+          alerts.push({
+            level: "warning",
+            code: "caja_cero",
+            title: "Caja en cero",
+            detail: "Entró exactamente lo mismo que salió. No estás acumulando reserva.",
+          });
+        } else {
+          alerts.push({
+            level: "ok",
+            code: "caja_positiva",
+            title: "Caja en positivo",
+            detail: `Te quedaron ₡${netoCaja.toLocaleString("es-CR")} en el periodo.`,
+          });
+        }
+
+        if (ventas === 0 && egresos > 0) {
+          alerts.push({
+            level: "critical",
+            code: "sin_ventas",
+            title: "Hay gastos pero no registraste ventas",
+            detail: "Sin ventas digitadas no se puede medir el negocio. Registrá las ventas del periodo.",
+          });
+        } else if (ventasDeltaPct != null && ventasDeltaPct <= -20) {
+          alerts.push({
+            level: "warning",
+            code: "ventas_bajan",
+            title: "Las ventas van mal vs el periodo anterior",
+            detail: `Ventas bajaron ${Math.abs(ventasDeltaPct).toFixed(0)}% (₡${ventas.toLocaleString("es-CR")} vs ₡${prevVentas.toLocaleString("es-CR")} antes).`,
+          });
+        } else if (ventasDeltaPct != null && ventasDeltaPct >= 10) {
+          alerts.push({
+            level: "ok",
+            code: "ventas_suben",
+            title: "Ventas mejorando",
+            detail: `Subieron ${ventasDeltaPct.toFixed(0)}% vs el periodo anterior.`,
+          });
+        }
+
+        if (ventas > 0 && gastosOperativos > ventas) {
+          alerts.push({
+            level: "critical",
+            code: "opex_alto",
+            title: "Gastos operativos superan las ventas",
+            detail: `Planilla/alquiler/servicios/etc. ₡${gastosOperativos.toLocaleString("es-CR")} > ventas ₡${ventas.toLocaleString("es-CR")}.`,
+          });
+        }
+
+        if (ventas > 0 && comprasMercaderia > ventas * 0.8) {
+          alerts.push({
+            level: "warning",
+            code: "compras_altas",
+            title: "Compras de mercadería muy altas vs ventas",
+            detail: `Compraste ₡${comprasMercaderia.toLocaleString("es-CR")} en mercadería (más del 80% de ventas ₡${ventas.toLocaleString("es-CR")}). Revisá si estás sobre-inventariando.`,
+          });
+        }
+      }
+
+      return {
+        desde: input.desde,
+        hasta: input.hasta,
+        prevDesde,
+        prevHasta,
+        ingresos,
+        egresos,
+        netoCaja,
+        ventas,
+        otrosIngresos,
+        comprasMercaderia,
+        gastosOperativos,
+        utilidadOperativa,
+        ventasDeltaPct,
+        byCategory,
+        byStore,
+        alerts,
+        movimientos: rows.length,
+      };
+    }),
+
+  purgeAllAdmin: adminQuery.mutation(async () => {
+    // Safety hatch only — soft-delete all finance rows
+    const db = getDb();
+    await ensureEnterpriseSchema();
+    await db.update(financeEntries).set({ isActive: false });
+    return { success: true };
+  }),
+});

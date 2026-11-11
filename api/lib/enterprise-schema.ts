@@ -94,8 +94,52 @@ export async function ensureEnterpriseSchema() {
     await tryExec(conn, "CREATE INDEX idx_products_store_barcode ON products (storeId, codigoBarras)");
     await tryExec(conn, "CREATE INDEX idx_products_store_pallet ON products (storeId, palletId)");
 
+    await tryExec(
+      conn,
+      `CREATE TABLE IF NOT EXISTS financeEntries (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        storeId BIGINT UNSIGNED NOT NULL,
+        tipo ENUM('ingreso','egreso') NOT NULL,
+        categoria VARCHAR(50) NOT NULL,
+        monto DECIMAL(12,2) NOT NULL,
+        fecha VARCHAR(20) NOT NULL,
+        metodoPago ENUM('efectivo','sinpe','tarjeta','transferencia','otro') NOT NULL DEFAULT 'efectivo',
+        descripcion VARCHAR(500) NULL,
+        createdBy VARCHAR(255) NULL,
+        isActive BOOLEAN NOT NULL DEFAULT TRUE,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+        INDEX idx_fin_store_fecha (storeId, fecha),
+        INDEX idx_fin_tipo (tipo),
+        INDEX idx_fin_categoria (categoria)
+      )`,
+    );
+
+    // Retail stores for finance book (Bodega stays operational only)
+    await tryExec(
+      conn,
+      `INSERT INTO stores (name, slug, description, isActive)
+       SELECT 'Los Chiles', 'los-chiles', 'Tienda Los Chiles', 1
+       FROM DUAL
+       WHERE NOT EXISTS (SELECT 1 FROM stores WHERE slug = 'los-chiles' OR name LIKE '%Los Chiles%')`,
+    );
+    await tryExec(
+      conn,
+      `INSERT INTO stores (name, slug, description, isActive)
+       SELECT 'Pavón', 'pavon', 'Tienda Pavón', 1
+       FROM DUAL
+       WHERE NOT EXISTS (SELECT 1 FROM stores WHERE slug = 'pavon' OR name LIKE '%Pavon%' OR name LIKE '%Pavón%')`,
+    );
+    await tryExec(
+      conn,
+      `INSERT INTO stores (name, slug, description, isActive)
+       SELECT 'Santa Rosa', 'santa-rosa', 'Tienda Santa Rosa', 1
+       FROM DUAL
+       WHERE NOT EXISTS (SELECT 1 FROM stores WHERE slug = 'santa-rosa' OR name LIKE '%Santa Rosa%')`,
+    );
+
     ready = true;
-    console.log("[enterprise-schema] Ready (additive columns + inventory_movements)");
+    console.log("[enterprise-schema] Ready (additive columns + inventory_movements + financeEntries)");
   } finally {
     await conn.end();
   }

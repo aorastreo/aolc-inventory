@@ -478,3 +478,24 @@ export const payrollPayments = mysqlTable("payrollPayments", {
 
 export type PayrollPayment = typeof payrollPayments.$inferSelect;
 export type InsertPayrollPayment = typeof payrollPayments.$inferInsert;
+
+// ============================================
+// FINANCE (Manual cash book — incomes/expenses)
+// ============================================
+export const financeEntries = mysqlTable("financeEntries", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  tipo: mysqlEnum("tipo", ["ingreso", "egreso"]).notNull(),
+  categoria: varchar("categoria", { length: 50 }).notNull(),
+  monto: decimal("monto", { precision: 12, scale: 2 }).notNull(),
+  fecha: varchar("fecha", { length: 20 }).notNull(),
+  metodoPago: mysqlEnum("metodoPago", ["efectivo", "sinpe", "tarjeta", "transferencia", "otro"]).default("efectivo").notNull(),
+  descripcion: varchar("descripcion", { length: 500 }),
+  createdBy: varchar("createdBy", { length: 255 }),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type FinanceEntry = typeof financeEntries.$inferSelect;
+export type InsertFinanceEntry = typeof financeEntries.$inferInsert;

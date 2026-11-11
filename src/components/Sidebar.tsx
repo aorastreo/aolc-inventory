@@ -16,10 +16,12 @@ import {
   Printer,
   ArrowLeftRight,
   Banknote,
+  Wallet,
 } from "lucide-react";
 
 const menuItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "manager"] },
+  { path: "/finance", label: "Finanzas", icon: Wallet, roles: ["admin", "manager"] },
   { path: "/pallets", label: "Contenedores", icon: Package, roles: ["admin", "manager"] },
   { path: "/adjustments", label: "Ajustes", icon: ClipboardList, roles: ["admin", "manager"] },
   { path: "/transfers", label: "Transferencias", icon: ArrowLeftRight, roles: ["admin", "manager"] },
