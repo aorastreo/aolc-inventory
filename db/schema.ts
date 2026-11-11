@@ -502,14 +502,19 @@ export const financeEntries = mysqlTable("financeEntries", {
 export type FinanceEntry = typeof financeEntries.$inferSelect;
 export type InsertFinanceEntry = typeof financeEntries.$inferInsert;
 
-/** Recurring monthly costs — configure once, apply each month with one click. */
+/** Recurring costs — configure once, apply each month with one click. */
 export const financeFixedCosts = mysqlTable("financeFixedCosts", {
   id: serial("id").primaryKey(),
   storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
   nombre: varchar("nombre", { length: 120 }).notNull(),
   categoria: varchar("categoria", { length: 50 }).notNull(),
   monto: decimal("monto", { precision: 12, scale: 2 }).notNull(),
-  /** Day of month to post (1–28 recommended) */
+  /** How often this amount is paid */
+  frecuencia: mysqlEnum("frecuencia", ["semanal", "quincenal", "mensual"]).default("mensual").notNull(),
+  /**
+   * mensual/quincenal: day of month (1–28).
+   * semanal: weekday 1=Lunes … 7=Domingo.
+   */
   diaMes: int("diaMes").notNull().default(1),
   metodoPago: mysqlEnum("metodoPago", ["efectivo", "sinpe", "tarjeta", "transferencia", "otro"]).default("transferencia").notNull(),
   descripcion: varchar("descripcion", { length: 500 }),

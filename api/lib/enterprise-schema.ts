@@ -127,6 +127,7 @@ export async function ensureEnterpriseSchema() {
         nombre VARCHAR(120) NOT NULL,
         categoria VARCHAR(50) NOT NULL,
         monto DECIMAL(12,2) NOT NULL,
+        frecuencia ENUM('semanal','quincenal','mensual') NOT NULL DEFAULT 'mensual',
         diaMes INT NOT NULL DEFAULT 1,
         metodoPago ENUM('efectivo','sinpe','tarjeta','transferencia','otro') NOT NULL DEFAULT 'transferencia',
         descripcion VARCHAR(500) NULL,
@@ -136,6 +137,10 @@ export async function ensureEnterpriseSchema() {
         INDEX idx_ffc_store (storeId),
         INDEX idx_ffc_active (isActive)
       )`,
+    );
+    await tryExec(
+      conn,
+      "ALTER TABLE financeFixedCosts ADD COLUMN frecuencia ENUM('semanal','quincenal','mensual') NOT NULL DEFAULT 'mensual'",
     );
 
     // Retail stores for finance book (Bodega stays operational only)

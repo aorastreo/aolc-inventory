@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createRouter, authedQuery, managerQuery, adminQuery } from "../middleware";
 import { getDb } from "../queries/connection";
 import { financeEntries, financeFixedCosts, stores } from "@db/schema";
-import { and, desc, eq, gte, lte, ne, like } from "drizzle-orm";
+import { and, desc, eq, gte, lte, ne } from "drizzle-orm";
 import { ensureEnterpriseSchema } from "../lib/enterprise-schema";
 
 const BODEGA_STORE_ID = 1;
@@ -25,6 +25,7 @@ export const FINANCE_CATEGORIES = {
 
 const metodoEnum = z.enum(["efectivo", "sinpe", "tarjeta", "transferencia", "otro"]);
 const tipoEnum = z.enum(["ingreso", "egreso"]);
+const frecuenciaEnum = z.enum(["semanal", "quincenal", "mensual"]);
 
 function shiftDate(yyyyMmDd: string, days: number): string {
   const d = new Date(`${yyyyMmDd}T12:00:00`);
@@ -45,14 +46,54 @@ function daysInMonth(year: number, month1to12: number): number {
   return new Date(year, month1to12, 0).getDate();
 }
 
-/** Build YYYY-MM-DD for a fixed cost day within a month (clamped to month length). */
-function fechaForFixed(yearMonth: string, diaMes: number): string {
+function padDay(yearMonth: string, day: number): string {
+  const [ys, ms] = yearMonth.split("-");
+  const maxDay = daysInMonth(Number(ys), Number(ms));
+  const d = Math.min(Math.max(1, day), maxDay);
+  return `${ys}-${ms}-${String(d).padStart(2, "0")}`;
+}
+
+/**
+ * Dates to post inside a calendar month for a fixed cost.
+ * - mensual: 1 payment on diaMes
+ * - quincenal: 2 payments (diaMes and diaMes+14)
+ * - semanal: every matching weekday (diaMes 1=Lun … 7=Dom)
+ * monto is the amount PER payment period.
+ */
+function fechasForFixed(
+  yearMonth: string,
+  frecuencia: "semanal" | "quincenal" | "mensual" | string | null | undefined,
+  diaMes: number,
+): string[] {
+  const freq = (frecuencia || "mensual") as string;
   const [ys, ms] = yearMonth.split("-");
   const year = Number(ys);
   const month = Number(ms);
-  const maxDay = daysInMonth(year, month);
-  const day = Math.min(Math.max(1, Number(diaMes) || 1), maxDay);
-  return `${ys}-${ms}-${String(day).padStart(2, "0")}`;
+  const last = daysInMonth(year, month);
+
+  if (freq === "semanal") {
+    const weekday = Math.min(7, Math.max(1, Number(diaMes) || 1)); // 1=Mon … 7=Sun
+    const targetMonBased = weekday - 1;
+    const out: string[] = [];
+    for (let d = 1; d <= last; d++) {
+      const dt = new Date(year, month - 1, d);
+      const js = dt.getDay(); // 0=Sun
+      const monBased = js === 0 ? 6 : js - 1;
+      if (monBased === targetMonBased) out.push(padDay(yearMonth, d));
+    }
+    return out;
+  }
+
+  if (freq === "quincenal") {
+    const d1 = Math.min(14, Math.max(1, Number(diaMes) || 1));
+    const d2 = Math.min(last, d1 + 14);
+    const dates = [padDay(yearMonth, d1)];
+    if (d2 !== d1) dates.push(padDay(yearMonth, d2));
+    return dates;
+  }
+
+  // mensual
+  return [padDay(yearMonth, Number(diaMes) || 1)];
 }
 
 function sumBy(
@@ -183,6 +224,7 @@ export const financeRouter = createRouter({
       nombre: z.string().min(1).max(120),
       categoria: z.string().min(1),
       monto: z.number().positive(),
+      frecuencia: frecuenciaEnum.default("mensual"),
       diaMes: z.number().int().min(1).max(28).default(1),
       metodoPago: metodoEnum.default("transferencia"),
       descripcion: z.string().max(500).optional(),
@@ -193,12 +235,16 @@ export const financeRouter = createRouter({
       if (input.storeId === BODEGA_STORE_ID) throw new Error("Gastos fijos solo para tiendas, no Bodega");
       const allowed = FINANCE_CATEGORIES.egreso.map((c) => c.id) as string[];
       if (!allowed.includes(input.categoria)) throw new Error("Categoria no valida para gasto fijo");
+      const diaMes = input.frecuencia === "semanal"
+        ? Math.min(7, Math.max(1, input.diaMes))
+        : Math.min(28, Math.max(1, input.diaMes));
       const result = await db.insert(financeFixedCosts).values({
         storeId: input.storeId,
         nombre: input.nombre.trim(),
         categoria: input.categoria,
         monto: String(input.monto),
-        diaMes: input.diaMes,
+        frecuencia: input.frecuencia,
+        diaMes,
         metodoPago: input.metodoPago,
         descripcion: input.descripcion?.trim() || null,
       });
@@ -211,6 +257,7 @@ export const financeRouter = createRouter({
       nombre: z.string().min(1).max(120).optional(),
       categoria: z.string().optional(),
       monto: z.number().positive().optional(),
+      frecuencia: frecuenciaEnum.optional(),
       diaMes: z.number().int().min(1).max(28).optional(),
       metodoPago: metodoEnum.optional(),
       descripcion: z.string().max(500).nullable().optional(),
@@ -224,6 +271,7 @@ export const financeRouter = createRouter({
       if (rest.nombre != null) patch.nombre = rest.nombre.trim();
       if (rest.categoria != null) patch.categoria = rest.categoria;
       if (rest.monto != null) patch.monto = String(rest.monto);
+      if (rest.frecuencia != null) patch.frecuencia = rest.frecuencia;
       if (rest.diaMes != null) patch.diaMes = rest.diaMes;
       if (rest.metodoPago != null) patch.metodoPago = rest.metodoPago;
       if (rest.descripcion !== undefined) patch.descripcion = rest.descripcion;
@@ -247,7 +295,8 @@ export const financeRouter = createRouter({
 
   /**
    * Apply all active fixed costs into the cash book for a given month (YYYY-MM).
-   * Skips any fixed cost already posted that month (idempotent).
+   * Creates one entry per due date (1 mensual / 2 quincenal / ~4–5 semanal).
+   * Skips dates already posted for that fixed cost (idempotent).
    */
   applyFixedToMonth: managerQuery
     .input(z.object({
@@ -264,32 +313,35 @@ export const financeRouter = createRouter({
       let created = 0;
       let skipped = 0;
       for (const f of fixed) {
-        const already = await db.select().from(financeEntries).where(and(
-          eq(financeEntries.isActive, true),
-          eq(financeEntries.fixedCostId, f.id),
-          like(financeEntries.fecha, `${input.yearMonth}%`),
-        )).limit(1);
-        if (already.length > 0) {
-          skipped += 1;
-          continue;
+        const fechas = fechasForFixed(input.yearMonth, f.frecuencia, f.diaMes);
+        const freqLabel = f.frecuencia === "semanal" ? "semanal" : f.frecuencia === "quincenal" ? "quincenal" : "mensual";
+        for (const fecha of fechas) {
+          const already = await db.select().from(financeEntries).where(and(
+            eq(financeEntries.isActive, true),
+            eq(financeEntries.fixedCostId, f.id),
+            eq(financeEntries.fecha, fecha),
+          )).limit(1);
+          if (already.length > 0) {
+            skipped += 1;
+            continue;
+          }
+          const note = [
+            `Gasto fijo (${freqLabel}): ${f.nombre}`,
+            f.descripcion ? f.descripcion : null,
+          ].filter(Boolean).join(" — ");
+          await db.insert(financeEntries).values({
+            storeId: f.storeId,
+            tipo: "egreso",
+            categoria: f.categoria,
+            monto: String(f.monto),
+            fecha,
+            metodoPago: f.metodoPago,
+            descripcion: note.slice(0, 500),
+            fixedCostId: f.id,
+            createdBy: ctx.user?.name || ctx.user?.unionId || null,
+          });
+          created += 1;
         }
-        const fecha = fechaForFixed(input.yearMonth, f.diaMes);
-        const note = [
-          `Gasto fijo: ${f.nombre}`,
-          f.descripcion ? f.descripcion : null,
-        ].filter(Boolean).join(" — ");
-        await db.insert(financeEntries).values({
-          storeId: f.storeId,
-          tipo: "egreso",
-          categoria: f.categoria,
-          monto: String(f.monto),
-          fecha,
-          metodoPago: f.metodoPago,
-          descripcion: note.slice(0, 500),
-          fixedCostId: f.id,
-          createdBy: ctx.user?.name || ctx.user?.unionId || null,
-        });
-        created += 1;
       }
       return { created, skipped, total: fixed.length, yearMonth: input.yearMonth };
     }),

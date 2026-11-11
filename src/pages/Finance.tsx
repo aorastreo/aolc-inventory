@@ -76,6 +76,7 @@ export default function FinancePage() {
     nombre: "",
     categoria: "alquiler",
     monto: "",
+    frecuencia: "mensual" as "semanal" | "quincenal" | "mensual",
     diaMes: "1",
     metodoPago: "transferencia" as typeof METODOS[number]["id"],
     descripcion: "",
@@ -129,12 +130,18 @@ export default function FinancePage() {
         nombre: "",
         categoria: "alquiler",
         monto: "",
+        frecuencia: "mensual",
         diaMes: "1",
         metodoPago: "transferencia",
         descripcion: "",
       });
     },
     onError: (err) => setFixedError(err.message),
+  });
+
+  const updateFixed = trpc.finance.updateFixed.useMutation({
+    onSuccess: () => utils.finance.listFixed.invalidate(),
+    onError: (err) => alert(err.message),
   });
 
   const removeFixed = trpc.finance.removeFixed.useMutation({
@@ -217,8 +224,9 @@ export default function FinancePage() {
     setFixedForm({
       storeId: storeFilter !== "all" ? String(storeFilter) : (financeStores?.[0] ? String(financeStores[0].id) : ""),
       nombre: "",
-      categoria: "alquiler",
+      categoria: "planilla",
       monto: "",
+      frecuencia: "quincenal",
       diaMes: "1",
       metodoPago: "transferencia",
       descripcion: "",
@@ -236,23 +244,28 @@ export default function FinancePage() {
       return;
     }
     if (!fixedForm.nombre.trim()) {
-      setFixedError("Poné un nombre (ej. Alquiler Los Chiles)");
+      setFixedError("Poné un nombre (ej. Planilla Los Chiles)");
       return;
     }
     if (!monto || monto <= 0) {
       setFixedError("Monto inválido");
       return;
     }
+    const maxDia = fixedForm.frecuencia === "semanal" ? 7 : 28;
     createFixed.mutate({
       storeId,
       nombre: fixedForm.nombre.trim(),
       categoria: fixedForm.categoria,
       monto,
-      diaMes: Math.min(28, Math.max(1, diaMes || 1)),
+      frecuencia: fixedForm.frecuencia,
+      diaMes: Math.min(maxDia, Math.max(1, diaMes || 1)),
       metodoPago: fixedForm.metodoPago,
       descripcion: fixedForm.descripcion.trim() || undefined,
     });
   };
+
+  const weekdayLabel = (n: number) =>
+    ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][Math.min(7, Math.max(1, n))] || String(n);
 
   const handleApplyFixed = () => {
     if (!yearMonth || yearMonth.length !== 7) {
@@ -353,7 +366,7 @@ export default function FinancePage() {
                 Gastos fijos (no cambian cada mes)
               </p>
               <p className="text-xs mt-0.5" style={{ color: "hsl(207 20% 50%)" }}>
-                Configuralos una vez (alquiler, planilla base, internet…). Cada mes: un clic y se cargan al libro. No se duplican.
+                Configuralos una vez. Planilla puede ser semanal, quincenal o mensual. Alquiler suele ser mensual. Cada mes: un clic y se cargan (sin duplicar).
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -391,7 +404,8 @@ export default function FinancePage() {
                     <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Nombre</th>
                     <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Tienda</th>
                     <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Categoría</th>
-                    <th className="py-2 font-semibold text-right" style={{ color: BRAND_BLUE }}>Monto / mes</th>
+                    <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Frecuencia</th>
+                    <th className="py-2 font-semibold text-right" style={{ color: BRAND_BLUE }}>Monto / pago</th>
                     <th className="py-2 font-semibold text-center" style={{ color: BRAND_BLUE }}>Día</th>
                     <th className="w-10" />
                   </tr>
@@ -402,8 +416,28 @@ export default function FinancePage() {
                       <td className="py-2.5 font-medium">{f.nombre}</td>
                       <td className="py-2.5">{storeLabel(f.storeId)}</td>
                       <td className="py-2.5">{catLabel("egreso", f.categoria)}</td>
+                      <td className="py-2.5">
+                        <select
+                          className="h-8 border rounded px-2 text-xs font-medium"
+                          value={(f as any).frecuencia || "mensual"}
+                          disabled={updateFixed.isPending}
+                          onChange={(e) => {
+                            const frecuencia = e.target.value as "semanal" | "quincenal" | "mensual";
+                            updateFixed.mutate({ id: f.id, frecuencia });
+                          }}
+                          title="Cambiar frecuencia de pago"
+                        >
+                          <option value="semanal">Semanal</option>
+                          <option value="quincenal">Quincenal</option>
+                          <option value="mensual">Mensual</option>
+                        </select>
+                      </td>
                       <td className="py-2.5 text-right font-semibold text-red-700">{money(Number(f.monto))}</td>
-                      <td className="py-2.5 text-center">{f.diaMes}</td>
+                      <td className="py-2.5 text-center text-xs">
+                        {(f as any).frecuencia === "semanal"
+                          ? weekdayLabel(Number(f.diaMes))
+                          : `Día ${f.diaMes}`}
+                      </td>
                       <td className="py-2.5">
                         <button
                           type="button"
@@ -423,7 +457,7 @@ export default function FinancePage() {
                 </tbody>
               </table>
               <p className="text-[11px] mt-2" style={{ color: "hsl(207 20% 55%)" }}>
-                Total fijo mensual (vista actual): {money((fixedCosts || []).reduce((s, f) => s + Number(f.monto || 0), 0))}
+                El monto es por cada pago (si es quincenal y ponés ₡200.000, al cargar el mes salen 2 pagos). Podés cambiar la frecuencia en la lista.
               </p>
             </div>
           )}
@@ -748,16 +782,42 @@ export default function FinancePage() {
               <select
                 className="w-full h-10 border rounded-md px-3 text-sm"
                 value={fixedForm.categoria}
-                onChange={(e) => setFixedForm((f) => ({ ...f, categoria: e.target.value }))}
+                onChange={(e) => setFixedForm((f) => ({
+                  ...f,
+                  categoria: e.target.value,
+                  frecuencia: e.target.value === "planilla" && f.frecuencia === "mensual" ? "quincenal" : f.frecuencia,
+                }))}
               >
                 {(categories?.egreso || []).map((c) => (
                   <option key={c.id} value={c.id}>{c.label}</option>
                 ))}
               </select>
             </div>
+            <div>
+              <Label>Frecuencia de pago</Label>
+              <select
+                className="w-full h-10 border rounded-md px-3 text-sm"
+                value={fixedForm.frecuencia}
+                onChange={(e) => setFixedForm((f) => ({
+                  ...f,
+                  frecuencia: e.target.value as "semanal" | "quincenal" | "mensual",
+                  diaMes: e.target.value === "semanal" ? "5" : f.diaMes === "5" && e.target.value !== "semanal" ? "1" : f.diaMes,
+                }))}
+              >
+                <option value="semanal">Semanal</option>
+                <option value="quincenal">Quincenal (2 veces al mes)</option>
+                <option value="mensual">Mensual</option>
+              </select>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Monto mensual (₡)</Label>
+                <Label>
+                  {fixedForm.frecuencia === "semanal"
+                    ? "Monto por semana (₡)"
+                    : fixedForm.frecuencia === "quincenal"
+                      ? "Monto por quincena (₡)"
+                      : "Monto mensual (₡)"}
+                </Label>
                 <Input
                   type="number"
                   min={0}
@@ -767,17 +827,43 @@ export default function FinancePage() {
                 />
               </div>
               <div>
-                <Label>Día del mes (1–28)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={28}
-                  value={fixedForm.diaMes}
-                  onChange={(e) => setFixedForm((f) => ({ ...f, diaMes: e.target.value }))}
-                  className="h-10"
-                />
+                {fixedForm.frecuencia === "semanal" ? (
+                  <>
+                    <Label>Día de la semana</Label>
+                    <select
+                      className="w-full h-10 border rounded-md px-3 text-sm"
+                      value={fixedForm.diaMes}
+                      onChange={(e) => setFixedForm((f) => ({ ...f, diaMes: e.target.value }))}
+                    >
+                      <option value="1">Lunes</option>
+                      <option value="2">Martes</option>
+                      <option value="3">Miércoles</option>
+                      <option value="4">Jueves</option>
+                      <option value="5">Viernes</option>
+                      <option value="6">Sábado</option>
+                      <option value="7">Domingo</option>
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <Label>{fixedForm.frecuencia === "quincenal" ? "Primera fecha (día 1–14)" : "Día del mes (1–28)"}</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={fixedForm.frecuencia === "quincenal" ? 14 : 28}
+                      value={fixedForm.diaMes}
+                      onChange={(e) => setFixedForm((f) => ({ ...f, diaMes: e.target.value }))}
+                      className="h-10"
+                    />
+                  </>
+                )}
               </div>
             </div>
+            <p className="text-[11px]" style={{ color: "hsl(207 20% 50%)" }}>
+              {fixedForm.frecuencia === "semanal" && "Al cargar el mes se crea un egreso cada semana (ej. cada viernes)."}
+              {fixedForm.frecuencia === "quincenal" && "Al cargar el mes se crean 2 egresos (día elegido y +14 días). Ideal para planilla."}
+              {fixedForm.frecuencia === "mensual" && "Al cargar el mes se crea 1 egreso en ese día. Ideal para alquiler."}
+            </p>
             <div>
               <Label>Método de pago</Label>
               <select
