@@ -284,51 +284,51 @@ export default function FinancePage() {
   };
 
   return (
-    <div>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <div className="max-w-full min-w-0">
+      <div className="flex flex-col gap-3 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2" style={{ color: "hsl(207 55% 15%)" }}>
-            <Wallet className="w-6 h-6" style={{ color: BRAND_RED }} />
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2" style={{ color: "hsl(207 55% 15%)" }}>
+            <Wallet className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" style={{ color: BRAND_RED }} />
             Finanzas
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>
-            Libro manual de ingresos y egresos · Los Chiles, Pavón y Santa Rosa · no se conecta a cierres ni inventario
+          <p className="text-xs sm:text-sm mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>
+            Libro manual · Los Chiles, Pavón y Santa Rosa
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" className="h-10 font-medium" onClick={() => openCreate("ingreso")}>
-            <ArrowUpCircle className="w-4 h-4 mr-2 text-green-600" />
-            Digitar ingreso
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <Button variant="outline" className="h-11 font-medium w-full sm:w-auto" onClick={() => openCreate("ingreso")}>
+            <ArrowUpCircle className="w-4 h-4 mr-2 text-green-600 shrink-0" />
+            Ingreso
           </Button>
-          <Button className="h-10 font-medium" style={{ background: BRAND_RED }} onClick={() => openCreate("egreso")}>
-            <ArrowDownCircle className="w-4 h-4 mr-2" />
-            Digitar egreso
+          <Button className="h-11 font-medium w-full sm:w-auto" style={{ background: BRAND_RED }} onClick={() => openCreate("egreso")}>
+            <ArrowDownCircle className="w-4 h-4 mr-2 shrink-0" />
+            Egreso
           </Button>
         </div>
       </div>
 
       {/* Filters */}
-      <Card className="mb-5 border shadow-sm">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-wrap gap-2">
+      <Card className="mb-4 sm:mb-5 border shadow-sm">
+        <CardContent className="p-3 sm:p-4 space-y-3">
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin">
             <button
               type="button"
               onClick={() => setStoreFilter("all")}
-              className="px-3 py-1.5 rounded-md text-sm font-medium border"
+              className="px-3 py-2 rounded-md text-sm font-medium border whitespace-nowrap shrink-0 min-h-10"
               style={{
                 background: storeFilter === "all" ? BRAND_BLUE : "#fff",
                 color: storeFilter === "all" ? "#fff" : BRAND_BLUE,
                 borderColor: "hsl(210 20% 88%)",
               }}
             >
-              Todas las tiendas
+              Todas
             </button>
             {(financeStores || []).map((s) => (
               <button
                 key={s.id}
                 type="button"
                 onClick={() => setStoreFilter(s.id)}
-                className="px-3 py-1.5 rounded-md text-sm font-medium border flex items-center gap-1.5"
+                className="px-3 py-2 rounded-md text-sm font-medium border flex items-center gap-1.5 whitespace-nowrap shrink-0 min-h-10"
                 style={{
                   background: storeFilter === s.id ? BRAND_BLUE : "#fff",
                   color: storeFilter === s.id ? "#fff" : BRAND_BLUE,
@@ -340,18 +340,20 @@ export default function FinancePage() {
               </button>
             ))}
           </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end">
+            <div className="min-w-0">
               <Label className="text-xs">Desde</Label>
-              <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-9 w-40" />
+              <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-10 w-full sm:w-40" />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label className="text-xs">Hasta</Label>
-              <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-9 w-40" />
+              <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-10 w-full sm:w-40" />
             </div>
-            <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => { setDesde(todayStr()); setHasta(todayStr()); }}>Hoy</Button>
-            <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => { setDesde(weekStart()); setHasta(todayStr()); }}>Esta semana</Button>
-            <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => { setDesde(monthStart()); setHasta(todayStr()); }}>Este mes</Button>
+            <div className="col-span-2 flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" className="h-10 flex-1 sm:flex-none" onClick={() => { setDesde(todayStr()); setHasta(todayStr()); }}>Hoy</Button>
+              <Button type="button" variant="outline" size="sm" className="h-10 flex-1 sm:flex-none" onClick={() => { setDesde(weekStart()); setHasta(todayStr()); }}>Semana</Button>
+              <Button type="button" variant="outline" size="sm" className="h-10 flex-1 sm:flex-none" onClick={() => { setDesde(monthStart()); setHasta(todayStr()); }}>Mes</Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -369,21 +371,21 @@ export default function FinancePage() {
                 Configuralos una vez. Planilla puede ser semanal, quincenal o mensual. Alquiler suele ser mensual. Cada mes: un clic y se cargan (sin duplicar).
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" className="h-9" onClick={openFixedCreate}>
+            <div className="grid grid-cols-1 xs:grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
+              <Button type="button" variant="outline" size="sm" className="h-11 sm:h-9 w-full sm:w-auto" onClick={openFixedCreate}>
                 <Plus className="w-4 h-4 mr-1" />
                 Agregar fijo
               </Button>
               <Button
                 type="button"
                 size="sm"
-                className="h-9 font-medium"
+                className="h-11 sm:h-9 font-medium w-full sm:w-auto"
                 style={{ background: BRAND_BLUE }}
                 onClick={handleApplyFixed}
                 disabled={applyFixed.isPending || !(fixedCosts?.length)}
               >
                 <CalendarDays className="w-4 h-4 mr-1" />
-                {applyFixed.isPending ? "Cargando..." : `Cargar fijos a ${yearMonth}`}
+                {applyFixed.isPending ? "Cargando..." : `Cargar fijos ${yearMonth}`}
               </Button>
             </div>
           </div>
@@ -397,67 +399,107 @@ export default function FinancePage() {
               Todavía no hay gastos fijos. Ejemplos: Alquiler Los Chiles, Internet Pavón, Planilla Santa Rosa.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left" style={{ borderColor: "hsl(210 20% 92%)" }}>
-                    <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Nombre</th>
-                    <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Tienda</th>
-                    <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Categoría</th>
-                    <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Frecuencia</th>
-                    <th className="py-2 font-semibold text-right" style={{ color: BRAND_BLUE }}>Monto / pago</th>
-                    <th className="py-2 font-semibold text-center" style={{ color: BRAND_BLUE }}>Día</th>
-                    <th className="w-10" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {fixedCosts.map((f) => (
-                    <tr key={f.id} className="border-b" style={{ borderColor: "hsl(210 20% 94%)" }}>
-                      <td className="py-2.5 font-medium">{f.nombre}</td>
-                      <td className="py-2.5">{storeLabel(f.storeId)}</td>
-                      <td className="py-2.5">{catLabel("egreso", f.categoria)}</td>
-                      <td className="py-2.5">
-                        <select
-                          className="h-8 border rounded px-2 text-xs font-medium"
-                          value={(f as any).frecuencia || "mensual"}
-                          disabled={updateFixed.isPending}
-                          onChange={(e) => {
-                            const frecuencia = e.target.value as "semanal" | "quincenal" | "mensual";
-                            updateFixed.mutate({ id: f.id, frecuencia });
-                          }}
-                          title="Cambiar frecuencia de pago"
-                        >
-                          <option value="semanal">Semanal</option>
-                          <option value="quincenal">Quincenal</option>
-                          <option value="mensual">Mensual</option>
-                        </select>
-                      </td>
-                      <td className="py-2.5 text-right font-semibold text-red-700">{money(Number(f.monto))}</td>
-                      <td className="py-2.5 text-center text-xs">
-                        {(f as any).frecuencia === "semanal"
-                          ? weekdayLabel(Number(f.diaMes))
-                          : `Día ${f.diaMes}`}
-                      </td>
-                      <td className="py-2.5">
-                        <button
-                          type="button"
-                          className="p-1.5 rounded hover:bg-red-50 text-red-600"
-                          title="Quitar gasto fijo"
-                          onClick={() => {
-                            if (confirm(`¿Quitar el gasto fijo "${f.nombre}"? (no borra lo ya cargado en meses anteriores)`)) {
-                              removeFixed.mutate({ id: f.id });
-                            }
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
+            <div className="space-y-2">
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-2">
+                {fixedCosts.map((f) => (
+                  <div key={f.id} className="rounded-lg border p-3 space-y-2" style={{ borderColor: "hsl(210 20% 90%)" }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm truncate">{f.nombre}</p>
+                        <p className="text-xs" style={{ color: "hsl(207 20% 50%)" }}>
+                          {storeLabel(f.storeId)} · {catLabel("egreso", f.categoria)}
+                        </p>
+                      </div>
+                      <p className="font-bold text-red-700 shrink-0">{money(Number(f.monto))}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="flex-1 h-10 border rounded-md px-2 text-sm"
+                        value={(f as any).frecuencia || "mensual"}
+                        disabled={updateFixed.isPending}
+                        onChange={(e) => {
+                          const frecuencia = e.target.value as "semanal" | "quincenal" | "mensual";
+                          updateFixed.mutate({ id: f.id, frecuencia });
+                        }}
+                      >
+                        <option value="semanal">Semanal</option>
+                        <option value="quincenal">Quincenal</option>
+                        <option value="mensual">Mensual</option>
+                      </select>
+                      <button
+                        type="button"
+                        className="p-2.5 rounded-md border min-h-10 min-w-10 flex items-center justify-center text-red-600"
+                        onClick={() => {
+                          if (confirm(`¿Quitar el gasto fijo "${f.nombre}"?`)) removeFixed.mutate({ id: f.id });
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-[11px]" style={{ color: "hsl(207 20% 55%)" }}>
+                      {(f as any).frecuencia === "semanal" ? weekdayLabel(Number(f.diaMes)) : `Día ${f.diaMes} del mes`}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left" style={{ borderColor: "hsl(210 20% 92%)" }}>
+                      <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Nombre</th>
+                      <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Tienda</th>
+                      <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Categoría</th>
+                      <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Frecuencia</th>
+                      <th className="py-2 font-semibold text-right" style={{ color: BRAND_BLUE }}>Monto / pago</th>
+                      <th className="py-2 font-semibold text-center" style={{ color: BRAND_BLUE }}>Día</th>
+                      <th className="w-10" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="text-[11px] mt-2" style={{ color: "hsl(207 20% 55%)" }}>
-                El monto es por cada pago (si es quincenal y ponés ₡200.000, al cargar el mes salen 2 pagos). Podés cambiar la frecuencia en la lista.
+                  </thead>
+                  <tbody>
+                    {fixedCosts.map((f) => (
+                      <tr key={f.id} className="border-b" style={{ borderColor: "hsl(210 20% 94%)" }}>
+                        <td className="py-2.5 font-medium">{f.nombre}</td>
+                        <td className="py-2.5">{storeLabel(f.storeId)}</td>
+                        <td className="py-2.5">{catLabel("egreso", f.categoria)}</td>
+                        <td className="py-2.5">
+                          <select
+                            className="h-8 border rounded px-2 text-xs font-medium"
+                            value={(f as any).frecuencia || "mensual"}
+                            disabled={updateFixed.isPending}
+                            onChange={(e) => {
+                              const frecuencia = e.target.value as "semanal" | "quincenal" | "mensual";
+                              updateFixed.mutate({ id: f.id, frecuencia });
+                            }}
+                          >
+                            <option value="semanal">Semanal</option>
+                            <option value="quincenal">Quincenal</option>
+                            <option value="mensual">Mensual</option>
+                          </select>
+                        </td>
+                        <td className="py-2.5 text-right font-semibold text-red-700">{money(Number(f.monto))}</td>
+                        <td className="py-2.5 text-center text-xs">
+                          {(f as any).frecuencia === "semanal" ? weekdayLabel(Number(f.diaMes)) : `Día ${f.diaMes}`}
+                        </td>
+                        <td className="py-2.5">
+                          <button
+                            type="button"
+                            className="p-1.5 rounded hover:bg-red-50 text-red-600"
+                            onClick={() => {
+                              if (confirm(`¿Quitar el gasto fijo "${f.nombre}"?`)) removeFixed.mutate({ id: f.id });
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] mt-1" style={{ color: "hsl(207 20% 55%)" }}>
+                El monto es por cada pago. En quincenal, al cargar el mes salen 2 pagos.
               </p>
             </div>
           )}
@@ -571,65 +613,105 @@ export default function FinancePage() {
           {loadingList ? (
             <p className="p-4 text-sm text-gray-500">Cargando...</p>
           ) : !entries?.length ? (
-            <p className="p-6 text-sm" style={{ color: "hsl(207 20% 50%)" }}>
-              Todavía no hay movimientos. Empezá digitando las ventas del día y los gastos (alquiler, planilla, pago de contenedor, etc.).
+            <p className="p-4 sm:p-6 text-sm" style={{ color: "hsl(207 20% 50%)" }}>
+              Todavía no hay movimientos. Empezá digitando las ventas del día y los gastos.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead style={{ background: "hsl(0 0% 98%)" }}>
-                  <tr className="border-b text-left" style={{ borderColor: "hsl(210 20% 92%)" }}>
-                    <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Fecha</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Tienda</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Tipo</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Categoría</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Método</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold uppercase text-right" style={{ color: BRAND_BLUE }}>Monto</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Nota</th>
-                    <th className="w-12" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map((e) => (
-                    <tr key={e.id} className="border-b hover:bg-gray-50/60" style={{ borderColor: "hsl(210 20% 94%)" }}>
-                      <td className="px-4 py-2.5 whitespace-nowrap">{e.fecha}</td>
-                      <td className="px-4 py-2.5">{storeLabel(e.storeId)}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded ${e.tipo === "ingreso" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
-                          {e.tipo === "ingreso" ? "Ingreso" : "Egreso"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5">{catLabel(e.tipo, e.categoria)}</td>
-                      <td className="px-4 py-2.5 capitalize">{e.metodoPago}</td>
-                      <td className={`px-4 py-2.5 text-right font-semibold ${e.tipo === "ingreso" ? "text-green-700" : "text-red-700"}`}>
-                        {e.tipo === "ingreso" ? "+" : "−"}{money(Number(e.monto))}
-                      </td>
-                      <td className="px-4 py-2.5 text-xs max-w-[200px] truncate" style={{ color: "hsl(207 20% 45%)" }}>
-                        {e.descripcion || "—"}
-                      </td>
-                      <td className="px-2 py-2.5">
+            <>
+              {/* Mobile cards */}
+              <div className="md:hidden divide-y" style={{ borderColor: "hsl(210 20% 92%)" }}>
+                {entries.map((e) => (
+                  <div key={e.id} className="p-3 space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${e.tipo === "ingreso" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+                            {e.tipo === "ingreso" ? "Ingreso" : "Egreso"}
+                          </span>
+                          <span className="text-xs" style={{ color: "hsl(207 20% 50%)" }}>{e.fecha}</span>
+                        </div>
+                        <p className="text-sm font-medium mt-1">{catLabel(e.tipo, e.categoria)}</p>
+                        <p className="text-xs" style={{ color: "hsl(207 20% 50%)" }}>
+                          {storeLabel(e.storeId)} · {e.metodoPago}
+                        </p>
+                        {e.descripcion && (
+                          <p className="text-xs mt-0.5 line-clamp-2" style={{ color: "hsl(207 20% 45%)" }}>{e.descripcion}</p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className={`font-bold ${e.tipo === "ingreso" ? "text-green-700" : "text-red-700"}`}>
+                          {e.tipo === "ingreso" ? "+" : "−"}{money(Number(e.monto))}
+                        </p>
                         <button
                           type="button"
-                          className="p-1.5 rounded hover:bg-red-50 text-red-600"
-                          title="Eliminar"
+                          className="mt-1 p-2 rounded-md text-red-600 inline-flex"
                           onClick={() => {
                             if (confirm("¿Eliminar este movimiento?")) removeEntry.mutate({ id: e.id });
                           }}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
-                      </td>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead style={{ background: "hsl(0 0% 98%)" }}>
+                    <tr className="border-b text-left" style={{ borderColor: "hsl(210 20% 92%)" }}>
+                      <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Fecha</th>
+                      <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Tienda</th>
+                      <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Tipo</th>
+                      <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Categoría</th>
+                      <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Método</th>
+                      <th className="px-4 py-2.5 text-xs font-semibold uppercase text-right" style={{ color: BRAND_BLUE }}>Monto</th>
+                      <th className="px-4 py-2.5 text-xs font-semibold uppercase" style={{ color: BRAND_BLUE }}>Nota</th>
+                      <th className="w-12" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {entries.map((e) => (
+                      <tr key={e.id} className="border-b hover:bg-gray-50/60" style={{ borderColor: "hsl(210 20% 94%)" }}>
+                        <td className="px-4 py-2.5 whitespace-nowrap">{e.fecha}</td>
+                        <td className="px-4 py-2.5">{storeLabel(e.storeId)}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${e.tipo === "ingreso" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+                            {e.tipo === "ingreso" ? "Ingreso" : "Egreso"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5">{catLabel(e.tipo, e.categoria)}</td>
+                        <td className="px-4 py-2.5 capitalize">{e.metodoPago}</td>
+                        <td className={`px-4 py-2.5 text-right font-semibold ${e.tipo === "ingreso" ? "text-green-700" : "text-red-700"}`}>
+                          {e.tipo === "ingreso" ? "+" : "−"}{money(Number(e.monto))}
+                        </td>
+                        <td className="px-4 py-2.5 text-xs max-w-[200px] truncate" style={{ color: "hsl(207 20% 45%)" }}>
+                          {e.descripcion || "—"}
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <button
+                            type="button"
+                            className="p-1.5 rounded hover:bg-red-50 text-red-600"
+                            onClick={() => {
+                              if (confirm("¿Eliminar este movimiento?")) removeEntry.mutate({ id: e.id });
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md w-[calc(100%-1.25rem)] max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{form.tipo === "ingreso" ? "Digitar ingreso" : "Digitar egreso"}</DialogTitle>
           </DialogHeader>
@@ -747,9 +829,9 @@ export default function FinancePage() {
       </Dialog>
 
       <Dialog open={fixedDialogOpen} onOpenChange={setFixedDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md w-[calc(100%-1.25rem)] max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nuevo gasto fijo mensual</DialogTitle>
+            <DialogTitle>Nuevo gasto fijo</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-2">
             <p className="text-xs" style={{ color: "hsl(207 20% 50%)" }}>

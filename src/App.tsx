@@ -19,16 +19,67 @@ import PayrollPage from "@/pages/Payroll";
 import FinancePage from "@/pages/Finance";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 768px)").matches : true,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = () => setIsDesktop(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  return isDesktop;
+}
 
 function AppLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const isDesktop = useIsDesktop();
+  const [desktopOpen, setDesktopOpen] = useState(true);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    if (isDesktop) setMobileOpen(false);
+  }, [isDesktop]);
+
+  // Prevent body scroll when mobile drawer is open
+  useEffect(() => {
+    if (!isDesktop && mobileOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [isDesktop, mobileOpen]);
+
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
-        <main className="flex-1 overflow-auto p-6">
+    <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
+      {!isDesktop && mobileOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-black/45 border-0 cursor-pointer"
+          aria-label="Cerrar menu"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+      <Sidebar
+        open={desktopOpen}
+        onToggle={() => setDesktopOpen((o) => !o)}
+        isDesktop={isDesktop}
+        mobileOpen={mobileOpen}
+        onCloseMobile={() => setMobileOpen(false)}
+      />
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <Header
+          onMenuClick={() => {
+            if (isDesktop) setDesktopOpen((o) => !o);
+            else setMobileOpen((o) => !o);
+          }}
+        />
+        <main className="flex-1 overflow-auto overflow-x-hidden p-3 sm:p-4 md:p-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {children}
         </main>
       </div>
@@ -38,10 +89,9 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { user, isLoading, role } = useLocalAuth();
-  if (isLoading) return <div className="flex items-center justify-center h-screen">Cargando...</div>;
+  if (isLoading) return <div className="flex items-center justify-center h-[100dvh]">Cargando...</div>;
   if (!user) return <Navigate to="/login" replace />;
 
-  // If role restrictions are specified and user doesn't have permission, redirect
   if (allowedRoles && role && !allowedRoles.includes(role)) {
     return <Navigate to="/closings" replace />;
   }
@@ -49,10 +99,9 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
   return <AppLayout>{children}</AppLayout>;
 }
 
-// Admin console home
 function RootRedirect() {
   const { user, isLoading } = useLocalAuth();
-  if (isLoading) return <div className="flex items-center justify-center h-screen">Cargando...</div>;
+  if (isLoading) return <div className="flex items-center justify-center h-[100dvh]">Cargando...</div>;
   if (!user) return <Navigate to="/login" replace />;
   return <DashboardPage />;
 }
