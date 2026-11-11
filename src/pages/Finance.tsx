@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Wallet, Plus, Trash2, TrendingUp, TrendingDown, AlertTriangle,
-  CheckCircle2, ArrowDownCircle, ArrowUpCircle, Store,
+  CheckCircle2, ArrowDownCircle, ArrowUpCircle, Store, Repeat, CalendarDays,
 } from "lucide-react";
 
 const BRAND_RED = "#B22234";
@@ -56,7 +56,10 @@ export default function FinancePage() {
   const [desde, setDesde] = useState(monthStart());
   const [hasta, setHasta] = useState(todayStr());
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [fixedDialogOpen, setFixedDialogOpen] = useState(false);
   const [formError, setFormError] = useState("");
+  const [fixedError, setFixedError] = useState("");
+  const [applyNote, setApplyNote] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     storeId: "" as string,
@@ -68,14 +71,29 @@ export default function FinancePage() {
     descripcion: "",
   });
 
+  const [fixedForm, setFixedForm] = useState({
+    storeId: "" as string,
+    nombre: "",
+    categoria: "alquiler",
+    monto: "",
+    diaMes: "1",
+    metodoPago: "transferencia" as typeof METODOS[number]["id"],
+    descripcion: "",
+  });
+
   const listInput = {
     storeId: storeFilter === "all" ? undefined : storeFilter,
     desde,
     hasta,
   };
 
+  const yearMonth = desde.slice(0, 7);
+
   const { data: summary, isLoading: loadingSummary } = trpc.finance.summary.useQuery(listInput);
   const { data: entries, isLoading: loadingList } = trpc.finance.list.useQuery(listInput);
+  const { data: fixedCosts } = trpc.finance.listFixed.useQuery(
+    storeFilter === "all" ? undefined : { storeId: storeFilter },
+  );
 
   const createEntry = trpc.finance.create.useMutation({
     onSuccess: () => {
@@ -97,6 +115,44 @@ export default function FinancePage() {
     onSuccess: () => {
       utils.finance.list.invalidate();
       utils.finance.summary.invalidate();
+    },
+    onError: (err) => alert(err.message),
+  });
+
+  const createFixed = trpc.finance.createFixed.useMutation({
+    onSuccess: () => {
+      utils.finance.listFixed.invalidate();
+      setFixedDialogOpen(false);
+      setFixedError("");
+      setFixedForm({
+        storeId: storeFilter !== "all" ? String(storeFilter) : (financeStores?.[0] ? String(financeStores[0].id) : ""),
+        nombre: "",
+        categoria: "alquiler",
+        monto: "",
+        diaMes: "1",
+        metodoPago: "transferencia",
+        descripcion: "",
+      });
+    },
+    onError: (err) => setFixedError(err.message),
+  });
+
+  const removeFixed = trpc.finance.removeFixed.useMutation({
+    onSuccess: () => utils.finance.listFixed.invalidate(),
+    onError: (err) => alert(err.message),
+  });
+
+  const applyFixed = trpc.finance.applyFixedToMonth.useMutation({
+    onSuccess: (res) => {
+      utils.finance.list.invalidate();
+      utils.finance.summary.invalidate();
+      setApplyNote(
+        res.created > 0
+          ? `Se cargaron ${res.created} gasto(s) fijo(s) a ${res.yearMonth}` + (res.skipped ? ` (${res.skipped} ya estaban)` : "")
+          : res.skipped > 0
+            ? `Todos los fijos de ${res.yearMonth} ya estaban cargados (${res.skipped})`
+            : "No hay gastos fijos configurados",
+      );
     },
     onError: (err) => alert(err.message),
   });
@@ -154,6 +210,63 @@ export default function FinancePage() {
       fecha: form.fecha,
       metodoPago: form.metodoPago,
       descripcion: form.descripcion.trim() || undefined,
+    });
+  };
+
+  const openFixedCreate = () => {
+    setFixedForm({
+      storeId: storeFilter !== "all" ? String(storeFilter) : (financeStores?.[0] ? String(financeStores[0].id) : ""),
+      nombre: "",
+      categoria: "alquiler",
+      monto: "",
+      diaMes: "1",
+      metodoPago: "transferencia",
+      descripcion: "",
+    });
+    setFixedError("");
+    setFixedDialogOpen(true);
+  };
+
+  const handleFixedSubmit = () => {
+    const storeId = Number(fixedForm.storeId);
+    const monto = Number(fixedForm.monto);
+    const diaMes = Number(fixedForm.diaMes);
+    if (!storeId) {
+      setFixedError("Elegí una tienda");
+      return;
+    }
+    if (!fixedForm.nombre.trim()) {
+      setFixedError("Poné un nombre (ej. Alquiler Los Chiles)");
+      return;
+    }
+    if (!monto || monto <= 0) {
+      setFixedError("Monto inválido");
+      return;
+    }
+    createFixed.mutate({
+      storeId,
+      nombre: fixedForm.nombre.trim(),
+      categoria: fixedForm.categoria,
+      monto,
+      diaMes: Math.min(28, Math.max(1, diaMes || 1)),
+      metodoPago: fixedForm.metodoPago,
+      descripcion: fixedForm.descripcion.trim() || undefined,
+    });
+  };
+
+  const handleApplyFixed = () => {
+    if (!yearMonth || yearMonth.length !== 7) {
+      alert("Revisá el filtro de fechas (mes)");
+      return;
+    }
+    const label = storeFilter === "all"
+      ? `todas las tiendas en ${yearMonth}`
+      : `${storeLabel(storeFilter)} en ${yearMonth}`;
+    if (!confirm(`¿Cargar los gastos fijos a ${label}?\n\nSi ya se cargaron este mes, no se duplican.`)) return;
+    setApplyNote(null);
+    applyFixed.mutate({
+      yearMonth,
+      storeId: storeFilter === "all" ? undefined : storeFilter,
     });
   };
 
@@ -227,6 +340,93 @@ export default function FinancePage() {
             <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => { setDesde(weekStart()); setHasta(todayStr()); }}>Esta semana</Button>
             <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => { setDesde(monthStart()); setHasta(todayStr()); }}>Este mes</Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Fixed costs */}
+      <Card className="mb-5 border shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+            <div>
+              <p className="text-sm font-semibold flex items-center gap-2" style={{ color: BRAND_BLUE }}>
+                <Repeat className="w-4 h-4" />
+                Gastos fijos (no cambian cada mes)
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: "hsl(207 20% 50%)" }}>
+                Configuralos una vez (alquiler, planilla base, internet…). Cada mes: un clic y se cargan al libro. No se duplican.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" className="h-9" onClick={openFixedCreate}>
+                <Plus className="w-4 h-4 mr-1" />
+                Agregar fijo
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 font-medium"
+                style={{ background: BRAND_BLUE }}
+                onClick={handleApplyFixed}
+                disabled={applyFixed.isPending || !(fixedCosts?.length)}
+              >
+                <CalendarDays className="w-4 h-4 mr-1" />
+                {applyFixed.isPending ? "Cargando..." : `Cargar fijos a ${yearMonth}`}
+              </Button>
+            </div>
+          </div>
+
+          {applyNote && (
+            <p className="text-sm mb-3 px-3 py-2 rounded-md bg-green-50 text-green-800 border border-green-200">{applyNote}</p>
+          )}
+
+          {!fixedCosts?.length ? (
+            <p className="text-sm" style={{ color: "hsl(207 20% 50%)" }}>
+              Todavía no hay gastos fijos. Ejemplos: Alquiler Los Chiles, Internet Pavón, Planilla Santa Rosa.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left" style={{ borderColor: "hsl(210 20% 92%)" }}>
+                    <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Nombre</th>
+                    <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Tienda</th>
+                    <th className="py-2 font-semibold" style={{ color: BRAND_BLUE }}>Categoría</th>
+                    <th className="py-2 font-semibold text-right" style={{ color: BRAND_BLUE }}>Monto / mes</th>
+                    <th className="py-2 font-semibold text-center" style={{ color: BRAND_BLUE }}>Día</th>
+                    <th className="w-10" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {fixedCosts.map((f) => (
+                    <tr key={f.id} className="border-b" style={{ borderColor: "hsl(210 20% 94%)" }}>
+                      <td className="py-2.5 font-medium">{f.nombre}</td>
+                      <td className="py-2.5">{storeLabel(f.storeId)}</td>
+                      <td className="py-2.5">{catLabel("egreso", f.categoria)}</td>
+                      <td className="py-2.5 text-right font-semibold text-red-700">{money(Number(f.monto))}</td>
+                      <td className="py-2.5 text-center">{f.diaMes}</td>
+                      <td className="py-2.5">
+                        <button
+                          type="button"
+                          className="p-1.5 rounded hover:bg-red-50 text-red-600"
+                          title="Quitar gasto fijo"
+                          onClick={() => {
+                            if (confirm(`¿Quitar el gasto fijo "${f.nombre}"? (no borra lo ya cargado en meses anteriores)`)) {
+                              removeFixed.mutate({ id: f.id });
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-[11px] mt-2" style={{ color: "hsl(207 20% 55%)" }}>
+                Total fijo mensual (vista actual): {money((fixedCosts || []).reduce((s, f) => s + Number(f.monto || 0), 0))}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -508,6 +708,106 @@ export default function FinancePage() {
                 Quedará registrado por {user.name}
               </p>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={fixedDialogOpen} onOpenChange={setFixedDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuevo gasto fijo mensual</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <p className="text-xs" style={{ color: "hsl(207 20% 50%)" }}>
+              Se guarda la plantilla. Después usás “Cargar fijos a YYYY-MM” para meterlo al libro de ese mes.
+            </p>
+            <div>
+              <Label>Nombre</Label>
+              <Input
+                value={fixedForm.nombre}
+                onChange={(e) => setFixedForm((f) => ({ ...f, nombre: e.target.value }))}
+                className="h-10"
+                placeholder="Ej. Alquiler Los Chiles"
+              />
+            </div>
+            <div>
+              <Label>Tienda</Label>
+              <select
+                className="w-full h-10 border rounded-md px-3 text-sm"
+                value={fixedForm.storeId}
+                onChange={(e) => setFixedForm((f) => ({ ...f, storeId: e.target.value }))}
+              >
+                <option value="">Seleccionar...</option>
+                {(financeStores || []).map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>Categoría</Label>
+              <select
+                className="w-full h-10 border rounded-md px-3 text-sm"
+                value={fixedForm.categoria}
+                onChange={(e) => setFixedForm((f) => ({ ...f, categoria: e.target.value }))}
+              >
+                {(categories?.egreso || []).map((c) => (
+                  <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Monto mensual (₡)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={fixedForm.monto}
+                  onChange={(e) => setFixedForm((f) => ({ ...f, monto: e.target.value }))}
+                  className="h-10"
+                />
+              </div>
+              <div>
+                <Label>Día del mes (1–28)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={28}
+                  value={fixedForm.diaMes}
+                  onChange={(e) => setFixedForm((f) => ({ ...f, diaMes: e.target.value }))}
+                  className="h-10"
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Método de pago</Label>
+              <select
+                className="w-full h-10 border rounded-md px-3 text-sm"
+                value={fixedForm.metodoPago}
+                onChange={(e) => setFixedForm((f) => ({ ...f, metodoPago: e.target.value as any }))}
+              >
+                {METODOS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>Nota (opcional)</Label>
+              <Input
+                value={fixedForm.descripcion}
+                onChange={(e) => setFixedForm((f) => ({ ...f, descripcion: e.target.value }))}
+                className="h-10"
+                placeholder="Ej. Contrato local centro"
+              />
+            </div>
+            {fixedError && <p className="text-sm text-red-600">{fixedError}</p>}
+            <Button
+              className="w-full h-11 font-medium"
+              style={{ background: BRAND_BLUE }}
+              onClick={handleFixedSubmit}
+              disabled={createFixed.isPending}
+            >
+              {createFixed.isPending ? "Guardando..." : "Guardar gasto fijo"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

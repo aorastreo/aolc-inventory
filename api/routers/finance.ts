@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { createRouter, authedQuery, managerQuery, adminQuery } from "../middleware";
 import { getDb } from "../queries/connection";
-import { financeEntries, stores } from "@db/schema";
-import { and, desc, eq, gte, lte, ne } from "drizzle-orm";
+import { financeEntries, financeFixedCosts, stores } from "@db/schema";
+import { and, desc, eq, gte, lte, ne, like } from "drizzle-orm";
 import { ensureEnterpriseSchema } from "../lib/enterprise-schema";
 
 const BODEGA_STORE_ID = 1;
@@ -39,6 +39,20 @@ function daysBetween(a: string, b: string): number {
   const da = new Date(`${a}T12:00:00`).getTime();
   const db = new Date(`${b}T12:00:00`).getTime();
   return Math.max(1, Math.round((db - da) / 86400000) + 1);
+}
+
+function daysInMonth(year: number, month1to12: number): number {
+  return new Date(year, month1to12, 0).getDate();
+}
+
+/** Build YYYY-MM-DD for a fixed cost day within a month (clamped to month length). */
+function fechaForFixed(yearMonth: string, diaMes: number): string {
+  const [ys, ms] = yearMonth.split("-");
+  const year = Number(ys);
+  const month = Number(ms);
+  const maxDay = daysInMonth(year, month);
+  const day = Math.min(Math.max(1, Number(diaMes) || 1), maxDay);
+  return `${ys}-${ms}-${String(day).padStart(2, "0")}`;
 }
 
 function sumBy(
@@ -150,6 +164,134 @@ export const financeRouter = createRouter({
       await ensureEnterpriseSchema();
       await db.update(financeEntries).set({ isActive: false }).where(eq(financeEntries.id, input.id));
       return { success: true };
+    }),
+
+  // ---------- Gastos fijos (recurrentes mensuales) ----------
+  listFixed: authedQuery
+    .input(z.object({ storeId: z.number().optional() }).optional())
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const conditions = [eq(financeFixedCosts.isActive, true), ne(financeFixedCosts.storeId, BODEGA_STORE_ID)];
+      if (input?.storeId != null) conditions.push(eq(financeFixedCosts.storeId, input.storeId));
+      return db.select().from(financeFixedCosts).where(and(...conditions)).orderBy(financeFixedCosts.storeId, financeFixedCosts.nombre);
+    }),
+
+  createFixed: managerQuery
+    .input(z.object({
+      storeId: z.number(),
+      nombre: z.string().min(1).max(120),
+      categoria: z.string().min(1),
+      monto: z.number().positive(),
+      diaMes: z.number().int().min(1).max(28).default(1),
+      metodoPago: metodoEnum.default("transferencia"),
+      descripcion: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      if (input.storeId === BODEGA_STORE_ID) throw new Error("Gastos fijos solo para tiendas, no Bodega");
+      const allowed = FINANCE_CATEGORIES.egreso.map((c) => c.id) as string[];
+      if (!allowed.includes(input.categoria)) throw new Error("Categoria no valida para gasto fijo");
+      const result = await db.insert(financeFixedCosts).values({
+        storeId: input.storeId,
+        nombre: input.nombre.trim(),
+        categoria: input.categoria,
+        monto: String(input.monto),
+        diaMes: input.diaMes,
+        metodoPago: input.metodoPago,
+        descripcion: input.descripcion?.trim() || null,
+      });
+      return { id: Number(result[0].insertId) };
+    }),
+
+  updateFixed: managerQuery
+    .input(z.object({
+      id: z.number(),
+      nombre: z.string().min(1).max(120).optional(),
+      categoria: z.string().optional(),
+      monto: z.number().positive().optional(),
+      diaMes: z.number().int().min(1).max(28).optional(),
+      metodoPago: metodoEnum.optional(),
+      descripcion: z.string().max(500).nullable().optional(),
+      storeId: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const { id, ...rest } = input;
+      const patch: Record<string, unknown> = {};
+      if (rest.nombre != null) patch.nombre = rest.nombre.trim();
+      if (rest.categoria != null) patch.categoria = rest.categoria;
+      if (rest.monto != null) patch.monto = String(rest.monto);
+      if (rest.diaMes != null) patch.diaMes = rest.diaMes;
+      if (rest.metodoPago != null) patch.metodoPago = rest.metodoPago;
+      if (rest.descripcion !== undefined) patch.descripcion = rest.descripcion;
+      if (rest.storeId != null) {
+        if (rest.storeId === BODEGA_STORE_ID) throw new Error("No se puede asignar a Bodega");
+        patch.storeId = rest.storeId;
+      }
+      if (Object.keys(patch).length === 0) return { success: true };
+      await db.update(financeFixedCosts).set(patch).where(and(eq(financeFixedCosts.id, id), eq(financeFixedCosts.isActive, true)));
+      return { success: true };
+    }),
+
+  removeFixed: managerQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      await db.update(financeFixedCosts).set({ isActive: false }).where(eq(financeFixedCosts.id, input.id));
+      return { success: true };
+    }),
+
+  /**
+   * Apply all active fixed costs into the cash book for a given month (YYYY-MM).
+   * Skips any fixed cost already posted that month (idempotent).
+   */
+  applyFixedToMonth: managerQuery
+    .input(z.object({
+      yearMonth: z.string().regex(/^\d{4}-\d{2}$/),
+      storeId: z.number().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const conditions = [eq(financeFixedCosts.isActive, true), ne(financeFixedCosts.storeId, BODEGA_STORE_ID)];
+      if (input.storeId != null) conditions.push(eq(financeFixedCosts.storeId, input.storeId));
+      const fixed = await db.select().from(financeFixedCosts).where(and(...conditions));
+
+      let created = 0;
+      let skipped = 0;
+      for (const f of fixed) {
+        const already = await db.select().from(financeEntries).where(and(
+          eq(financeEntries.isActive, true),
+          eq(financeEntries.fixedCostId, f.id),
+          like(financeEntries.fecha, `${input.yearMonth}%`),
+        )).limit(1);
+        if (already.length > 0) {
+          skipped += 1;
+          continue;
+        }
+        const fecha = fechaForFixed(input.yearMonth, f.diaMes);
+        const note = [
+          `Gasto fijo: ${f.nombre}`,
+          f.descripcion ? f.descripcion : null,
+        ].filter(Boolean).join(" — ");
+        await db.insert(financeEntries).values({
+          storeId: f.storeId,
+          tipo: "egreso",
+          categoria: f.categoria,
+          monto: String(f.monto),
+          fecha,
+          metodoPago: f.metodoPago,
+          descripcion: note.slice(0, 500),
+          fixedCostId: f.id,
+          createdBy: ctx.user?.name || ctx.user?.unionId || null,
+        });
+        created += 1;
+      }
+      return { created, skipped, total: fixed.length, yearMonth: input.yearMonth };
     }),
 
   /** Owner cockpit: totals + guidance alerts (manual book only). */

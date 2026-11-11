@@ -491,6 +491,8 @@ export const financeEntries = mysqlTable("financeEntries", {
   fecha: varchar("fecha", { length: 20 }).notNull(),
   metodoPago: mysqlEnum("metodoPago", ["efectivo", "sinpe", "tarjeta", "transferencia", "otro"]).default("efectivo").notNull(),
   descripcion: varchar("descripcion", { length: 500 }),
+  /** Links entry to a recurring fixed cost when auto-applied for a month */
+  fixedCostId: bigint("fixedCostId", { mode: "number", unsigned: true }),
   createdBy: varchar("createdBy", { length: 255 }),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -499,3 +501,22 @@ export const financeEntries = mysqlTable("financeEntries", {
 
 export type FinanceEntry = typeof financeEntries.$inferSelect;
 export type InsertFinanceEntry = typeof financeEntries.$inferInsert;
+
+/** Recurring monthly costs — configure once, apply each month with one click. */
+export const financeFixedCosts = mysqlTable("financeFixedCosts", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  nombre: varchar("nombre", { length: 120 }).notNull(),
+  categoria: varchar("categoria", { length: 50 }).notNull(),
+  monto: decimal("monto", { precision: 12, scale: 2 }).notNull(),
+  /** Day of month to post (1–28 recommended) */
+  diaMes: int("diaMes").notNull().default(1),
+  metodoPago: mysqlEnum("metodoPago", ["efectivo", "sinpe", "tarjeta", "transferencia", "otro"]).default("transferencia").notNull(),
+  descripcion: varchar("descripcion", { length: 500 }),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type FinanceFixedCost = typeof financeFixedCosts.$inferSelect;
+export type InsertFinanceFixedCost = typeof financeFixedCosts.$inferInsert;

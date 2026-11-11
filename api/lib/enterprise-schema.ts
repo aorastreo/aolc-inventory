@@ -105,13 +105,36 @@ export async function ensureEnterpriseSchema() {
         fecha VARCHAR(20) NOT NULL,
         metodoPago ENUM('efectivo','sinpe','tarjeta','transferencia','otro') NOT NULL DEFAULT 'efectivo',
         descripcion VARCHAR(500) NULL,
+        fixedCostId BIGINT UNSIGNED NULL,
         createdBy VARCHAR(255) NULL,
         isActive BOOLEAN NOT NULL DEFAULT TRUE,
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
         updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
         INDEX idx_fin_store_fecha (storeId, fecha),
         INDEX idx_fin_tipo (tipo),
-        INDEX idx_fin_categoria (categoria)
+        INDEX idx_fin_categoria (categoria),
+        INDEX idx_fin_fixed (fixedCostId, fecha)
+      )`,
+    );
+    await tryExec(conn, "ALTER TABLE financeEntries ADD COLUMN fixedCostId BIGINT UNSIGNED NULL");
+    await tryExec(conn, "CREATE INDEX idx_fin_fixed ON financeEntries (fixedCostId, fecha)");
+
+    await tryExec(
+      conn,
+      `CREATE TABLE IF NOT EXISTS financeFixedCosts (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        storeId BIGINT UNSIGNED NOT NULL,
+        nombre VARCHAR(120) NOT NULL,
+        categoria VARCHAR(50) NOT NULL,
+        monto DECIMAL(12,2) NOT NULL,
+        diaMes INT NOT NULL DEFAULT 1,
+        metodoPago ENUM('efectivo','sinpe','tarjeta','transferencia','otro') NOT NULL DEFAULT 'transferencia',
+        descripcion VARCHAR(500) NULL,
+        isActive BOOLEAN NOT NULL DEFAULT TRUE,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+        INDEX idx_ffc_store (storeId),
+        INDEX idx_ffc_active (isActive)
       )`,
     );
 
