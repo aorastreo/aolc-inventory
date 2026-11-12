@@ -92,9 +92,32 @@ export default function FinancePage() {
 
   const { data: summary, isLoading: loadingSummary } = trpc.finance.summary.useQuery(listInput);
   const { data: entries, isLoading: loadingList } = trpc.finance.list.useQuery(listInput);
-  const { data: fixedCosts } = trpc.finance.listFixed.useQuery(
-    storeFilter === "all" ? undefined : { storeId: storeFilter },
-  );
+  /** Always load all fixed costs so we can show per-store + grand totals. */
+  const { data: fixedCostsAll } = trpc.finance.listFixed.useQuery(undefined);
+
+  const fixedCosts = useMemo(() => {
+    const all = fixedCostsAll || [];
+    if (storeFilter === "all") return all;
+    return all.filter((f) => f.storeId === storeFilter);
+  }, [fixedCostsAll, storeFilter]);
+
+  /** Equivalent monthly burn (semanal×52/12, quincenal×2, mensual×1). */
+  const monthlyEq = (monto: number, frecuencia?: string | null) => {
+    if (frecuencia === "semanal") return monto * (52 / 12);
+    if (frecuencia === "quincenal") return monto * 2;
+    return monto;
+  };
+
+  const fixedTotals = useMemo(() => {
+    const storesList = financeStores || [];
+    const byStore = storesList.map((s) => {
+      const rows = (fixedCostsAll || []).filter((f) => f.storeId === s.id);
+      const mensual = rows.reduce((sum, f) => sum + monthlyEq(Number(f.monto || 0), (f as any).frecuencia), 0);
+      return { storeId: s.id, name: s.name, count: rows.length, mensual };
+    });
+    const totalMensual = byStore.reduce((s, r) => s + r.mensual, 0);
+    return { byStore, totalMensual, count: (fixedCostsAll || []).length };
+  }, [fixedCostsAll, financeStores]);
 
   const createEntry = trpc.finance.create.useMutation({
     onSuccess: () => {
@@ -394,9 +417,50 @@ export default function FinancePage() {
             <p className="text-sm mb-3 px-3 py-2 rounded-md bg-green-50 text-green-800 border border-green-200">{applyNote}</p>
           )}
 
+          {/* Totals: per store + all 3 */}
+          {(fixedCostsAll?.length ?? 0) > 0 && (
+            <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+              {fixedTotals.byStore.map((s) => (
+                <button
+                  key={s.storeId}
+                  type="button"
+                  onClick={() => setStoreFilter(s.storeId)}
+                  className="text-left rounded-lg border p-3 transition-colors"
+                  style={{
+                    borderColor: storeFilter === s.storeId ? BRAND_BLUE : "hsl(210 20% 90%)",
+                    background: storeFilter === s.storeId ? "rgba(27,58,92,0.06)" : "#fff",
+                  }}
+                >
+                  <p className="text-xs font-medium" style={{ color: "hsl(207 20% 50%)" }}>{s.name}</p>
+                  <p className="text-lg font-bold text-red-700 leading-tight">{money(s.mensual)}</p>
+                  <p className="text-[11px]" style={{ color: "hsl(207 20% 55%)" }}>
+                    {s.count} fijo{s.count === 1 ? "" : "s"} · equiv. / mes
+                  </p>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setStoreFilter("all")}
+                className="text-left rounded-lg border p-3 transition-colors"
+                style={{
+                  borderColor: storeFilter === "all" ? BRAND_BLUE : "hsl(210 20% 90%)",
+                  background: storeFilter === "all" ? "rgba(27,58,92,0.06)" : "hsl(0 0% 98%)",
+                }}
+              >
+                <p className="text-xs font-medium" style={{ color: BRAND_BLUE }}>Total 3 tiendas</p>
+                <p className="text-lg font-bold leading-tight" style={{ color: BRAND_BLUE }}>{money(fixedTotals.totalMensual)}</p>
+                <p className="text-[11px]" style={{ color: "hsl(207 20% 55%)" }}>
+                  {fixedTotals.count} fijo{fixedTotals.count === 1 ? "" : "s"} · equiv. / mes
+                </p>
+              </button>
+            </div>
+          )}
+
           {!fixedCosts?.length ? (
             <p className="text-sm" style={{ color: "hsl(207 20% 50%)" }}>
-              Todavía no hay gastos fijos. Ejemplos: Alquiler Los Chiles, Internet Pavón, Planilla Santa Rosa.
+              {storeFilter === "all"
+                ? "Todavía no hay gastos fijos. Ejemplos: Alquiler Los Chiles, Internet Pavón, Planilla Santa Rosa."
+                : `No hay gastos fijos en ${storeLabel(storeFilter)}. Tocá «Agregar fijo» o mirá «Todas».`}
             </p>
           ) : (
             <div className="space-y-2">
@@ -499,7 +563,7 @@ export default function FinancePage() {
                 </table>
               </div>
               <p className="text-[11px] mt-1" style={{ color: "hsl(207 20% 55%)" }}>
-                El monto es por cada pago. En quincenal, al cargar el mes salen 2 pagos.
+                El monto de cada fila es por pago. Arriba ves el equivalente mensual por tienda y el total de las 3 (semanal×4.33, quincenal×2, mensual×1). Tocá una tienda para filtrar la lista.
               </p>
             </div>
           )}
