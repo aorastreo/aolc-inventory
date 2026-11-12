@@ -867,6 +867,28 @@ export const inventoryRouter = createRouter({
       return { id: Number(result[0].insertId) };
     }),
 
+  updateAdjustment: managerQuery
+    .input(z.object({
+      id: z.number(),
+      adjustmentId: z.string().min(1).optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [adj] = await db.select().from(adjustments).where(eq(adjustments.id, input.id)).limit(1);
+      if (!adj) throw new Error("Ajuste no encontrado");
+      if (adj.estado === "cancelado") throw new Error("No se puede editar un ajuste cancelado");
+      const setData: Record<string, string> = {};
+      if (input.adjustmentId !== undefined) setData.adjustmentId = input.adjustmentId.trim();
+      if (input.description !== undefined) setData.description = input.description.trim();
+      if (Object.keys(setData).length === 0) throw new Error("No hay cambios");
+      if (setData.adjustmentId !== undefined && !setData.adjustmentId) {
+        throw new Error("El nombre del ajuste no puede estar vacio");
+      }
+      await db.update(adjustments).set(setData).where(eq(adjustments.id, input.id));
+      return { success: true };
+    }),
+
   addAdjustmentItem: managerQuery
     .input(z.object({
       adjustmentId: z.number(),

@@ -83,6 +83,14 @@ export default function AdjustmentsPage() {
     },
   });
   const updateItem = trpc.inventory.updateAdjustmentItem.useMutation({ onSuccess: () => { utils.inventory.adjustmentItems.invalidate(); utils.inventory.palletMarginProgress.invalidate(); setEditingItemId(null); } });
+  const updateAdj = trpc.inventory.updateAdjustment.useMutation({
+    onSuccess: () => {
+      utils.inventory.adjustments.invalidate();
+      utils.inventory.adjustmentById.invalidate();
+      setEditingAdjMeta(false);
+    },
+    onError: (err) => alert("No se pudo actualizar el ajuste: " + err.message),
+  });
 
   const [viewingAdj, setViewingAdj] = useState<number | null>(null);
   const [newAdj, setNewAdj] = useState({ adjustmentId: "", description: "", palletId: palletFilter || "" });
@@ -93,6 +101,8 @@ export default function AdjustmentsPage() {
   // Inline edit state
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editItemForm, setEditItemForm] = useState({ nombre: "", precio: "", cantidad: 1, codigoBarras: "", costo: "", codigo: "" });
+  const [editingAdjMeta, setEditingAdjMeta] = useState(false);
+  const [editAdjForm, setEditAdjForm] = useState({ adjustmentId: "", description: "" });
 
   // Item search/filter
   const [itemSearch, setItemSearch] = useState("");
@@ -215,23 +225,99 @@ export default function AdjustmentsPage() {
       <div>
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" size="sm" onClick={() => setViewingAdj(null)} style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setEditingAdjMeta(false);
+              setViewingAdj(null);
+            }}
+            style={{ color: BRAND_BLUE, borderColor: "hsl(210 20% 88%)" }}
+          >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Volver
           </Button>
-          <div className="flex items-center gap-3 flex-1">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: status.color + "18" }}>
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: status.color + "18" }}>
               <ClipboardList className="w-5 h-5" style={{ color: status.color }} />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight" style={{ color: "hsl(207 55% 15%)" }}>{adjDetail.adjustmentId}</h1>
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${status.bg} ${status.text} ${status.border} border`}>
-                  {status.label}
-                </span>
+            {editingAdjMeta ? (
+              <div className="flex-1 min-w-0 space-y-2">
+                <div>
+                  <Label className="text-xs">Nombre del ajuste</Label>
+                  <Input
+                    value={editAdjForm.adjustmentId}
+                    onChange={(e) => setEditAdjForm({ ...editAdjForm, adjustmentId: e.target.value })}
+                    className="h-10 text-base sm:text-sm font-semibold"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Descripción</Label>
+                  <Input
+                    value={editAdjForm.description}
+                    onChange={(e) => setEditAdjForm({ ...editAdjForm, description: e.target.value })}
+                    className="h-10 text-base sm:text-sm"
+                    placeholder="Descripción del ajuste"
+                  />
+                </div>
+                <div className="flex flex-col-reverse sm:flex-row gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10"
+                    onClick={() => setEditingAdjMeta(false)}
+                    disabled={updateAdj.isPending}
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Cancelar
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-10 font-medium"
+                    style={{ background: BRAND_BLUE }}
+                    disabled={updateAdj.isPending || !editAdjForm.adjustmentId.trim()}
+                    onClick={() => {
+                      updateAdj.mutate({
+                        id: viewingAdj!,
+                        adjustmentId: editAdjForm.adjustmentId.trim(),
+                        description: editAdjForm.description.trim(),
+                      });
+                    }}
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    {updateAdj.isPending ? "Guardando..." : "Guardar"}
+                  </Button>
+                </div>
               </div>
-              <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>{adjDetail.description}</p>
-            </div>
+            ) : (
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl font-bold tracking-tight truncate" style={{ color: "hsl(207 55% 15%)" }}>{adjDetail.adjustmentId}</h1>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${status.bg} ${status.text} ${status.border} border`}>
+                    {status.label}
+                  </span>
+                  {adjDetail.estado !== "cancelado" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      title="Editar nombre"
+                      onClick={() => {
+                        setEditAdjForm({
+                          adjustmentId: adjDetail.adjustmentId,
+                          description: adjDetail.description || "",
+                        });
+                        setEditingAdjMeta(true);
+                      }}
+                    >
+                      <Pencil className="w-4 h-4" style={{ color: BRAND_BLUE }} />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>{adjDetail.description || "Sin descripción"}</p>
+              </div>
+            )}
           </div>
         </div>
 
