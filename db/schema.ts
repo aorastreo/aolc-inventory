@@ -589,3 +589,34 @@ export const hrAttendanceEvents = mysqlTable("hrAttendanceEvents", {
 
 export type HrAttendanceEvent = typeof hrAttendanceEvents.$inferSelect;
 export type InsertHrAttendanceEvent = typeof hrAttendanceEvents.$inferInsert;
+
+/** Saved settlement estimates (Costa Rica labor liquidation). */
+export const hrLiquidaciones = mysqlTable("hrLiquidaciones", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  employeeId: bigint("employeeId", { mode: "number", unsigned: true }).notNull(),
+  tipoSalida: mysqlEnum("tipoSalida", [
+    "renuncia",
+    "despido_con_responsabilidad",
+    "despido_sin_responsabilidad",
+  ]).notNull(),
+  fechaIngreso: varchar("fechaIngreso", { length: 20 }).notNull(),
+  fechaSalida: varchar("fechaSalida", { length: 20 }).notNull(),
+  promedioMensual: decimal("promedioMensual", { precision: 12, scale: 2 }).notNull(),
+  tipoSalario: mysqlEnum("tipoSalario", ["semanal", "quincenal", "mensual"]).notNull(),
+  pagaPreaviso: boolean("pagaPreaviso").default(true).notNull(),
+  preavisoMonto: decimal("preavisoMonto", { precision: 12, scale: 2 }).default("0"),
+  cesantiaMonto: decimal("cesantiaMonto", { precision: 12, scale: 2 }).default("0"),
+  vacacionesMonto: decimal("vacacionesMonto", { precision: 12, scale: 2 }).default("0"),
+  aguinaldoMonto: decimal("aguinaldoMonto", { precision: 12, scale: 2 }).default("0"),
+  salariosPendientes: decimal("salariosPendientes", { precision: 12, scale: 2 }).default("0"),
+  total: decimal("total", { precision: 12, scale: 2 }).notNull(),
+  detalleJson: text("detalleJson"),
+  nota: varchar("nota", { length: 500 }),
+  createdBy: varchar("createdBy", { length: 255 }),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type HrLiquidacion = typeof hrLiquidaciones.$inferSelect;
+export type InsertHrLiquidacion = typeof hrLiquidaciones.$inferInsert;

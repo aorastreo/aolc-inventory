@@ -1,14 +1,29 @@
 import { z } from "zod";
 import { createRouter, authedQuery, managerQuery } from "../middleware";
 import { getDb } from "../queries/connection";
-import { hrEmployees, hrStoreSchedules, hrAttendanceEvents, stores } from "@db/schema";
+import { hrEmployees, hrStoreSchedules, hrAttendanceEvents, hrLiquidaciones, stores } from "@db/schema";
 import { and, desc, eq, gte, lte, ne } from "drizzle-orm";
 import { ensureEnterpriseSchema } from "../lib/enterprise-schema";
+import { calcularLiquidacion } from "../lib/liquidacion-cr";
 
 const BODEGA_STORE_ID = 1;
 
 const tipoSalarioEnum = z.enum(["semanal", "quincenal", "mensual"]);
 const eventoTipoEnum = z.enum(["ausencia", "tardanza", "salida_tarde"]);
+const tipoSalidaEnum = z.enum(["renuncia", "despido_con_responsabilidad", "despido_sin_responsabilidad"]);
+
+const liquidacionInputShape = z.object({
+  employeeId: z.number(),
+  tipoSalida: tipoSalidaEnum,
+  fechaSalida: z.string().min(1),
+  promedioMensual: z.string().optional(),
+  pagaPreaviso: z.boolean().optional(),
+  diasVacaciones: z.number().optional(),
+  sumaSalariosAguinaldo: z.string().optional(),
+  salariosPendientes: z.string().optional(),
+  marcarInactivo: z.boolean().optional(),
+  nota: z.string().optional(),
+});
 
 const DIA_LABELS = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
@@ -371,5 +386,133 @@ export const hrRouter = createRouter({
           minutosExtra: salidas.reduce((s, t) => s + (t.minutos || 0), 0),
         };
       }).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+    }),
+
+  // ---------- Liquidación (Costa Rica) ----------
+  previewLiquidacion: managerQuery
+    .input(liquidacionInputShape)
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const [emp] = await db.select().from(hrEmployees).where(and(
+        eq(hrEmployees.id, input.employeeId),
+        eq(hrEmployees.isActive, true),
+      )).limit(1);
+      if (!emp) throw new Error("Empleado no encontrado");
+
+      const promedio = Number(input.promedioMensual || emp.salarioBase);
+      if (!Number.isFinite(promedio) || promedio <= 0) throw new Error("Promedio salarial inválido");
+
+      const result = calcularLiquidacion({
+        tipoSalida: input.tipoSalida,
+        fechaIngreso: emp.fechaIngreso,
+        fechaSalida: input.fechaSalida,
+        promedioMensual: promedio,
+        tipoSalario: emp.tipoSalario as "semanal" | "quincenal" | "mensual",
+        pagaPreaviso: input.pagaPreaviso !== false,
+        diasVacaciones: input.diasVacaciones,
+        sumaSalariosAguinaldo: input.sumaSalariosAguinaldo != null ? Number(input.sumaSalariosAguinaldo) : null,
+        salariosPendientes: input.salariosPendientes != null ? Number(input.salariosPendientes) : 0,
+      });
+
+      return {
+        employee: {
+          id: emp.id,
+          storeId: emp.storeId,
+          nombre: `${emp.nombre} ${emp.apellidos}`,
+          puesto: emp.puesto,
+          fechaIngreso: emp.fechaIngreso,
+          salarioBase: emp.salarioBase,
+          tipoSalario: emp.tipoSalario,
+        },
+        ...result,
+      };
+    }),
+
+  saveLiquidacion: managerQuery
+    .input(liquidacionInputShape)
+    .mutation(async ({ input, ctx }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const [emp] = await db.select().from(hrEmployees).where(and(
+        eq(hrEmployees.id, input.employeeId),
+        eq(hrEmployees.isActive, true),
+      )).limit(1);
+      if (!emp) throw new Error("Empleado no encontrado");
+
+      const promedio = Number(input.promedioMensual || emp.salarioBase);
+      if (!Number.isFinite(promedio) || promedio <= 0) throw new Error("Promedio salarial inválido");
+
+      const result = calcularLiquidacion({
+        tipoSalida: input.tipoSalida,
+        fechaIngreso: emp.fechaIngreso,
+        fechaSalida: input.fechaSalida,
+        promedioMensual: promedio,
+        tipoSalario: emp.tipoSalario as "semanal" | "quincenal" | "mensual",
+        pagaPreaviso: input.pagaPreaviso !== false,
+        diasVacaciones: input.diasVacaciones,
+        sumaSalariosAguinaldo: input.sumaSalariosAguinaldo != null ? Number(input.sumaSalariosAguinaldo) : null,
+        salariosPendientes: input.salariosPendientes != null ? Number(input.salariosPendientes) : 0,
+      });
+
+      const insertResult = await db.insert(hrLiquidaciones).values({
+        storeId: emp.storeId,
+        employeeId: emp.id,
+        tipoSalida: input.tipoSalida,
+        fechaIngreso: emp.fechaIngreso,
+        fechaSalida: input.fechaSalida,
+        promedioMensual: String(promedio),
+        tipoSalario: emp.tipoSalario,
+        pagaPreaviso: input.pagaPreaviso !== false,
+        preavisoMonto: String(result.preavisoMonto),
+        cesantiaMonto: String(result.cesantiaMonto),
+        vacacionesMonto: String(result.vacacionesMonto),
+        aguinaldoMonto: String(result.aguinaldoMonto),
+        salariosPendientes: String(result.salariosPendientes),
+        total: String(result.total),
+        detalleJson: JSON.stringify(result),
+        nota: input.nota?.trim() || null,
+        createdBy: ctx.user?.name || ctx.user?.unionId || null,
+      });
+
+      if (input.marcarInactivo) {
+        await db.update(hrEmployees).set({ estado: "inactivo" }).where(eq(hrEmployees.id, emp.id));
+      }
+
+      return { id: Number(insertResult[0].insertId), total: result.total, result };
+    }),
+
+  liquidaciones: authedQuery
+    .input(z.object({ storeId: z.number().optional() }).optional())
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const conditions = [eq(hrLiquidaciones.isActive, true)];
+      if (input?.storeId != null) conditions.push(eq(hrLiquidaciones.storeId, input.storeId));
+      const rows = await db.select().from(hrLiquidaciones).where(and(...conditions)).orderBy(desc(hrLiquidaciones.id));
+      const emps = await db.select().from(hrEmployees);
+      const empMap = new Map(emps.map((e) => [e.id, e]));
+      const TIPO: Record<string, string> = {
+        renuncia: "Renuncia",
+        despido_con_responsabilidad: "Despido con responsabilidad",
+        despido_sin_responsabilidad: "Despido sin responsabilidad",
+      };
+      return rows.map((r) => {
+        const emp = empMap.get(r.employeeId);
+        return {
+          ...r,
+          tipoSalidaLabel: TIPO[r.tipoSalida] || r.tipoSalida,
+          empleadoNombre: emp ? `${emp.nombre} ${emp.apellidos}` : `Empleado #${r.employeeId}`,
+        };
+      });
+    }),
+
+  deleteLiquidacion: managerQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      await db.update(hrLiquidaciones).set({ isActive: false }).where(eq(hrLiquidaciones.id, input.id));
+      return { success: true };
     }),
 });

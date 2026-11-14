@@ -229,6 +229,35 @@ export async function ensureEnterpriseSchema() {
       )`,
     );
 
+    await tryExec(
+      conn,
+      `CREATE TABLE IF NOT EXISTS hrLiquidaciones (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        storeId BIGINT UNSIGNED NOT NULL,
+        employeeId BIGINT UNSIGNED NOT NULL,
+        tipoSalida ENUM('renuncia','despido_con_responsabilidad','despido_sin_responsabilidad') NOT NULL,
+        fechaIngreso VARCHAR(20) NOT NULL,
+        fechaSalida VARCHAR(20) NOT NULL,
+        promedioMensual DECIMAL(12,2) NOT NULL,
+        tipoSalario ENUM('semanal','quincenal','mensual') NOT NULL,
+        pagaPreaviso BOOLEAN NOT NULL DEFAULT TRUE,
+        preavisoMonto DECIMAL(12,2) DEFAULT 0,
+        cesantiaMonto DECIMAL(12,2) DEFAULT 0,
+        vacacionesMonto DECIMAL(12,2) DEFAULT 0,
+        aguinaldoMonto DECIMAL(12,2) DEFAULT 0,
+        salariosPendientes DECIMAL(12,2) DEFAULT 0,
+        total DECIMAL(12,2) NOT NULL,
+        detalleJson TEXT NULL,
+        nota VARCHAR(500) NULL,
+        createdBy VARCHAR(255) NULL,
+        isActive BOOLEAN NOT NULL DEFAULT TRUE,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        INDEX idx_hr_liq_store (storeId),
+        INDEX idx_hr_liq_employee (employeeId),
+        INDEX idx_hr_liq_fecha (fechaSalida)
+      )`,
+    );
+
     ready = true;
     console.log("[enterprise-schema] Ready (additive columns + inventory_movements + finance + hr)");
   } finally {

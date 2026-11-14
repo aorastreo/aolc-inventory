@@ -6,13 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Users, Clock, AlertTriangle, Plus, Trash2, Pencil, CalendarDays, Store,
+  Users, Clock, AlertTriangle, Plus, Trash2, Pencil, CalendarDays, Store, Scale,
 } from "lucide-react";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
 
-type Tab = "empleados" | "horarios" | "excepciones" | "resumen";
+type Tab = "empleados" | "horarios" | "excepciones" | "resumen" | "liquidacion";
 
 function todayStr() {
   const d = new Date();
@@ -64,7 +64,7 @@ export default function PersonalPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight" style={{ color: "hsl(207 55% 15%)" }}>Personal</h1>
           <p className="text-sm mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>
-            Empleados, horarios por tienda y solo excepciones (faltas, tardanzas, salidas tarde)
+            Empleados, horarios, excepciones y liquidación (leyes de Costa Rica)
           </p>
         </div>
       </div>
@@ -98,6 +98,7 @@ export default function PersonalPage() {
           ["empleados", "Empleados"],
           ["horarios", "Horarios"],
           ["resumen", "Resumen"],
+          ["liquidacion", "Liquidación"],
         ] as [Tab, string][]).map(([id, label]) => (
           <button
             key={id}
@@ -139,6 +140,15 @@ export default function PersonalPage() {
       )}
       {tab === "resumen" && (
         <SummaryTab rows={summary || []} storeName={storeName} desde={desde} hasta={hasta} />
+      )}
+      {tab === "liquidacion" && (
+        <LiquidacionTab
+          storeFilter={storeFilter}
+          stores={hrStores || []}
+          employees={employees || []}
+          storeName={storeName}
+          utils={utils}
+        />
       )}
     </div>
   );
@@ -819,6 +829,339 @@ function SummaryTab({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const SALIDA_LABEL: Record<string, string> = {
+  renuncia: "Renuncia",
+  despido_con_responsabilidad: "Despido con responsabilidad",
+  despido_sin_responsabilidad: "Despido sin responsabilidad",
+};
+
+function LiquidacionTab({
+  storeFilter, stores, employees, storeName, utils,
+}: {
+  storeFilter: number | "all";
+  stores: { id: number; name: string }[];
+  employees: any[];
+  storeName: (id: number) => string;
+  utils: ReturnType<typeof trpc.useUtils>;
+}) {
+  const storeIdNum = storeFilter === "all" ? undefined : storeFilter;
+  const { data: saved, isLoading: loadingSaved } = trpc.hr.liquidaciones.useQuery({ storeId: storeIdNum });
+
+  const [form, setForm] = useState({
+    employeeId: "",
+    tipoSalida: "despido_con_responsabilidad" as "renuncia" | "despido_con_responsabilidad" | "despido_sin_responsabilidad",
+    fechaSalida: todayStr(),
+    promedioMensual: "",
+    pagaPreaviso: true,
+    diasVacaciones: "",
+    sumaSalariosAguinaldo: "",
+    salariosPendientes: "",
+    marcarInactivo: true,
+    nota: "",
+  });
+  const [preview, setPreview] = useState<any | null>(null);
+  const [error, setError] = useState("");
+
+  const emps = useMemo(() => {
+    const list = employees.filter((e) => e.estado === "activo");
+    if (storeFilter === "all") return list;
+    return list.filter((e) => e.storeId === storeFilter);
+  }, [employees, storeFilter]);
+
+  const selected = emps.find((e) => e.id === Number(form.employeeId));
+
+  useEffect(() => {
+    if (selected && !form.promedioMensual) {
+      setForm((f) => ({ ...f, promedioMensual: String(selected.salarioBase) }));
+    }
+  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const previewMut = trpc.hr.previewLiquidacion.useMutation({
+    onSuccess: (data) => { setPreview(data); setError(""); },
+    onError: (e) => setError(e.message),
+  });
+  const saveMut = trpc.hr.saveLiquidacion.useMutation({
+    onSuccess: () => {
+      utils.hr.liquidaciones.invalidate();
+      utils.hr.employees.invalidate();
+      setError("");
+      alert("Liquidación guardada");
+    },
+    onError: (e) => setError(e.message),
+  });
+  const deleteMut = trpc.hr.deleteLiquidacion.useMutation({
+    onSuccess: () => utils.hr.liquidaciones.invalidate(),
+  });
+
+  function buildInput() {
+    return {
+      employeeId: Number(form.employeeId),
+      tipoSalida: form.tipoSalida,
+      fechaSalida: form.fechaSalida,
+      promedioMensual: form.promedioMensual || undefined,
+      pagaPreaviso: form.pagaPreaviso,
+      diasVacaciones: form.diasVacaciones !== "" ? Number(form.diasVacaciones) : undefined,
+      sumaSalariosAguinaldo: form.sumaSalariosAguinaldo || undefined,
+      salariosPendientes: form.salariosPendientes || undefined,
+      marcarInactivo: form.marcarInactivo,
+      nota: form.nota || undefined,
+    };
+  }
+
+  function calc() {
+    setError("");
+    if (!form.employeeId) {
+      setError("Seleccioná un empleado");
+      return;
+    }
+    previewMut.mutate(buildInput());
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border shadow-sm">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Scale className="w-5 h-5" style={{ color: BRAND_RED }} />
+            <h2 className="font-semibold" style={{ color: "hsl(207 55% 15%)" }}>Calcular liquidación</h2>
+          </div>
+          <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
+            Estimación según Código de Trabajo (Arts. 28–30), aguinaldo y vacaciones. Orientativo — confirmá casos especiales con MTSS o abogado laboral.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <Label>Empleado</Label>
+              <select
+                className="w-full h-10 border rounded-md px-3 text-sm"
+                style={{ borderColor: "hsl(210 20% 88%)" }}
+                value={form.employeeId}
+                onChange={(e) => {
+                  const emp = emps.find((x) => x.id === Number(e.target.value));
+                  setForm({
+                    ...form,
+                    employeeId: e.target.value,
+                    promedioMensual: emp ? String(emp.salarioBase) : "",
+                  });
+                  setPreview(null);
+                }}
+              >
+                <option value="">Seleccionar</option>
+                {emps.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nombre} {e.apellidos} · {storeName(e.storeId)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>Tipo de salida</Label>
+              <select
+                className="w-full h-10 border rounded-md px-3 text-sm"
+                style={{ borderColor: "hsl(210 20% 88%)" }}
+                value={form.tipoSalida}
+                onChange={(e) => {
+                  setForm({ ...form, tipoSalida: e.target.value as any });
+                  setPreview(null);
+                }}
+              >
+                <option value="renuncia">Renuncia</option>
+                <option value="despido_con_responsabilidad">Despido con responsabilidad</option>
+                <option value="despido_sin_responsabilidad">Despido sin responsabilidad (falta grave)</option>
+              </select>
+            </div>
+            <div>
+              <Label>Fecha de salida</Label>
+              <Input
+                type="date"
+                value={form.fechaSalida}
+                onChange={(e) => { setForm({ ...form, fechaSalida: e.target.value }); setPreview(null); }}
+              />
+            </div>
+            <div>
+              <Label>Promedio salarial mensual (últimos 6 meses)</Label>
+              <Input
+                type="number"
+                value={form.promedioMensual}
+                onChange={(e) => setForm({ ...form, promedioMensual: e.target.value })}
+                placeholder="Ej. 450000"
+              />
+            </div>
+            <div>
+              <Label>Días vacaciones a pagar (opcional)</Label>
+              <Input
+                type="number"
+                value={form.diasVacaciones}
+                onChange={(e) => setForm({ ...form, diasVacaciones: e.target.value })}
+                placeholder="Vacío = cálculo proporcional"
+              />
+            </div>
+            <div>
+              <Label>Suma salarios aguinaldo (opcional)</Label>
+              <Input
+                type="number"
+                value={form.sumaSalariosAguinaldo}
+                onChange={(e) => setForm({ ...form, sumaSalariosAguinaldo: e.target.value })}
+                placeholder="Vacío = promedio × meses del período"
+              />
+            </div>
+            <div>
+              <Label>Salarios pendientes</Label>
+              <Input
+                type="number"
+                value={form.salariosPendientes}
+                onChange={(e) => setForm({ ...form, salariosPendientes: e.target.value })}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <Label>Nota</Label>
+              <Input value={form.nota} onChange={(e) => setForm({ ...form, nota: e.target.value })} />
+            </div>
+          </div>
+
+          {form.tipoSalida === "despido_con_responsabilidad" && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.pagaPreaviso}
+                onChange={(e) => setForm({ ...form, pagaPreaviso: e.target.checked })}
+              />
+              Pagar preaviso en dinero (no se trabajó el aviso)
+            </label>
+          )}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.marcarInactivo}
+              onChange={(e) => setForm({ ...form, marcarInactivo: e.target.checked })}
+            />
+            Al guardar, marcar empleado como inactivo
+          </label>
+
+          {selected && (
+            <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
+              Ingreso: {selected.fechaIngreso} · Puesto: {selected.puesto} · Pago: {selected.tipoSalario}
+            </p>
+          )}
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              className="font-medium"
+              style={{ background: BRAND_BLUE }}
+              disabled={previewMut.isPending}
+              onClick={calc}
+            >
+              {previewMut.isPending ? "Calculando…" : "Calcular"}
+            </Button>
+            <Button
+              className="font-medium"
+              style={{ background: BRAND_RED }}
+              disabled={!preview || saveMut.isPending}
+              onClick={() => {
+                if (!confirm(`¿Guardar liquidación por ${money(preview.total)}?`)) return;
+                saveMut.mutate(buildInput());
+              }}
+            >
+              {saveMut.isPending ? "Guardando…" : "Guardar liquidación"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {preview && (
+        <Card className="border shadow-sm">
+          <CardContent className="p-5 space-y-4">
+            <div>
+              <h3 className="font-semibold text-lg" style={{ color: "hsl(207 55% 15%)" }}>
+                {preview.employee.nombre}
+              </h3>
+              <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
+                {SALIDA_LABEL[form.tipoSalida]} · Antigüedad {preview.antigüedadLabel} · Diario {money(preview.salarioDiario)}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {preview.rubros.map((r: any) => (
+                <div
+                  key={r.id}
+                  className="flex items-start justify-between gap-3 py-2 border-b"
+                  style={{ borderColor: "hsl(210 20% 94%)" }}
+                >
+                  <div>
+                    <div className="text-sm font-medium" style={{ color: "hsl(207 55% 15%)" }}>{r.label}</div>
+                    <div className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>{r.detalle}</div>
+                  </div>
+                  <div className="font-semibold text-sm whitespace-nowrap">{money(r.monto)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              className="flex items-center justify-between rounded-lg px-4 py-3"
+              style={{ background: "rgba(178,34,52,0.08)" }}
+            >
+              <span className="font-bold" style={{ color: BRAND_RED }}>Total estimado</span>
+              <span className="font-bold text-lg" style={{ color: BRAND_RED }}>{money(preview.total)}</span>
+            </div>
+
+            {preview.advertencias?.length > 0 && (
+              <ul className="text-xs space-y-1" style={{ color: "#92400E" }}>
+                {preview.advertencias.map((a: string, i: number) => (
+                  <li key={i}>• {a}</li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <div>
+        <h3 className="font-semibold mb-3" style={{ color: "hsl(207 55% 15%)" }}>Liquidaciones guardadas</h3>
+        {loadingSaved ? (
+          <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>Cargando…</p>
+        ) : !saved?.length ? (
+          <Card className="border shadow-sm">
+            <CardContent className="p-5 text-sm" style={{ color: "hsl(207 20% 45%)" }}>
+              Todavía no hay liquidaciones guardadas.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {saved.map((row) => (
+              <Card key={row.id} className="border shadow-sm">
+                <CardContent className="p-4 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-sm" style={{ color: "hsl(207 55% 15%)" }}>
+                      {row.empleadoNombre}
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>
+                      {row.tipoSalidaLabel} · Salida {row.fechaSalida} · {storeName(row.storeId)}
+                    </p>
+                    <p className="text-sm font-bold mt-1" style={{ color: BRAND_RED }}>{money(row.total)}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 w-10 p-0"
+                    onClick={() => {
+                      if (confirm("¿Eliminar esta liquidación guardada?")) deleteMut.mutate({ id: row.id });
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
