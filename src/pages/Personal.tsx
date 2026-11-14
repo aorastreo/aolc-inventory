@@ -83,7 +83,7 @@ export default function PersonalPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight" style={{ color: "hsl(207 55% 15%)" }}>Personal</h1>
           <p className="text-sm mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>
-            Empleados, horarios, excepciones y liquidación (leyes de Costa Rica)
+            Empleados (tiendas + Bodega), horarios, excepciones, quincena y liquidación
           </p>
         </div>
       </div>

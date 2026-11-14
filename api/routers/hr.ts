@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createRouter, authedQuery, managerQuery } from "../middleware";
 import { getDb } from "../queries/connection";
 import { hrEmployees, hrStoreSchedules, hrAttendanceEvents, hrLiquidaciones, stores } from "@db/schema";
-import { and, desc, eq, gte, lte, ne } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { ensureEnterpriseSchema } from "../lib/enterprise-schema";
 import { calcularLiquidacion } from "../lib/liquidacion-cr";
 
@@ -45,20 +45,22 @@ function minutesToHHMM(total: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-async function assertRetailStore(db: ReturnType<typeof getDb>, storeId: number) {
-  if (storeId === BODEGA_STORE_ID) throw new Error("Bodega no aplica para personal de tienda");
+async function assertHrStore(db: ReturnType<typeof getDb>, storeId: number) {
   const [row] = await db.select().from(stores).where(and(eq(stores.id, storeId), eq(stores.isActive, true))).limit(1);
-  if (!row) throw new Error("Tienda no encontrada");
+  if (!row) throw new Error("Tienda/bodega no encontrada");
   return row;
 }
 
-/** Horarios oficiales por tienda (Lun–Sáb). Dom = no laborable. */
-function hoursForStore(store: { name?: string | null; slug?: string | null }): { entrada: string; salida: string } {
+/** Horarios oficiales (Lun–Sáb). Dom = no laborable. */
+function hoursForStore(store: { id?: number; name?: string | null; slug?: string | null }): { entrada: string; salida: string } {
   const key = `${store.slug || ""} ${store.name || ""}`.toLowerCase();
+  if (store.id === BODEGA_STORE_ID || key.includes("bodega")) {
+    return { entrada: "07:00", salida: "17:00" }; // 7 a 5
+  }
   if (key.includes("los-chiles") || key.includes("los chiles")) {
     return { entrada: "09:00", salida: "19:00" }; // 9 a 7
   }
-  // Pavón y Santa Rosa (y demás tiendas retail por defecto)
+  // Pavón y Santa Rosa
   return { entrada: "08:00", salida: "18:00" }; // 8 a 6
 }
 
@@ -66,7 +68,7 @@ async function ensureDefaultSchedule(db: ReturnType<typeof getDb>, storeId: numb
   const existing = await db.select().from(hrStoreSchedules).where(and(eq(hrStoreSchedules.storeId, storeId), eq(hrStoreSchedules.isActive, true)));
   if (existing.length > 0) return existing;
 
-  const store = await assertRetailStore(db, storeId);
+  const store = await assertHrStore(db, storeId);
   const { entrada, salida } = hoursForStore(store);
 
   const defaults = [
@@ -98,11 +100,11 @@ async function ensureDefaultSchedule(db: ReturnType<typeof getDb>, storeId: numb
 
 let officialHoursApplied = false;
 
-/** Aplica horarios oficiales de las 3 tiendas una vez por arranque del servidor. */
+/** Aplica horarios oficiales (tiendas + Bodega) una vez por arranque del servidor. */
 async function applyOfficialStoreHours(db: ReturnType<typeof getDb>) {
   if (officialHoursApplied) return;
-  const retail = await db.select().from(stores).where(and(eq(stores.isActive, true), ne(stores.id, BODEGA_STORE_ID)));
-  for (const store of retail) {
+  const allStores = await db.select().from(stores).where(eq(stores.isActive, true));
+  for (const store of allStores) {
     const { entrada, salida } = hoursForStore(store);
     const existing = await db.select().from(hrStoreSchedules).where(eq(hrStoreSchedules.storeId, store.id));
     if (existing.length === 0) {
@@ -125,8 +127,13 @@ export const hrRouter = createRouter({
   stores: authedQuery.query(async () => {
     const db = getDb();
     await ensureEnterpriseSchema();
-    const rows = await db.select().from(stores).where(and(eq(stores.isActive, true), ne(stores.id, BODEGA_STORE_ID)));
-    return rows.sort((a, b) => a.name.localeCompare(b.name, "es"));
+    const rows = await db.select().from(stores).where(eq(stores.isActive, true));
+    // Bodega primero, luego el resto alfabético
+    return rows.sort((a, b) => {
+      if (a.id === BODEGA_STORE_ID) return -1;
+      if (b.id === BODEGA_STORE_ID) return 1;
+      return a.name.localeCompare(b.name, "es");
+    });
   }),
 
   // ---------- Employees ----------
@@ -155,7 +162,7 @@ export const hrRouter = createRouter({
     .mutation(async ({ input }) => {
       const db = getDb();
       await ensureEnterpriseSchema();
-      await assertRetailStore(db, input.storeId);
+      await assertHrStore(db, input.storeId);
       const salario = Number(input.salarioBase);
       if (!Number.isFinite(salario) || salario <= 0) throw new Error("Salario inválido");
       const result = await db.insert(hrEmployees).values({
@@ -195,7 +202,7 @@ export const hrRouter = createRouter({
       const { id, ...raw } = input;
       const setData: Record<string, unknown> = {};
       if (raw.storeId !== undefined) {
-        await assertRetailStore(db, raw.storeId);
+        await assertHrStore(db, raw.storeId);
         setData.storeId = raw.storeId;
       }
       if (raw.cedula !== undefined) setData.cedula = raw.cedula.trim() || null;
@@ -231,7 +238,7 @@ export const hrRouter = createRouter({
     .query(async ({ input }) => {
       const db = getDb();
       await ensureEnterpriseSchema();
-      await assertRetailStore(db, input.storeId);
+      await assertHrStore(db, input.storeId);
       // Una vez: deja Los Chiles 9–7 y Pavón/Santa Rosa 8–6
       await applyOfficialStoreHours(db);
       const rows = await ensureDefaultSchedule(db, input.storeId);
@@ -253,7 +260,7 @@ export const hrRouter = createRouter({
     .mutation(async ({ input }) => {
       const db = getDb();
       await ensureEnterpriseSchema();
-      await assertRetailStore(db, input.storeId);
+      await assertHrStore(db, input.storeId);
       await ensureDefaultSchedule(db, input.storeId);
 
       for (const day of input.days) {
@@ -330,7 +337,7 @@ export const hrRouter = createRouter({
     .mutation(async ({ input, ctx }) => {
       const db = getDb();
       await ensureEnterpriseSchema();
-      await assertRetailStore(db, input.storeId);
+      await assertHrStore(db, input.storeId);
 
       const [emp] = await db.select().from(hrEmployees).where(and(
         eq(hrEmployees.id, input.employeeId),

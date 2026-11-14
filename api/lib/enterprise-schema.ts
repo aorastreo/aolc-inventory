@@ -258,7 +258,15 @@ export async function ensureEnterpriseSchema() {
       )`,
     );
 
-    // Horarios oficiales: Los Chiles 9–7; Pavón y Santa Rosa 8–6 (Lun–Sáb)
+    // Horarios oficiales: Bodega 7–5; Los Chiles 9–7; Pavón y Santa Rosa 8–6 (Lun–Sáb)
+    await tryExec(
+      conn,
+      `UPDATE hrStoreSchedules h
+       JOIN stores s ON s.id = h.storeId
+       SET h.horaEntrada = '07:00', h.horaSalida = '17:00',
+           h.laborable = IF(h.diaSemana = 7, 0, 1), h.isActive = 1
+       WHERE s.id = 1 OR s.slug = 'bodega' OR s.name LIKE '%Bodega%'`,
+    );
     await tryExec(
       conn,
       `UPDATE hrStoreSchedules h
