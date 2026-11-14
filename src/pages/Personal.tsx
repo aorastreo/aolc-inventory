@@ -45,6 +45,7 @@ const TIPO_LABEL: Record<string, string> = {
   ausencia: "No llegó",
   tardanza: "Llegó tarde",
   salida_tarde: "Salió más tarde",
+  salida_parcial: "Salió un rato",
 };
 
 export default function PersonalPage() {
@@ -599,15 +600,17 @@ function ExceptionsTab({
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({
+  const emptyForm = () => ({
     storeId: storeFilter === "all" ? "" : String(storeFilter),
     employeeId: "",
     fecha: todayStr(),
-    tipo: "tardanza" as "ausencia" | "tardanza" | "salida_tarde",
+    tipo: "tardanza" as "ausencia" | "tardanza" | "salida_tarde" | "salida_parcial",
     horaReal: "",
+    horaDesde: "",
     justificada: false,
     nota: "",
   });
+  const [form, setForm] = useState(emptyForm);
 
   const empsForStore = useMemo(() => {
     if (!form.storeId) return employees.filter((e) => e.estado === "activo");
@@ -618,22 +621,19 @@ function ExceptionsTab({
     onSuccess: () => {
       utils.hr.events.invalidate();
       utils.hr.summaryByEmployee.invalidate();
+      utils.hr.quincenaPay.invalidate();
       setOpen(false);
       setError("");
-      setForm({
-        storeId: storeFilter === "all" ? "" : String(storeFilter),
-        employeeId: "",
-        fecha: todayStr(),
-        tipo: "tardanza",
-        horaReal: "",
-        justificada: false,
-        nota: "",
-      });
+      setForm(emptyForm());
     },
     onError: (e) => setError(e.message),
   });
   const deleteEvent = trpc.hr.deleteEvent.useMutation({
-    onSuccess: () => { utils.hr.events.invalidate(); utils.hr.summaryByEmployee.invalidate(); },
+    onSuccess: () => {
+      utils.hr.events.invalidate();
+      utils.hr.summaryByEmployee.invalidate();
+      utils.hr.quincenaPay.invalidate();
+    },
   });
 
   function save() {
@@ -642,7 +642,12 @@ function ExceptionsTab({
       setError("Completá tienda, empleado y fecha");
       return;
     }
-    if (form.tipo !== "ausencia" && !form.horaReal) {
+    if (form.tipo === "salida_parcial") {
+      if (!form.horaDesde || !form.horaReal) {
+        setError("Indicá de qué hora a qué hora salió (ej. 12:00 a 15:00)");
+        return;
+      }
+    } else if (form.tipo !== "ausencia" && !form.horaReal) {
       setError("Indicá la hora real");
       return;
     }
@@ -652,6 +657,7 @@ function ExceptionsTab({
       fecha: form.fecha,
       tipo: form.tipo,
       horaReal: form.tipo === "ausencia" ? undefined : form.horaReal,
+      horaDesde: form.tipo === "salida_parcial" ? form.horaDesde : undefined,
       justificada: form.justificada,
       nota: form.nota || undefined,
     });
@@ -668,15 +674,7 @@ function ExceptionsTab({
           style={{ background: BRAND_RED }}
           onClick={() => {
             setError("");
-            setForm({
-              storeId: storeFilter === "all" ? "" : String(storeFilter),
-              employeeId: "",
-              fecha: todayStr(),
-              tipo: "tardanza",
-              horaReal: "",
-              justificada: false,
-              nota: "",
-            });
+            setForm(emptyForm());
             setOpen(true);
           }}
         >
@@ -690,7 +688,7 @@ function ExceptionsTab({
       ) : events.length === 0 ? (
         <Card className="border shadow-sm">
           <CardContent className="p-6 text-sm" style={{ color: "hsl(207 20% 45%)" }}>
-            No hay excepciones en este rango. Si alguien faltó o llegó tarde, registralo acá.
+            No hay excepciones en este rango. Si alguien faltó, llegó tarde o salió un rato, registralo acá.
           </CardContent>
         </Card>
       ) : (
@@ -714,9 +712,15 @@ function ExceptionsTab({
                   <p className="text-sm mt-1" style={{ color: "hsl(207 55% 15%)" }}>{ev.empleadoNombre}</p>
                   <p className="text-xs mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>
                     {storeName(ev.storeId)}
-                    {ev.horaProgramada ? ` · Programado ${ev.horaProgramada}` : ""}
-                    {ev.horaReal ? ` · Real ${ev.horaReal}` : ""}
-                    {ev.tipo !== "ausencia" ? ` · ${ev.minutos} min` : ""}
+                    {ev.tipo === "salida_parcial" && ev.horaProgramada && ev.horaReal
+                      ? ` · De ${ev.horaProgramada} a ${ev.horaReal} · ${ev.minutos} min`
+                      : (
+                        <>
+                          {ev.horaProgramada ? ` · Programado ${ev.horaProgramada}` : ""}
+                          {ev.horaReal ? ` · Real ${ev.horaReal}` : ""}
+                          {ev.tipo !== "ausencia" ? ` · ${ev.minutos} min` : ""}
+                        </>
+                      )}
                   </p>
                   {ev.nota && <p className="text-xs mt-1 italic" style={{ color: "hsl(207 20% 55%)" }}>{ev.nota}</p>}
                 </div>
@@ -748,15 +752,16 @@ function ExceptionsTab({
                 className="w-full h-10 border rounded-md px-3 text-sm"
                 style={{ borderColor: "hsl(210 20% 88%)" }}
                 value={form.tipo}
-                onChange={(e) => setForm({ ...form, tipo: e.target.value as any, horaReal: "" })}
+                onChange={(e) => setForm({ ...form, tipo: e.target.value as any, horaReal: "", horaDesde: "" })}
               >
                 <option value="ausencia">No llegó</option>
                 <option value="tardanza">Llegó tarde</option>
-                <option value="salida_tarde">Salió más tarde</option>
+                <option value="salida_parcial">Salió un rato (ej. 12 a 3)</option>
+                <option value="salida_tarde">Salió más tarde (hora extra)</option>
               </select>
             </div>
             <div>
-              <Label>Tienda</Label>
+              <Label>Tienda / Bodega</Label>
               <select
                 className="w-full h-10 border rounded-md px-3 text-sm"
                 style={{ borderColor: "hsl(210 20% 88%)" }}
@@ -781,18 +786,28 @@ function ExceptionsTab({
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label>Fecha</Label>
-                <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
-              </div>
-              {form.tipo !== "ausencia" && (
+            <div>
+              <Label>Fecha</Label>
+              <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+            </div>
+            {form.tipo === "salida_parcial" && (
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>{form.tipo === "tardanza" ? "Hora en que llegó" : "Hora en que salió"}</Label>
+                  <Label>Salió a las</Label>
+                  <Input type="time" value={form.horaDesde} onChange={(e) => setForm({ ...form, horaDesde: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Regresó a las</Label>
                   <Input type="time" value={form.horaReal} onChange={(e) => setForm({ ...form, horaReal: e.target.value })} />
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+            {(form.tipo === "tardanza" || form.tipo === "salida_tarde") && (
+              <div>
+                <Label>{form.tipo === "tardanza" ? "Hora en que llegó" : "Hora en que salió"}</Label>
+                <Input type="time" value={form.horaReal} onChange={(e) => setForm({ ...form, horaReal: e.target.value })} />
+              </div>
+            )}
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -1111,7 +1126,7 @@ function QuincenaTab({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
                     <div style={{ color: "hsl(207 20% 45%)" }}>Bruto quincena</div>
                     <div className="font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{money(r.brutoPeriodo)}</div>
@@ -1131,6 +1146,13 @@ function QuincenaTab({
                     </div>
                   </div>
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
+                    <div style={{ color: "hsl(207 20% 45%)" }}>Desc. salió un rato</div>
+                    <div className="font-semibold" style={{ color: r.descParciales ? BRAND_RED : "hsl(207 55% 15%)" }}>
+                      −{money(r.descParciales || 0)}
+                      {r.minutosParciales ? ` (${r.minutosParciales} min)` : ""}
+                    </div>
+                  </div>
+                  <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
                     <div style={{ color: "hsl(207 20% 45%)" }}>Extras 1.5×</div>
                     <div className="font-semibold" style={{ color: r.montoExtras ? "#16A34A" : "hsl(207 55% 15%)" }}>
                       +{money(r.montoExtras)}
@@ -1145,7 +1167,9 @@ function QuincenaTab({
                       <div key={ev.id} className="flex justify-between gap-2">
                         <span>
                           {ev.fecha}: {TIPO_LABEL[ev.tipo] || ev.tipo}
-                          {ev.horaReal ? ` (${ev.horaReal})` : ""}
+                          {ev.tipo === "salida_parcial" && ev.horaProgramada && ev.horaReal
+                            ? ` (${ev.horaProgramada}–${ev.horaReal})`
+                            : ev.horaReal ? ` (${ev.horaReal})` : ""}
                           {ev.minutos ? ` · ${ev.minutos} min` : ""}
                           {ev.justificada ? " · justificada" : ""}
                         </span>
@@ -1200,7 +1224,7 @@ function SummaryTab({
                   <h3 className="font-semibold text-sm" style={{ color: "hsl(207 55% 15%)" }}>{r.nombre}</h3>
                   <span className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>{storeName(r.storeId)} · {r.puesto}</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
                     <div style={{ color: "hsl(207 20% 45%)" }}>Ausencias</div>
                     <div className="font-bold text-sm" style={{ color: "hsl(207 55% 15%)" }}>
@@ -1211,6 +1235,12 @@ function SummaryTab({
                     <div style={{ color: "hsl(207 20% 45%)" }}>Tardanzas</div>
                     <div className="font-bold text-sm" style={{ color: "hsl(207 55% 15%)" }}>
                       {r.tardanzas} · {r.minutosTarde} min
+                    </div>
+                  </div>
+                  <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
+                    <div style={{ color: "hsl(207 20% 45%)" }}>Salió un rato</div>
+                    <div className="font-bold text-sm" style={{ color: "hsl(207 55% 15%)" }}>
+                      {r.salidasParciales || 0} · {r.minutosParciales || 0} min
                     </div>
                   </div>
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>

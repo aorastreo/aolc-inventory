@@ -568,14 +568,14 @@ export type InsertHrStoreSchedule = typeof hrStoreSchedules.$inferInsert;
 
 /**
  * Only exceptions are stored. No row for a day = assumed on time / present.
- * tipo: ausencia | tardanza | salida_tarde
+ * tipo: ausencia | tardanza | salida_tarde | salida_parcial (ej. salió de 12 a 15)
  */
 export const hrAttendanceEvents = mysqlTable("hrAttendanceEvents", {
   id: serial("id").primaryKey(),
   storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
   employeeId: bigint("employeeId", { mode: "number", unsigned: true }).notNull(),
   fecha: varchar("fecha", { length: 20 }).notNull(),
-  tipo: mysqlEnum("tipo", ["ausencia", "tardanza", "salida_tarde"]).notNull(),
+  tipo: mysqlEnum("tipo", ["ausencia", "tardanza", "salida_tarde", "salida_parcial"]).notNull(),
   horaProgramada: varchar("horaProgramada", { length: 5 }),
   horaReal: varchar("horaReal", { length: 5 }),
   minutos: int("minutos").default(0).notNull(),

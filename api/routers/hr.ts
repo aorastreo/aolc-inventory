@@ -9,7 +9,7 @@ import { calcularLiquidacion } from "../lib/liquidacion-cr";
 const BODEGA_STORE_ID = 1;
 
 const tipoSalarioEnum = z.enum(["semanal", "quincenal", "mensual"]);
-const eventoTipoEnum = z.enum(["ausencia", "tardanza", "salida_tarde"]);
+const eventoTipoEnum = z.enum(["ausencia", "tardanza", "salida_tarde", "salida_parcial"]);
 const tipoSalidaEnum = z.enum(["renuncia", "despido_con_responsabilidad", "despido_sin_responsabilidad"]);
 
 const liquidacionInputShape = z.object({
@@ -330,7 +330,10 @@ export const hrRouter = createRouter({
       employeeId: z.number(),
       fecha: z.string().min(1),
       tipo: eventoTipoEnum,
+      /** Tardanza / salida tarde: hora real. Salida parcial: hora de regreso (hasta). */
       horaReal: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+      /** Salida parcial: hora en que se fue (desde), ej. 12:00 */
+      horaDesde: z.string().regex(/^\d{2}:\d{2}$/).optional(),
       justificada: z.boolean().optional(),
       nota: z.string().optional(),
     }))
@@ -344,17 +347,27 @@ export const hrRouter = createRouter({
         eq(hrEmployees.isActive, true),
       )).limit(1);
       if (!emp) throw new Error("Empleado no encontrado");
-      if (emp.storeId !== input.storeId) throw new Error("El empleado no pertenece a esa tienda");
+      if (emp.storeId !== input.storeId) throw new Error("El empleado no pertenece a esa tienda/bodega");
 
       const scheduleRows = await ensureDefaultSchedule(db, input.storeId);
       const wd = weekdayMon1(input.fecha);
       const day = scheduleRows.find((s) => s.diaSemana === wd);
 
       let horaProgramada: string | null = null;
+      let horaReal: string | null = null;
       let minutos = 0;
 
       if (input.tipo === "ausencia") {
         if (day && !day.laborable) throw new Error("Ese día no es laborable en el horario de la tienda");
+      } else if (input.tipo === "salida_parcial") {
+        if (!input.horaDesde || !input.horaReal) {
+          throw new Error("Indicá de qué hora a qué hora salió (ej. 12:00 a 15:00)");
+        }
+        if (!day || !day.laborable) throw new Error("Ese día no es laborable en el horario de la tienda");
+        minutos = timeToMinutes(input.horaReal) - timeToMinutes(input.horaDesde);
+        if (minutos <= 0) throw new Error("La hora de regreso debe ser después de la hora en que salió");
+        horaProgramada = input.horaDesde; // desde
+        horaReal = input.horaReal; // hasta
       } else {
         if (!input.horaReal) throw new Error("Indicá la hora real");
         if (!day || !day.laborable) throw new Error("Ese día no es laborable en el horario de la tienda");
@@ -363,10 +376,12 @@ export const hrRouter = createRouter({
           minutos = Math.max(0, timeToMinutes(input.horaReal) - timeToMinutes(day.horaEntrada));
           if (minutos <= 0) throw new Error("La hora indicada no es después de la entrada programada");
         } else {
+          // salida_tarde
           horaProgramada = day.horaSalida;
           minutos = Math.max(0, timeToMinutes(input.horaReal) - timeToMinutes(day.horaSalida));
           if (minutos <= 0) throw new Error("La hora indicada no es después de la salida programada");
         }
+        horaReal = input.horaReal;
       }
 
       const actor = ctx.user?.name || ctx.user?.unionId || null;
@@ -376,7 +391,7 @@ export const hrRouter = createRouter({
         fecha: input.fecha,
         tipo: input.tipo,
         horaProgramada,
-        horaReal: input.tipo === "ausencia" ? null : (input.horaReal || null),
+        horaReal,
         minutos,
         justificada: !!input.justificada,
         nota: input.nota?.trim() || null,
@@ -419,6 +434,7 @@ export const hrRouter = createRouter({
         const mine = events.filter((ev) => ev.employeeId === e.id);
         const ausencias = mine.filter((ev) => ev.tipo === "ausencia");
         const tardanzas = mine.filter((ev) => ev.tipo === "tardanza");
+        const parciales = mine.filter((ev) => ev.tipo === "salida_parcial");
         const salidas = mine.filter((ev) => ev.tipo === "salida_tarde");
         return {
           employeeId: e.id,
@@ -429,6 +445,8 @@ export const hrRouter = createRouter({
           ausenciasInjustificadas: ausencias.filter((a) => !a.justificada).length,
           tardanzas: tardanzas.length,
           minutosTarde: tardanzas.reduce((s, t) => s + (t.minutos || 0), 0),
+          salidasParciales: parciales.length,
+          minutosParciales: parciales.reduce((s, t) => s + (t.minutos || 0), 0),
           salidasTarde: salidas.length,
           minutosExtra: salidas.reduce((s, t) => s + (t.minutos || 0), 0),
         };
@@ -504,6 +522,7 @@ export const hrRouter = createRouter({
         // Rebaja siempre, justificada o no
         const ausencias = mine.filter((ev) => ev.tipo === "ausencia");
         const tardanzas = mine.filter((ev) => ev.tipo === "tardanza");
+        const parciales = mine.filter((ev) => ev.tipo === "salida_parcial");
         const extras = mine.filter((ev) => ev.tipo === "salida_tarde");
 
         const descAusencias = round2(ausencias.length * diario);
@@ -515,6 +534,14 @@ export const hrRouter = createRouter({
         }
         descTardanzas = round2(descTardanzas);
 
+        let descParciales = 0;
+        for (const p of parciales) {
+          const jornada = jornadaMinutos(e.storeId, p.fecha);
+          const vMin = diario / jornada;
+          descParciales += (p.minutos || 0) * vMin;
+        }
+        descParciales = round2(descParciales);
+
         let montoExtras = 0;
         for (const x of extras) {
           const jornada = jornadaMinutos(e.storeId, x.fecha);
@@ -525,7 +552,8 @@ export const hrRouter = createRouter({
         montoExtras = round2(montoExtras);
 
         const minutosTarde = tardanzas.reduce((s, t) => s + (t.minutos || 0), 0);
-        const descuentos = round2(descAusencias + descTardanzas);
+        const minutosParciales = parciales.reduce((s, t) => s + (t.minutos || 0), 0);
+        const descuentos = round2(descAusencias + descTardanzas + descParciales);
         const neto = round2(Math.max(0, bruto - descuentos + montoExtras));
 
         rows.push({
@@ -539,9 +567,11 @@ export const hrRouter = createRouter({
           diario: round2(diario),
           ausencias: ausencias.length,
           minutosTarde,
+          minutosParciales,
           minutosExtra: extras.reduce((s, t) => s + (t.minutos || 0), 0),
           descAusencias,
           descTardanzas,
+          descParciales,
           descuentos,
           montoExtras,
           netoPagar: neto,
@@ -551,10 +581,11 @@ export const hrRouter = createRouter({
             tipo: ev.tipo,
             minutos: ev.minutos,
             justificada: ev.justificada,
+            horaProgramada: ev.horaProgramada,
             horaReal: ev.horaReal,
             descuentoEstimado: ev.tipo === "ausencia"
               ? round2(diario)
-              : ev.tipo === "tardanza"
+              : (ev.tipo === "tardanza" || ev.tipo === "salida_parcial")
                 ? round2((ev.minutos || 0) * (diario / jornadaMinutos(e.storeId, ev.fecha)))
                 : 0,
           })),
