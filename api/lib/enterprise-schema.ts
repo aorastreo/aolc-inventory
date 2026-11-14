@@ -258,6 +258,26 @@ export async function ensureEnterpriseSchema() {
       )`,
     );
 
+    // Horarios oficiales: Los Chiles 9–7; Pavón y Santa Rosa 8–6 (Lun–Sáb)
+    await tryExec(
+      conn,
+      `UPDATE hrStoreSchedules h
+       JOIN stores s ON s.id = h.storeId
+       SET h.horaEntrada = '09:00', h.horaSalida = '19:00',
+           h.laborable = IF(h.diaSemana = 7, 0, 1), h.isActive = 1
+       WHERE s.slug = 'los-chiles' OR s.name LIKE '%Los Chiles%'`,
+    );
+    await tryExec(
+      conn,
+      `UPDATE hrStoreSchedules h
+       JOIN stores s ON s.id = h.storeId
+       SET h.horaEntrada = '08:00', h.horaSalida = '18:00',
+           h.laborable = IF(h.diaSemana = 7, 0, 1), h.isActive = 1
+       WHERE s.slug IN ('pavon', 'santa-rosa')
+          OR s.name LIKE '%Pav%n%'
+          OR s.name LIKE '%Santa Rosa%'`,
+    );
+
     ready = true;
     console.log("[enterprise-schema] Ready (additive columns + inventory_movements + finance + hr)");
   } finally {

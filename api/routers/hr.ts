@@ -52,18 +52,31 @@ async function assertRetailStore(db: ReturnType<typeof getDb>, storeId: number) 
   return row;
 }
 
+/** Horarios oficiales por tienda (Lun–Sáb). Dom = no laborable. */
+function hoursForStore(store: { name?: string | null; slug?: string | null }): { entrada: string; salida: string } {
+  const key = `${store.slug || ""} ${store.name || ""}`.toLowerCase();
+  if (key.includes("los-chiles") || key.includes("los chiles")) {
+    return { entrada: "09:00", salida: "19:00" }; // 9 a 7
+  }
+  // Pavón y Santa Rosa (y demás tiendas retail por defecto)
+  return { entrada: "08:00", salida: "18:00" }; // 8 a 6
+}
+
 async function ensureDefaultSchedule(db: ReturnType<typeof getDb>, storeId: number) {
   const existing = await db.select().from(hrStoreSchedules).where(and(eq(hrStoreSchedules.storeId, storeId), eq(hrStoreSchedules.isActive, true)));
   if (existing.length > 0) return existing;
 
+  const store = await assertRetailStore(db, storeId);
+  const { entrada, salida } = hoursForStore(store);
+
   const defaults = [
-    { dia: 1, laborable: true, entrada: "08:00", salida: "17:00" },
-    { dia: 2, laborable: true, entrada: "08:00", salida: "17:00" },
-    { dia: 3, laborable: true, entrada: "08:00", salida: "17:00" },
-    { dia: 4, laborable: true, entrada: "08:00", salida: "17:00" },
-    { dia: 5, laborable: true, entrada: "08:00", salida: "17:00" },
-    { dia: 6, laborable: true, entrada: "08:00", salida: "13:00" },
-    { dia: 7, laborable: false, entrada: "08:00", salida: "17:00" },
+    { dia: 1, laborable: true, entrada, salida },
+    { dia: 2, laborable: true, entrada, salida },
+    { dia: 3, laborable: true, entrada, salida },
+    { dia: 4, laborable: true, entrada, salida },
+    { dia: 5, laborable: true, entrada, salida },
+    { dia: 6, laborable: true, entrada, salida },
+    { dia: 7, laborable: false, entrada, salida },
   ];
 
   for (const d of defaults) {
@@ -81,6 +94,31 @@ async function ensureDefaultSchedule(db: ReturnType<typeof getDb>, storeId: numb
   }
 
   return db.select().from(hrStoreSchedules).where(and(eq(hrStoreSchedules.storeId, storeId), eq(hrStoreSchedules.isActive, true)));
+}
+
+let officialHoursApplied = false;
+
+/** Aplica horarios oficiales de las 3 tiendas una vez por arranque del servidor. */
+async function applyOfficialStoreHours(db: ReturnType<typeof getDb>) {
+  if (officialHoursApplied) return;
+  const retail = await db.select().from(stores).where(and(eq(stores.isActive, true), ne(stores.id, BODEGA_STORE_ID)));
+  for (const store of retail) {
+    const { entrada, salida } = hoursForStore(store);
+    const existing = await db.select().from(hrStoreSchedules).where(eq(hrStoreSchedules.storeId, store.id));
+    if (existing.length === 0) {
+      await ensureDefaultSchedule(db, store.id);
+      continue;
+    }
+    for (const row of existing) {
+      await db.update(hrStoreSchedules).set({
+        horaEntrada: entrada,
+        horaSalida: salida,
+        laborable: row.diaSemana !== 7,
+        isActive: true,
+      }).where(eq(hrStoreSchedules.id, row.id));
+    }
+  }
+  officialHoursApplied = true;
 }
 
 export const hrRouter = createRouter({
@@ -194,6 +232,8 @@ export const hrRouter = createRouter({
       const db = getDb();
       await ensureEnterpriseSchema();
       await assertRetailStore(db, input.storeId);
+      // Una vez: deja Los Chiles 9–7 y Pavón/Santa Rosa 8–6
+      await applyOfficialStoreHours(db);
       const rows = await ensureDefaultSchedule(db, input.storeId);
       return rows
         .sort((a, b) => a.diaSemana - b.diaSemana)
