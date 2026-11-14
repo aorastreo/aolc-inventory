@@ -6,13 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Users, Clock, AlertTriangle, Plus, Trash2, Pencil, CalendarDays, Store, Scale,
+  Users, Clock, AlertTriangle, Plus, Trash2, Pencil, CalendarDays, Store, Scale, Wallet,
 } from "lucide-react";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
 
-type Tab = "empleados" | "horarios" | "excepciones" | "resumen" | "liquidacion";
+type Tab = "empleados" | "horarios" | "excepciones" | "resumen" | "quincena" | "liquidacion";
 
 function todayStr() {
   const d = new Date();
@@ -22,6 +22,19 @@ function todayStr() {
 function monthStart() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/** Quincena actual: 1–15 o 16–fin de mes. */
+function currentQuincena(): { desde: string; hasta: string } {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = d.getDate();
+  const last = new Date(y, d.getMonth() + 1, 0).getDate();
+  if (day <= 15) {
+    return { desde: `${y}-${m}-01`, hasta: `${y}-${m}-15` };
+  }
+  return { desde: `${y}-${m}-16`, hasta: `${y}-${m}-${String(last).padStart(2, "0")}` };
 }
 
 function money(n: string | number) {
@@ -37,12 +50,13 @@ const TIPO_LABEL: Record<string, string> = {
 export default function PersonalPage() {
   const utils = trpc.useUtils();
   const { data: hrStores } = trpc.hr.stores.useQuery();
-  const [tab, setTab] = useState<Tab>("excepciones");
+  const [tab, setTab] = useState<Tab>("quincena");
   const [storeFilter, setStoreFilter] = useState<number | "all">("all");
 
   const storeIdNum = storeFilter === "all" ? undefined : storeFilter;
-  const [desde, setDesde] = useState(monthStart());
-  const [hasta, setHasta] = useState(todayStr());
+  const q = currentQuincena();
+  const [desde, setDesde] = useState(q.desde);
+  const [hasta, setHasta] = useState(q.hasta);
 
   const { data: employees, isLoading: loadingEmps } = trpc.hr.employees.useQuery({ storeId: storeIdNum });
   const { data: events, isLoading: loadingEvents } = trpc.hr.events.useQuery({
@@ -51,6 +65,11 @@ export default function PersonalPage() {
     hasta,
   });
   const { data: summary } = trpc.hr.summaryByEmployee.useQuery({
+    storeId: storeIdNum,
+    desde,
+    hasta,
+  });
+  const { data: quincena, isLoading: loadingQuincena } = trpc.hr.quincenaPay.useQuery({
     storeId: storeIdNum,
     desde,
     hasta,
@@ -84,16 +103,29 @@ export default function PersonalPage() {
             ))}
           </select>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <CalendarDays className="w-4 h-4" style={{ color: BRAND_BLUE }} />
           <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-10 w-auto" />
           <span className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>a</span>
           <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-10 w-auto" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-10"
+            onClick={() => {
+              const cur = currentQuincena();
+              setDesde(cur.desde);
+              setHasta(cur.hasta);
+            }}
+          >
+            Esta quincena
+          </Button>
         </div>
       </div>
 
       <div className="flex gap-1 mb-4 border-b overflow-x-auto" style={{ borderColor: "hsl(210 20% 90%)" }}>
         {([
+          ["quincena", "Quincena"],
           ["excepciones", "Excepciones"],
           ["empleados", "Empleados"],
           ["horarios", "Horarios"],
@@ -114,6 +146,15 @@ export default function PersonalPage() {
         ))}
       </div>
 
+      {tab === "quincena" && (
+        <QuincenaTab
+          data={quincena}
+          loading={loadingQuincena}
+          storeName={storeName}
+          desde={desde}
+          hasta={hasta}
+        />
+      )}
       {tab === "excepciones" && (
         <ExceptionsTab
           storeFilter={storeFilter}
@@ -765,6 +806,107 @@ function ExceptionsTab({
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function QuincenaTab({
+  data, loading, storeName, desde, hasta,
+}: {
+  data: any;
+  loading: boolean;
+  storeName: (id: number) => string;
+  desde: string;
+  hasta: string;
+}) {
+  if (loading) {
+    return <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>Calculando quincena…</p>;
+  }
+
+  const empleados = data?.empleados || [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>
+          Del {desde} al {hasta}. Descuenta faltas y tardanzas injustificadas; suma extras a 1.5×.
+        </p>
+        <div
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg font-bold"
+          style={{ background: "rgba(178,34,52,0.1)", color: BRAND_RED }}
+        >
+          <Wallet className="w-4 h-4" />
+          Total nómina: {money(data?.totalNeto || 0)}
+        </div>
+      </div>
+
+      {empleados.length === 0 ? (
+        <Card className="border shadow-sm">
+          <CardContent className="p-6 text-sm" style={{ color: "hsl(207 20% 45%)" }}>
+            No hay empleados activos. Agregá empleados primero.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {empleados.map((r: any) => (
+            <Card key={r.employeeId} className="border shadow-sm">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-semibold text-sm" style={{ color: "hsl(207 55% 15%)" }}>{r.nombre}</h3>
+                    <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
+                      {storeName(r.storeId)} · {r.puesto} · {r.tipoSalario}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>A pagar</div>
+                    <div className="font-bold text-lg" style={{ color: BRAND_RED }}>{money(r.netoPagar)}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
+                    <div style={{ color: "hsl(207 20% 45%)" }}>Bruto quincena</div>
+                    <div className="font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{money(r.brutoPeriodo)}</div>
+                  </div>
+                  <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
+                    <div style={{ color: "hsl(207 20% 45%)" }}>Desc. faltas</div>
+                    <div className="font-semibold" style={{ color: r.descAusencias ? BRAND_RED : "hsl(207 55% 15%)" }}>
+                      −{money(r.descAusencias)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
+                    <div style={{ color: "hsl(207 20% 45%)" }}>Desc. tardanzas</div>
+                    <div className="font-semibold" style={{ color: r.descTardanzas ? BRAND_RED : "hsl(207 55% 15%)" }}>
+                      −{money(r.descTardanzas)}
+                      {r.minutosTardeInjustificados ? ` (${r.minutosTardeInjustificados} min)` : ""}
+                    </div>
+                  </div>
+                  <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
+                    <div style={{ color: "hsl(207 20% 45%)" }}>Extras 1.5×</div>
+                    <div className="font-semibold" style={{ color: r.montoExtras ? "#16A34A" : "hsl(207 55% 15%)" }}>
+                      +{money(r.montoExtras)}
+                    </div>
+                  </div>
+                </div>
+
+                {r.detalleEventos?.length > 0 && (
+                  <div className="text-xs space-y-1 pt-1" style={{ color: "hsl(207 20% 45%)" }}>
+                    {r.detalleEventos.map((ev: any) => (
+                      <div key={ev.id}>
+                        · {ev.fecha}: {TIPO_LABEL[ev.tipo] || ev.tipo}
+                        {ev.horaReal ? ` (${ev.horaReal})` : ""}
+                        {ev.minutos ? ` · ${ev.minutos} min` : ""}
+                        {ev.justificada ? " · justificada" : ""}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

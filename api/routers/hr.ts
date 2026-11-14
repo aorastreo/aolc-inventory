@@ -428,6 +428,134 @@ export const hrRouter = createRouter({
       }).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
     }),
 
+  /**
+   * Estimado a pagar en un periodo (ej. quincena), aplicando excepciones:
+   * - Ausencia injustificada → descuenta 1 día
+   * - Tardanza injustificada → descuenta minutos proporcionales
+   * - Salida tarde → suma horas extra a 1.5×
+   */
+  quincenaPay: authedQuery
+    .input(z.object({
+      storeId: z.number().optional(),
+      desde: z.string(),
+      hasta: z.string(),
+    }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+
+      const empConditions = [eq(hrEmployees.isActive, true), eq(hrEmployees.estado, "activo")];
+      if (input.storeId != null) empConditions.push(eq(hrEmployees.storeId, input.storeId));
+      const emps = await db.select().from(hrEmployees).where(and(...empConditions));
+
+      const eventConditions = [
+        eq(hrAttendanceEvents.isActive, true),
+        gte(hrAttendanceEvents.fecha, input.desde),
+        lte(hrAttendanceEvents.fecha, input.hasta),
+      ];
+      if (input.storeId != null) eventConditions.push(eq(hrAttendanceEvents.storeId, input.storeId));
+      const events = await db.select().from(hrAttendanceEvents).where(and(...eventConditions));
+
+      const scheduleByStore = new Map<number, Awaited<ReturnType<typeof ensureDefaultSchedule>>>();
+      const round2 = (n: number) => Math.round(n * 100) / 100;
+
+      function periodPay(salarioBase: number, tipo: string): { bruto: number; diario: number } {
+        if (tipo === "mensual") {
+          return { bruto: salarioBase / 2, diario: salarioBase / 30 };
+        }
+        if (tipo === "semanal") {
+          // Quincena ≈ 2 semanas
+          return { bruto: salarioBase * 2, diario: salarioBase / 6 };
+        }
+        // quincenal: el salarioBase es lo de la quincena
+        return { bruto: salarioBase, diario: salarioBase / 15 };
+      }
+
+      function jornadaMinutos(storeId: number, fecha: string): number {
+        const rows = scheduleByStore.get(storeId) || [];
+        const wd = weekdayMon1(fecha);
+        const day = rows.find((s) => s.diaSemana === wd);
+        if (!day || !day.laborable) return 8 * 60;
+        const mins = timeToMinutes(day.horaSalida) - timeToMinutes(day.horaEntrada);
+        return mins > 0 ? mins : 8 * 60;
+      }
+
+      const rows = [];
+      for (const e of emps) {
+        if (!scheduleByStore.has(e.storeId)) {
+          try {
+            scheduleByStore.set(e.storeId, await ensureDefaultSchedule(db, e.storeId));
+          } catch {
+            scheduleByStore.set(e.storeId, []);
+          }
+        }
+
+        const base = Number(e.salarioBase) || 0;
+        const { bruto, diario } = periodPay(base, e.tipoSalario);
+
+        const mine = events.filter((ev) => ev.employeeId === e.id);
+        const ausenciasInj = mine.filter((ev) => ev.tipo === "ausencia" && !ev.justificada);
+        const tardanzasInj = mine.filter((ev) => ev.tipo === "tardanza" && !ev.justificada);
+        const extras = mine.filter((ev) => ev.tipo === "salida_tarde");
+
+        const descAusencias = round2(ausenciasInj.length * diario);
+        let descTardanzas = 0;
+        for (const t of tardanzasInj) {
+          const jornada = jornadaMinutos(e.storeId, t.fecha);
+          const vMin = diario / jornada;
+          descTardanzas += (t.minutos || 0) * vMin;
+        }
+        descTardanzas = round2(descTardanzas);
+
+        let montoExtras = 0;
+        for (const x of extras) {
+          const jornada = jornadaMinutos(e.storeId, x.fecha);
+          const vMin = diario / jornada;
+          // Hora extra ordinaria CR: 50% adicional → 1.5×
+          montoExtras += (x.minutos || 0) * vMin * 1.5;
+        }
+        montoExtras = round2(montoExtras);
+
+        const descuentos = round2(descAusencias + descTardanzas);
+        const neto = round2(Math.max(0, bruto - descuentos + montoExtras));
+
+        rows.push({
+          employeeId: e.id,
+          storeId: e.storeId,
+          nombre: `${e.nombre} ${e.apellidos}`,
+          puesto: e.puesto,
+          tipoSalario: e.tipoSalario,
+          salarioBase: base,
+          brutoPeriodo: round2(bruto),
+          diario: round2(diario),
+          ausenciasInjustificadas: ausenciasInj.length,
+          minutosTardeInjustificados: tardanzasInj.reduce((s, t) => s + (t.minutos || 0), 0),
+          minutosExtra: extras.reduce((s, t) => s + (t.minutos || 0), 0),
+          descAusencias,
+          descTardanzas,
+          descuentos,
+          montoExtras,
+          netoPagar: neto,
+          detalleEventos: mine.map((ev) => ({
+            id: ev.id,
+            fecha: ev.fecha,
+            tipo: ev.tipo,
+            minutos: ev.minutos,
+            justificada: ev.justificada,
+            horaReal: ev.horaReal,
+          })),
+        });
+      }
+
+      const totalNeto = round2(rows.reduce((s, r) => s + r.netoPagar, 0));
+      return {
+        desde: input.desde,
+        hasta: input.hasta,
+        totalNeto,
+        empleados: rows.sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
+      };
+    }),
+
   // ---------- Liquidación (Costa Rica) ----------
   previewLiquidacion: managerQuery
     .input(liquidacionInputShape)
