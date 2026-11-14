@@ -430,8 +430,8 @@ export const hrRouter = createRouter({
 
   /**
    * Estimado a pagar en un periodo (ej. quincena), aplicando excepciones:
-   * - Ausencia injustificada → descuenta 1 día
-   * - Tardanza injustificada → descuenta minutos proporcionales
+   * - Ausencia → descuenta 1 día (aunque esté marcada justificada)
+   * - Tardanza → descuenta minutos proporcionales (aunque esté justificada)
    * - Salida tarde → suma horas extra a 1.5×
    */
   quincenaPay: authedQuery
@@ -494,13 +494,14 @@ export const hrRouter = createRouter({
         const { bruto, diario } = periodPay(base, e.tipoSalario);
 
         const mine = events.filter((ev) => ev.employeeId === e.id);
-        const ausenciasInj = mine.filter((ev) => ev.tipo === "ausencia" && !ev.justificada);
-        const tardanzasInj = mine.filter((ev) => ev.tipo === "tardanza" && !ev.justificada);
+        // Rebaja siempre, justificada o no
+        const ausencias = mine.filter((ev) => ev.tipo === "ausencia");
+        const tardanzas = mine.filter((ev) => ev.tipo === "tardanza");
         const extras = mine.filter((ev) => ev.tipo === "salida_tarde");
 
-        const descAusencias = round2(ausenciasInj.length * diario);
+        const descAusencias = round2(ausencias.length * diario);
         let descTardanzas = 0;
-        for (const t of tardanzasInj) {
+        for (const t of tardanzas) {
           const jornada = jornadaMinutos(e.storeId, t.fecha);
           const vMin = diario / jornada;
           descTardanzas += (t.minutos || 0) * vMin;
@@ -516,6 +517,7 @@ export const hrRouter = createRouter({
         }
         montoExtras = round2(montoExtras);
 
+        const minutosTarde = tardanzas.reduce((s, t) => s + (t.minutos || 0), 0);
         const descuentos = round2(descAusencias + descTardanzas);
         const neto = round2(Math.max(0, bruto - descuentos + montoExtras));
 
@@ -528,8 +530,8 @@ export const hrRouter = createRouter({
           salarioBase: base,
           brutoPeriodo: round2(bruto),
           diario: round2(diario),
-          ausenciasInjustificadas: ausenciasInj.length,
-          minutosTardeInjustificados: tardanzasInj.reduce((s, t) => s + (t.minutos || 0), 0),
+          ausencias: ausencias.length,
+          minutosTarde,
           minutosExtra: extras.reduce((s, t) => s + (t.minutos || 0), 0),
           descAusencias,
           descTardanzas,
@@ -543,6 +545,11 @@ export const hrRouter = createRouter({
             minutos: ev.minutos,
             justificada: ev.justificada,
             horaReal: ev.horaReal,
+            descuentoEstimado: ev.tipo === "ausencia"
+              ? round2(diario)
+              : ev.tipo === "tardanza"
+                ? round2((ev.minutos || 0) * (diario / jornadaMinutos(e.storeId, ev.fecha)))
+                : 0,
           })),
         });
       }

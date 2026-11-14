@@ -69,7 +69,7 @@ export default function PersonalPage() {
     desde,
     hasta,
   });
-  const { data: quincena, isLoading: loadingQuincena } = trpc.hr.quincenaPay.useQuery({
+  const { data: quincena, isLoading: loadingQuincena, error: quincenaError } = trpc.hr.quincenaPay.useQuery({
     storeId: storeIdNum,
     desde,
     hasta,
@@ -150,6 +150,7 @@ export default function PersonalPage() {
         <QuincenaTab
           data={quincena}
           loading={loadingQuincena}
+          error={quincenaError?.message}
           storeName={storeName}
           desde={desde}
           hasta={hasta}
@@ -788,7 +789,7 @@ function ExceptionsTab({
                 checked={form.justificada}
                 onChange={(e) => setForm({ ...form, justificada: e.target.checked })}
               />
-              Justificada
+              Justificada (solo nota; igual se rebaja del pago)
             </label>
             <div>
               <Label>Nota (opcional)</Label>
@@ -811,10 +812,11 @@ function ExceptionsTab({
 }
 
 function QuincenaTab({
-  data, loading, storeName, desde, hasta,
+  data, loading, error, storeName, desde, hasta,
 }: {
   data: any;
   loading: boolean;
+  error?: string;
   storeName: (id: number) => string;
   desde: string;
   hasta: string;
@@ -823,13 +825,23 @@ function QuincenaTab({
     return <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>Calculando quincena…</p>;
   }
 
+  if (error) {
+    return (
+      <Card className="border shadow-sm border-red-200">
+        <CardContent className="p-5 text-sm text-red-700">
+          No se pudo calcular la quincena: {error}
+        </CardContent>
+      </Card>
+    );
+  }
+
   const empleados = data?.empleados || [];
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>
-          Del {desde} al {hasta}. Descuenta faltas y tardanzas injustificadas; suma extras a 1.5×.
+          Del {desde} al {hasta}. Faltas y tardanzas se rebajan siempre (aunque digan justificada). Extras a 1.5×.
         </p>
         <div
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg font-bold"
@@ -859,8 +871,8 @@ function QuincenaTab({
                     </p>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>A pagar</div>
-                    <div className="font-bold text-lg" style={{ color: BRAND_RED }}>{money(r.netoPagar)}</div>
+                    <div className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>A pagar esta quincena</div>
+                    <div className="font-bold text-xl" style={{ color: BRAND_RED }}>{money(r.netoPagar)}</div>
                   </div>
                 </div>
 
@@ -873,13 +885,14 @@ function QuincenaTab({
                     <div style={{ color: "hsl(207 20% 45%)" }}>Desc. faltas</div>
                     <div className="font-semibold" style={{ color: r.descAusencias ? BRAND_RED : "hsl(207 55% 15%)" }}>
                       −{money(r.descAusencias)}
+                      {r.ausencias ? ` (${r.ausencias})` : ""}
                     </div>
                   </div>
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
                     <div style={{ color: "hsl(207 20% 45%)" }}>Desc. tardanzas</div>
                     <div className="font-semibold" style={{ color: r.descTardanzas ? BRAND_RED : "hsl(207 55% 15%)" }}>
                       −{money(r.descTardanzas)}
-                      {r.minutosTardeInjustificados ? ` (${r.minutosTardeInjustificados} min)` : ""}
+                      {r.minutosTarde ? ` (${r.minutosTarde} min)` : ""}
                     </div>
                   </div>
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
@@ -890,17 +903,29 @@ function QuincenaTab({
                   </div>
                 </div>
 
-                {r.detalleEventos?.length > 0 && (
-                  <div className="text-xs space-y-1 pt-1" style={{ color: "hsl(207 20% 45%)" }}>
+                {r.detalleEventos?.length > 0 ? (
+                  <div className="text-xs space-y-1 pt-1 border-t" style={{ borderColor: "hsl(210 20% 94%)", color: "hsl(207 20% 45%)" }}>
+                    <div className="font-semibold mt-2" style={{ color: "hsl(207 55% 15%)" }}>Excepciones del periodo</div>
                     {r.detalleEventos.map((ev: any) => (
-                      <div key={ev.id}>
-                        · {ev.fecha}: {TIPO_LABEL[ev.tipo] || ev.tipo}
-                        {ev.horaReal ? ` (${ev.horaReal})` : ""}
-                        {ev.minutos ? ` · ${ev.minutos} min` : ""}
-                        {ev.justificada ? " · justificada" : ""}
+                      <div key={ev.id} className="flex justify-between gap-2">
+                        <span>
+                          {ev.fecha}: {TIPO_LABEL[ev.tipo] || ev.tipo}
+                          {ev.horaReal ? ` (${ev.horaReal})` : ""}
+                          {ev.minutos ? ` · ${ev.minutos} min` : ""}
+                          {ev.justificada ? " · justificada" : ""}
+                        </span>
+                        {ev.tipo !== "salida_tarde" && (
+                          <span className="font-semibold whitespace-nowrap" style={{ color: BRAND_RED }}>
+                            −{money(ev.descuentoEstimado || 0)}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
+                ) : (
+                  <p className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>
+                    Sin excepciones en este rango. Si registraste una tardanza, revisá que la fecha esté entre {desde} y {hasta}.
+                  </p>
                 )}
               </CardContent>
             </Card>
