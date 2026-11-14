@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createRouter, authedQuery, managerQuery } from "../middleware";
 import { getDb } from "../queries/connection";
-import { hrEmployees, hrStoreSchedules, hrAttendanceEvents, hrLiquidaciones, stores } from "@db/schema";
+import { hrEmployees, hrStoreSchedules, hrAttendanceEvents, hrLiquidaciones, hrPeriodPayments, stores } from "@db/schema";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { ensureEnterpriseSchema } from "../lib/enterprise-schema";
 import { calcularLiquidacion } from "../lib/liquidacion-cr";
@@ -695,6 +695,82 @@ export const hrRouter = createRouter({
       const db = getDb();
       await ensureEnterpriseSchema();
       await db.update(hrLiquidaciones).set({ isActive: false }).where(eq(hrLiquidaciones.id, input.id));
+      return { success: true };
+    }),
+
+  // ---------- Pagos de periodo (histórico / cierre) ----------
+  periodPayments: authedQuery
+    .input(z.object({
+      storeId: z.number().optional(),
+      employeeId: z.number().optional(),
+      desde: z.string().optional(),
+      hasta: z.string().optional(),
+    }).optional())
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const conditions = [eq(hrPeriodPayments.isActive, true)];
+      if (input?.storeId != null) conditions.push(eq(hrPeriodPayments.storeId, input.storeId));
+      if (input?.employeeId != null) conditions.push(eq(hrPeriodPayments.employeeId, input.employeeId));
+      if (input?.desde) conditions.push(gte(hrPeriodPayments.hasta, input.desde));
+      if (input?.hasta) conditions.push(lte(hrPeriodPayments.desde, input.hasta));
+
+      const rows = await db.select().from(hrPeriodPayments).where(and(...conditions)).orderBy(desc(hrPeriodPayments.desde), desc(hrPeriodPayments.id));
+      const emps = await db.select().from(hrEmployees);
+      const empMap = new Map(emps.map((e) => [e.id, e]));
+      return rows.map((r) => {
+        const emp = empMap.get(r.employeeId);
+        return {
+          ...r,
+          empleadoNombre: emp ? `${emp.nombre} ${emp.apellidos}` : `Empleado #${r.employeeId}`,
+        };
+      });
+    }),
+
+  createPeriodPayment: managerQuery
+    .input(z.object({
+      storeId: z.number(),
+      employeeId: z.number(),
+      desde: z.string().min(1),
+      hasta: z.string().min(1),
+      montoPagado: z.string().min(1),
+      origen: z.enum(["estimado", "historico"]).default("historico"),
+      nota: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      await assertHrStore(db, input.storeId);
+      const [emp] = await db.select().from(hrEmployees).where(and(
+        eq(hrEmployees.id, input.employeeId),
+        eq(hrEmployees.isActive, true),
+      )).limit(1);
+      if (!emp) throw new Error("Empleado no encontrado");
+      if (emp.storeId !== input.storeId) throw new Error("El empleado no pertenece a esa tienda/bodega");
+
+      const monto = Number(input.montoPagado);
+      if (!Number.isFinite(monto) || monto < 0) throw new Error("Monto inválido");
+      if (input.hasta < input.desde) throw new Error("El hasta debe ser después del desde");
+
+      const result = await db.insert(hrPeriodPayments).values({
+        storeId: input.storeId,
+        employeeId: input.employeeId,
+        desde: input.desde,
+        hasta: input.hasta,
+        montoPagado: String(monto),
+        origen: input.origen,
+        nota: input.nota?.trim() || null,
+        createdBy: ctx.user?.name || ctx.user?.unionId || null,
+      });
+      return { id: Number(result[0].insertId) };
+    }),
+
+  deletePeriodPayment: managerQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      await db.update(hrPeriodPayments).set({ isActive: false }).where(eq(hrPeriodPayments.id, input.id));
       return { success: true };
     }),
 });

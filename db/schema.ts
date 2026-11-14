@@ -620,3 +620,25 @@ export const hrLiquidaciones = mysqlTable("hrLiquidaciones", {
 
 export type HrLiquidacion = typeof hrLiquidaciones.$inferSelect;
 export type InsertHrLiquidacion = typeof hrLiquidaciones.$inferInsert;
+
+/**
+ * Pagos de periodo registrados a mano (histórico o cierre de quincena).
+ * Sirve para meses pasados sin control de asistencia: solo monto pagado.
+ */
+export const hrPeriodPayments = mysqlTable("hrPeriodPayments", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  employeeId: bigint("employeeId", { mode: "number", unsigned: true }).notNull(),
+  desde: varchar("desde", { length: 20 }).notNull(),
+  hasta: varchar("hasta", { length: 20 }).notNull(),
+  montoPagado: decimal("montoPagado", { precision: 12, scale: 2 }).notNull(),
+  /** estimado = del calculador; historico = solo lo que se pagó en el pasado */
+  origen: mysqlEnum("origen", ["estimado", "historico"]).default("historico").notNull(),
+  nota: varchar("nota", { length: 500 }),
+  createdBy: varchar("createdBy", { length: 255 }),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type HrPeriodPayment = typeof hrPeriodPayments.$inferSelect;
+export type InsertHrPeriodPayment = typeof hrPeriodPayments.$inferInsert;

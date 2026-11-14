@@ -12,7 +12,7 @@ import {
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
 
-type Tab = "empleados" | "horarios" | "excepciones" | "resumen" | "quincena" | "liquidacion";
+type Tab = "empleados" | "horarios" | "excepciones" | "resumen" | "quincena" | "historial" | "liquidacion";
 
 function todayStr() {
   const d = new Date();
@@ -126,6 +126,7 @@ export default function PersonalPage() {
       <div className="flex gap-1 mb-4 border-b overflow-x-auto" style={{ borderColor: "hsl(210 20% 90%)" }}>
         {([
           ["quincena", "Quincena"],
+          ["historial", "Pagos pasados"],
           ["excepciones", "Excepciones"],
           ["empleados", "Empleados"],
           ["horarios", "Horarios"],
@@ -154,6 +155,15 @@ export default function PersonalPage() {
           storeName={storeName}
           desde={desde}
           hasta={hasta}
+        />
+      )}
+      {tab === "historial" && (
+        <HistorialTab
+          storeFilter={storeFilter}
+          stores={hrStores || []}
+          employees={employees || []}
+          storeName={storeName}
+          utils={utils}
         />
       )}
       {tab === "excepciones" && (
@@ -803,6 +813,231 @@ function ExceptionsTab({
               onClick={save}
             >
               {createEvent.isPending ? "Guardando…" : "Guardar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function HistorialTab({
+  storeFilter, stores, employees, storeName, utils,
+}: {
+  storeFilter: number | "all";
+  stores: { id: number; name: string }[];
+  employees: any[];
+  storeName: (id: number) => string;
+  utils: ReturnType<typeof trpc.useUtils>;
+}) {
+  const storeIdNum = storeFilter === "all" ? undefined : storeFilter;
+  const { data: payments, isLoading } = trpc.hr.periodPayments.useQuery({ storeId: storeIdNum });
+
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({
+    storeId: storeFilter === "all" ? "" : String(storeFilter),
+    employeeId: "",
+    desde: "",
+    hasta: "",
+    montoPagado: "",
+    nota: "",
+  });
+
+  const empsForStore = useMemo(() => {
+    const list = employees; // incluir inactivos no; solo activos del listado actual
+    if (!form.storeId) return list;
+    return list.filter((e) => e.storeId === Number(form.storeId));
+  }, [employees, form.storeId]);
+
+  const createPay = trpc.hr.createPeriodPayment.useMutation({
+    onSuccess: () => {
+      utils.hr.periodPayments.invalidate();
+      setOpen(false);
+      setError("");
+      setForm({
+        storeId: storeFilter === "all" ? "" : String(storeFilter),
+        employeeId: "",
+        desde: "",
+        hasta: "",
+        montoPagado: "",
+        nota: "",
+      });
+    },
+    onError: (e) => setError(e.message),
+  });
+  const deletePay = trpc.hr.deletePeriodPayment.useMutation({
+    onSuccess: () => utils.hr.periodPayments.invalidate(),
+  });
+
+  function save() {
+    setError("");
+    if (!form.storeId || !form.employeeId || !form.desde || !form.hasta || !form.montoPagado) {
+      setError("Completá tienda, empleado, fechas y monto pagado");
+      return;
+    }
+    createPay.mutate({
+      storeId: Number(form.storeId),
+      employeeId: Number(form.employeeId),
+      desde: form.desde,
+      hasta: form.hasta,
+      montoPagado: form.montoPagado,
+      origen: "historico",
+      nota: form.nota || undefined,
+    });
+  }
+
+  const totalHistorico = (payments || []).reduce((s, p) => s + Number(p.montoPagado || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>
+            Para meses pasados sin control de asistencia: registrá solo <strong>cuánto se le pagó</strong> a cada persona en cada quincena/mes. No hace falta meter faltas ni tardanzas viejas.
+          </p>
+        </div>
+        <Button
+          className="font-medium shrink-0"
+          style={{ background: BRAND_RED }}
+          onClick={() => {
+            setError("");
+            setForm({
+              storeId: storeFilter === "all" ? "" : String(storeFilter),
+              employeeId: "",
+              desde: "",
+              hasta: "",
+              montoPagado: "",
+              nota: "",
+            });
+            setOpen(true);
+          }}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Registrar pago pasado
+        </Button>
+      </div>
+
+      <div
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold"
+        style={{ background: "rgba(27,58,92,0.08)", color: BRAND_BLUE }}
+      >
+        <Wallet className="w-4 h-4" />
+        Total registrado: {money(totalHistorico)}
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>Cargando…</p>
+      ) : !payments?.length ? (
+        <Card className="border shadow-sm">
+          <CardContent className="p-6 text-sm" style={{ color: "hsl(207 20% 45%)" }}>
+            Todavía no hay pagos pasados. Ejemplo: Pamela · 1–15 oct · ₡180.000
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {payments.map((p) => (
+            <Card key={p.id} className="border shadow-sm">
+              <CardContent className="p-4 flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-sm" style={{ color: "hsl(207 55% 15%)" }}>
+                    {p.empleadoNombre}
+                  </div>
+                  <p className="text-xs mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>
+                    {storeName(p.storeId)} · {p.desde} → {p.hasta}
+                    {p.origen === "historico" ? " · histórico" : " · estimado"}
+                  </p>
+                  {p.nota && (
+                    <p className="text-xs mt-1 italic" style={{ color: "hsl(207 20% 55%)" }}>{p.nota}</p>
+                  )}
+                  <p className="text-sm font-bold mt-1" style={{ color: BRAND_RED }}>{money(p.montoPagado)}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-10 w-10 p-0"
+                  onClick={() => {
+                    if (confirm("¿Eliminar este pago registrado?")) deletePay.mutate({ id: p.id });
+                  }}
+                >
+                  <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Registrar pago pasado</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
+              Solo el monto que ya se pagó. Sirve para armar el historial de meses anteriores.
+            </p>
+            <div>
+              <Label>Tienda / Bodega</Label>
+              <select
+                className="w-full h-10 border rounded-md px-3 text-sm"
+                style={{ borderColor: "hsl(210 20% 88%)" }}
+                value={form.storeId}
+                onChange={(e) => setForm({ ...form, storeId: e.target.value, employeeId: "" })}
+              >
+                <option value="">Seleccionar</option>
+                {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>Empleado</Label>
+              <select
+                className="w-full h-10 border rounded-md px-3 text-sm"
+                style={{ borderColor: "hsl(210 20% 88%)" }}
+                value={form.employeeId}
+                onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+              >
+                <option value="">Seleccionar</option>
+                {empsForStore.map((e) => (
+                  <option key={e.id} value={e.id}>{e.nombre} {e.apellidos}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Desde</Label>
+                <Input type="date" value={form.desde} onChange={(e) => setForm({ ...form, desde: e.target.value })} />
+              </div>
+              <div>
+                <Label>Hasta</Label>
+                <Input type="date" value={form.hasta} onChange={(e) => setForm({ ...form, hasta: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <Label>Monto pagado</Label>
+              <Input
+                type="number"
+                value={form.montoPagado}
+                onChange={(e) => setForm({ ...form, montoPagado: e.target.value })}
+                placeholder="Ej. 180000"
+              />
+            </div>
+            <div>
+              <Label>Nota (opcional)</Label>
+              <Input
+                value={form.nota}
+                onChange={(e) => setForm({ ...form, nota: e.target.value })}
+                placeholder="Ej. Quincena octubre, sin detalle de tardanzas"
+              />
+            </div>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <Button
+              className="w-full font-medium"
+              style={{ background: BRAND_RED }}
+              disabled={createPay.isPending}
+              onClick={save}
+            >
+              {createPay.isPending ? "Guardando…" : "Guardar pago"}
             </Button>
           </div>
         </DialogContent>

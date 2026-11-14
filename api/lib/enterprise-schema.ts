@@ -231,6 +231,26 @@ export async function ensureEnterpriseSchema() {
 
     await tryExec(
       conn,
+      `CREATE TABLE IF NOT EXISTS hrPeriodPayments (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        storeId BIGINT UNSIGNED NOT NULL,
+        employeeId BIGINT UNSIGNED NOT NULL,
+        desde VARCHAR(20) NOT NULL,
+        hasta VARCHAR(20) NOT NULL,
+        montoPagado DECIMAL(12,2) NOT NULL,
+        origen ENUM('estimado','historico') NOT NULL DEFAULT 'historico',
+        nota VARCHAR(500) NULL,
+        createdBy VARCHAR(255) NULL,
+        isActive BOOLEAN NOT NULL DEFAULT TRUE,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        INDEX idx_hr_pay_store (storeId),
+        INDEX idx_hr_pay_employee (employeeId),
+        INDEX idx_hr_pay_periodo (desde, hasta)
+      )`,
+    );
+
+    await tryExec(
+      conn,
       `CREATE TABLE IF NOT EXISTS hrLiquidaciones (
         id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         storeId BIGINT UNSIGNED NOT NULL,
