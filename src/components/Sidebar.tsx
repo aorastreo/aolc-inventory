@@ -17,12 +17,14 @@ import {
   ArrowLeftRight,
   Banknote,
   Wallet,
+  Users,
   X,
 } from "lucide-react";
 
 const menuItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "manager"] },
   { path: "/finance", label: "Finanzas", icon: Wallet, roles: ["admin", "manager"] },
+  { path: "/personal", label: "Personal", icon: Users, roles: ["admin", "manager"] },
   { path: "/pallets", label: "Contenedores", icon: Package, roles: ["admin", "manager"] },
   { path: "/adjustments", label: "Ajustes", icon: ClipboardList, roles: ["admin", "manager"] },
   { path: "/transfers", label: "Transferencias", icon: ArrowLeftRight, roles: ["admin", "manager"] },
@@ -30,7 +32,7 @@ const menuItems = [
   { path: "/catalog", label: "Catalogo", icon: Database, roles: ["admin", "manager"] },
   { path: "/labels", label: "Etiquetas", icon: Tag, roles: ["admin", "manager", "employee"] },
   { path: "/label-config", label: "Config. Etiquetas", icon: Printer, roles: ["admin", "manager"] },
-  { path: "/payroll", label: "Planilla", icon: Banknote, roles: ["admin", "manager"] },
+  { path: "/payroll", label: "Planilla (vieja)", icon: Banknote, roles: ["admin"] },
   { path: "/settings", label: "Configuracion", icon: Settings, roles: ["admin"] },
 ];
 

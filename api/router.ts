@@ -4,6 +4,7 @@ import { inventoryRouter } from "./inventory-router";
 import { initDataRouter } from "./init-data-router";
 import { labelConfigRouter } from "./routers/labelConfig";
 import { financeRouter } from "./routers/finance";
+import { hrRouter } from "./routers/hr";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -14,6 +15,7 @@ export const appRouter = createRouter({
   initData: initDataRouter,
   labelConfig: labelConfigRouter,
   finance: financeRouter,
+  hr: hrRouter,
 });
 
 export type AppRouter = typeof appRouter;

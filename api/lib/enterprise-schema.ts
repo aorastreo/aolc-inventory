@@ -166,8 +166,71 @@ export async function ensureEnterpriseSchema() {
        WHERE NOT EXISTS (SELECT 1 FROM stores WHERE slug = 'santa-rosa' OR name LIKE '%Santa Rosa%')`,
     );
 
+    // HR / Personal (from-scratch attendance + settlement foundation)
+    await tryExec(
+      conn,
+      `CREATE TABLE IF NOT EXISTS hrEmployees (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        storeId BIGINT UNSIGNED NOT NULL,
+        cedula VARCHAR(50) NULL,
+        nombre VARCHAR(255) NOT NULL,
+        apellidos VARCHAR(255) NOT NULL,
+        puesto VARCHAR(100) NOT NULL,
+        salarioBase DECIMAL(12,2) NOT NULL,
+        tipoSalario ENUM('semanal','quincenal','mensual') NOT NULL DEFAULT 'quincenal',
+        fechaIngreso VARCHAR(20) NOT NULL,
+        telefono VARCHAR(50) NULL,
+        estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo',
+        isActive BOOLEAN NOT NULL DEFAULT TRUE,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+        INDEX idx_hr_emp_store (storeId),
+        INDEX idx_hr_emp_active (isActive, estado)
+      )`,
+    );
+
+    await tryExec(
+      conn,
+      `CREATE TABLE IF NOT EXISTS hrStoreSchedules (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        storeId BIGINT UNSIGNED NOT NULL,
+        diaSemana INT NOT NULL,
+        laborable BOOLEAN NOT NULL DEFAULT TRUE,
+        horaEntrada VARCHAR(5) NOT NULL DEFAULT '08:00',
+        horaSalida VARCHAR(5) NOT NULL DEFAULT '17:00',
+        isActive BOOLEAN NOT NULL DEFAULT TRUE,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+        UNIQUE KEY uq_hr_sched_store_day (storeId, diaSemana),
+        INDEX idx_hr_sched_store (storeId)
+      )`,
+    );
+
+    await tryExec(
+      conn,
+      `CREATE TABLE IF NOT EXISTS hrAttendanceEvents (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        storeId BIGINT UNSIGNED NOT NULL,
+        employeeId BIGINT UNSIGNED NOT NULL,
+        fecha VARCHAR(20) NOT NULL,
+        tipo ENUM('ausencia','tardanza','salida_tarde') NOT NULL,
+        horaProgramada VARCHAR(5) NULL,
+        horaReal VARCHAR(5) NULL,
+        minutos INT NOT NULL DEFAULT 0,
+        justificada BOOLEAN NOT NULL DEFAULT FALSE,
+        nota VARCHAR(500) NULL,
+        createdBy VARCHAR(255) NULL,
+        isActive BOOLEAN NOT NULL DEFAULT TRUE,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+        INDEX idx_hr_att_store_fecha (storeId, fecha),
+        INDEX idx_hr_att_employee (employeeId, fecha),
+        INDEX idx_hr_att_tipo (tipo)
+      )`,
+    );
+
     ready = true;
-    console.log("[enterprise-schema] Ready (additive columns + inventory_movements + financeEntries)");
+    console.log("[enterprise-schema] Ready (additive columns + inventory_movements + finance + hr)");
   } finally {
     await conn.end();
   }

@@ -525,3 +525,67 @@ export const financeFixedCosts = mysqlTable("financeFixedCosts", {
 
 export type FinanceFixedCost = typeof financeFixedCosts.$inferSelect;
 export type InsertFinanceFixedCost = typeof financeFixedCosts.$inferInsert;
+
+// ============================================
+// HR / PERSONAL (asistencia por excepciones + liquidación)
+// ============================================
+/** Staff for attendance & settlement — independent from legacy payroll tables. */
+export const hrEmployees = mysqlTable("hrEmployees", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  cedula: varchar("cedula", { length: 50 }),
+  nombre: varchar("nombre", { length: 255 }).notNull(),
+  apellidos: varchar("apellidos", { length: 255 }).notNull(),
+  puesto: varchar("puesto", { length: 100 }).notNull(),
+  salarioBase: decimal("salarioBase", { precision: 12, scale: 2 }).notNull(),
+  tipoSalario: mysqlEnum("tipoSalario", ["semanal", "quincenal", "mensual"]).default("quincenal").notNull(),
+  fechaIngreso: varchar("fechaIngreso", { length: 20 }).notNull(),
+  telefono: varchar("telefono", { length: 50 }),
+  estado: mysqlEnum("estado", ["activo", "inactivo"]).default("activo").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type HrEmployee = typeof hrEmployees.$inferSelect;
+export type InsertHrEmployee = typeof hrEmployees.$inferInsert;
+
+/** Work schedule per store and weekday (1=Lunes … 7=Domingo). */
+export const hrStoreSchedules = mysqlTable("hrStoreSchedules", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  diaSemana: int("diaSemana").notNull(),
+  laborable: boolean("laborable").default(true).notNull(),
+  horaEntrada: varchar("horaEntrada", { length: 5 }).notNull().default("08:00"),
+  horaSalida: varchar("horaSalida", { length: 5 }).notNull().default("17:00"),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type HrStoreSchedule = typeof hrStoreSchedules.$inferSelect;
+export type InsertHrStoreSchedule = typeof hrStoreSchedules.$inferInsert;
+
+/**
+ * Only exceptions are stored. No row for a day = assumed on time / present.
+ * tipo: ausencia | tardanza | salida_tarde
+ */
+export const hrAttendanceEvents = mysqlTable("hrAttendanceEvents", {
+  id: serial("id").primaryKey(),
+  storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
+  employeeId: bigint("employeeId", { mode: "number", unsigned: true }).notNull(),
+  fecha: varchar("fecha", { length: 20 }).notNull(),
+  tipo: mysqlEnum("tipo", ["ausencia", "tardanza", "salida_tarde"]).notNull(),
+  horaProgramada: varchar("horaProgramada", { length: 5 }),
+  horaReal: varchar("horaReal", { length: 5 }),
+  minutos: int("minutos").default(0).notNull(),
+  justificada: boolean("justificada").default(false).notNull(),
+  nota: varchar("nota", { length: 500 }),
+  createdBy: varchar("createdBy", { length: 255 }),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type HrAttendanceEvent = typeof hrAttendanceEvents.$inferSelect;
+export type InsertHrAttendanceEvent = typeof hrAttendanceEvents.$inferInsert;
