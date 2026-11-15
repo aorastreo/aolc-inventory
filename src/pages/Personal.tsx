@@ -1070,6 +1070,28 @@ function HistorialTab({
   );
 }
 
+function payPeriodLabels(tipoSalario: string) {
+  if (tipoSalario === "semanal") {
+    return {
+      neto: "A pagar en este periodo (2 semanas)",
+      bruto: "Bruto (2 semanas)",
+      tipoLabel: "semanal",
+    };
+  }
+  if (tipoSalario === "mensual") {
+    return {
+      neto: "A pagar en este periodo (½ mes)",
+      bruto: "Bruto (½ mes)",
+      tipoLabel: "mensual",
+    };
+  }
+  return {
+    neto: "A pagar esta quincena",
+    bruto: "Bruto quincena",
+    tipoLabel: "quincenal",
+  };
+}
+
 function QuincenaTab({
   data, loading, error, storeName, desde, hasta,
 }: {
@@ -1081,14 +1103,14 @@ function QuincenaTab({
   hasta: string;
 }) {
   if (loading) {
-    return <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>Calculando quincena…</p>;
+    return <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>Calculando periodo…</p>;
   }
 
   if (error) {
     return (
       <Card className="border shadow-sm border-red-200">
         <CardContent className="p-5 text-sm text-red-700">
-          No se pudo calcular la quincena: {error}
+          No se pudo calcular el periodo: {error}
         </CardContent>
       </Card>
     );
@@ -1100,7 +1122,7 @@ function QuincenaTab({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>
-          Del {desde} al {hasta}. Faltas y tardanzas se rebajan siempre (aunque digan justificada). Extras a 1.5×.
+          Del {desde} al {hasta}. El monto se arma según si cobran semanal, quincenal o mensual. Faltas y tardanzas se rebajan siempre (aunque digan justificada). Extras a 1.5×.
         </p>
         <div
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg font-bold"
@@ -1119,25 +1141,28 @@ function QuincenaTab({
         </Card>
       ) : (
         <div className="space-y-3">
-          {empleados.map((r: any) => (
+          {empleados.map((r: any) => {
+            const labels = payPeriodLabels(r.tipoSalario);
+            return (
             <Card key={r.employeeId} className="border shadow-sm">
               <CardContent className="p-4 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <h3 className="font-semibold text-sm" style={{ color: "hsl(207 55% 15%)" }}>{r.nombre}</h3>
                     <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
-                      {storeName(r.storeId)} · {r.puesto} · {r.tipoSalario}
+                      {storeName(r.storeId)} · {r.puesto} · {labels.tipoLabel}
+                      {r.tipoSalario === "semanal" ? ` · base ${money(r.salarioBase)}/semana` : ""}
                     </p>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>A pagar esta quincena</div>
+                    <div className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>{labels.neto}</div>
                     <div className="font-bold text-xl" style={{ color: BRAND_RED }}>{money(r.netoPagar)}</div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
-                    <div style={{ color: "hsl(207 20% 45%)" }}>Bruto quincena</div>
+                    <div style={{ color: "hsl(207 20% 45%)" }}>{labels.bruto}</div>
                     <div className="font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{money(r.brutoPeriodo)}</div>
                   </div>
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
@@ -1204,7 +1229,8 @@ function QuincenaTab({
                 )}
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
