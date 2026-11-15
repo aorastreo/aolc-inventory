@@ -169,9 +169,19 @@ export function mesesAguinaldo(fechaSalida: string, fechaIngreso: string): numbe
   return Math.min(12, Math.max(0, months));
 }
 
+/** Días inclusivos de solape entre dos rangos de fechas. */
+function overlapDaysInclusive(a0: Date, a1: Date, b0: Date, b1: Date): number {
+  const from = Math.max(a0.getTime(), b0.getTime());
+  const to = Math.min(a1.getTime(), b1.getTime());
+  if (to < from) return 0;
+  return Math.round((to - from) / 86400000) + 1;
+}
+
 /**
- * Quincenas (1–15 y 16–fin de mes) que se solapan con [ingreso, salida]
- * dentro del período de aguinaldo. Ej.: 1 ago → 15 nov = 7 quincenas.
+ * Quincenas (1–15 y 16–fin) con trabajo significativo en el período de aguinaldo.
+ * Solo cuenta como 1 si trabajó al menos la mitad de los días de esa quincena.
+ * Así, ingreso el 31 jul no suma una quincena entera de ₡225 000.
+ * Ej.: 31 jul → 14 nov ≈ 7 quincenas (ago–nov), no 8.
  */
 export function quincenasAguinaldo(fechaSalida: string, fechaIngreso: string): number {
   const salida = parseDate(fechaSalida);
@@ -186,6 +196,14 @@ export function quincenasAguinaldo(fechaSalida: string, fechaIngreso: string): n
   const endY = salida.getFullYear();
   const endM = salida.getMonth();
 
+  const countIfSignificant = (qStart: Date, qEnd: Date) => {
+    const len = overlapDaysInclusive(qStart, qEnd, qStart, qEnd);
+    const worked = overlapDaysInclusive(qStart, qEnd, start, salida);
+    if (worked <= 0 || len <= 0) return;
+    // ≥ mitad de la quincena → cuenta completa (evita 1 día = 1 quincena)
+    if (worked * 2 >= len) count += 1;
+  };
+
   while (y < endY || (y === endY && m <= endM)) {
     const q1Start = new Date(y, m, 1, 12);
     const q1End = new Date(y, m, 15, 12);
@@ -193,8 +211,8 @@ export function quincenasAguinaldo(fechaSalida: string, fechaIngreso: string): n
     const lastDay = new Date(y, m + 1, 0).getDate();
     const q2End = new Date(y, m, lastDay, 12);
 
-    if (q1End >= start && q1Start <= salida) count += 1;
-    if (q2End >= start && q2Start <= salida) count += 1;
+    countIfSignificant(q1Start, q1End);
+    countIfSignificant(q2Start, q2End);
 
     m += 1;
     if (m > 11) {
