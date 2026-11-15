@@ -785,7 +785,7 @@ export default function FinancePage() {
                 type="button"
                 className="flex-1 h-9 rounded-md text-sm font-medium border"
                 style={{ background: form.tipo === "ingreso" ? "#16A34A" : "#fff", color: form.tipo === "ingreso" ? "#fff" : "#16A34A" }}
-                onClick={() => setForm((f) => ({ ...f, tipo: "ingreso", categoria: "ventas" }))}
+                onClick={() => setForm((f) => ({ ...f, tipo: "ingreso", categoria: "ventas", metodoPago: "efectivo" }))}
               >
                 Ingreso
               </button>
@@ -850,18 +850,20 @@ export default function FinancePage() {
               </div>
             </div>
 
-            <div>
-              <Label>Método de pago</Label>
-              <select
-                className="w-full h-10 border rounded-md px-3 text-sm"
-                value={form.metodoPago}
-                onChange={(e) => setForm((f) => ({ ...f, metodoPago: e.target.value as any }))}
-              >
-                {METODOS.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
-              </select>
-            </div>
+            {form.tipo === "egreso" && (
+              <div>
+                <Label>Método de pago</Label>
+                <select
+                  className="w-full h-10 border rounded-md px-3 text-sm"
+                  value={form.metodoPago}
+                  onChange={(e) => setForm((f) => ({ ...f, metodoPago: e.target.value as any }))}
+                >
+                  {METODOS.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <Label>Nota (opcional)</Label>
@@ -869,7 +871,7 @@ export default function FinancePage() {
                 value={form.descripcion}
                 onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
                 className="h-10"
-                placeholder="Ej. Contenedor #42, alquiler marzo..."
+                placeholder={form.tipo === "ingreso" ? "Ej. Cierre 15 nov..." : "Ej. Contenedor #42, alquiler marzo..."}
               />
             </div>
 
