@@ -63,7 +63,8 @@ export function antigüedad(fechaIngreso: string, fechaSalida: string) {
   }
 
   const diasTotales = daysBetweenInclusive(fechaIngreso, fechaSalida);
-  const mesesTotalesApprox = anos * 12 + meses + (dias >= 15 ? 0.5 : 0);
+  // Fracción real de meses (días/30) para umbrales de 3 y 6 meses Art. 28–29
+  const mesesTotalesApprox = anos * 12 + meses + Math.max(0, dias) / 30;
 
   return {
     anosCompletos: Math.max(0, anos),
@@ -80,11 +81,12 @@ export function salarioDiario(promedioMensual: number, tipoSalario: TipoSalario)
   return promedioMensual / div;
 }
 
-export function diasPreaviso(anosCompletos: number, mesesFraccion: number, mesesTotalesApprox: number): number {
+export function diasPreaviso(anosCompletos: number, _mesesFraccion: number, mesesTotalesApprox: number): number {
+  // Art. 28: <3 m = 0; de 3 a 6 m = 7; >6 m y <1 año = 15; ≥1 año = 30
   if (mesesTotalesApprox < 3) return 0;
-  if (anosCompletos === 0 && mesesTotalesApprox < 6) return 7; // 3–6 meses
-  if (anosCompletos === 0) return 15; // >6 meses y <1 año
-  return 30; // ≥1 año
+  if (anosCompletos === 0 && mesesTotalesApprox <= 6) return 7;
+  if (anosCompletos === 0) return 15;
+  return 30;
 }
 
 /**
@@ -98,6 +100,7 @@ export function diasCesantia(anosCompletos: number, mesesFraccion: number, meses
   factor: number;
   nota?: string;
 } {
+  // Art. 29: >3 a 6 m = 7 días; >6 m y <1 año = 14 días
   if (mesesTotalesApprox < 3) return { dias: 0, unidades: 0, factor: 0 };
   if (anosCompletos === 0) {
     if (mesesTotalesApprox <= 6) return { dias: 7, unidades: 0, factor: 0 };
@@ -276,8 +279,14 @@ export function calcularLiquidacion(input: LiquidacionInput): LiquidacionResult 
 
   const total = round2(rubros.reduce((s, r) => s + r.monto, 0));
 
+  const diasExtra = ant.diasExtrasFraccion || 0;
+  const antigüedadLabel =
+    diasExtra > 0
+      ? `${ant.anosCompletos} año(s), ${ant.mesesFraccion} mes(es), ${diasExtra} día(s)`
+      : `${ant.anosCompletos} año(s), ${ant.mesesFraccion} mes(es)`;
+
   return {
-    antigüedadLabel: `${ant.anosCompletos} año(s), ${ant.mesesFraccion} mes(es)`,
+    antigüedadLabel,
     anosCompletos: ant.anosCompletos,
     mesesFraccion: ant.mesesFraccion,
     diasTotales: ant.diasTotales,
