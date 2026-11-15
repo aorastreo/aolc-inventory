@@ -4,7 +4,7 @@ import { getDb } from "../queries/connection";
 import { hrEmployees, hrStoreSchedules, hrAttendanceEvents, hrLiquidaciones, hrPeriodPayments, stores } from "@db/schema";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { ensureEnterpriseSchema } from "../lib/enterprise-schema";
-import { calcularLiquidacion } from "../lib/liquidacion-cr";
+import { calcularLiquidacion, salarioBaseAMensual } from "../lib/liquidacion-cr";
 
 const BODEGA_STORE_ID = 1;
 
@@ -633,7 +633,10 @@ export const hrRouter = createRouter({
       )).limit(1);
       if (!emp) throw new Error("Empleado no encontrado");
 
-      const promedio = Number(input.promedioMensual || emp.salarioBase);
+      const tipoSalario = emp.tipoSalario as "semanal" | "quincenal" | "mensual";
+      const promedio = Number(
+        input.promedioMensual || salarioBaseAMensual(Number(emp.salarioBase), tipoSalario),
+      );
       if (!Number.isFinite(promedio) || promedio <= 0) throw new Error("Promedio salarial inválido");
 
       const result = calcularLiquidacion({
@@ -641,7 +644,7 @@ export const hrRouter = createRouter({
         fechaIngreso: emp.fechaIngreso,
         fechaSalida: input.fechaSalida,
         promedioMensual: promedio,
-        tipoSalario: emp.tipoSalario as "semanal" | "quincenal" | "mensual",
+        tipoSalario,
         pagaPreaviso: input.pagaPreaviso !== false,
         diasVacaciones: input.diasVacaciones,
         sumaSalariosAguinaldo: input.sumaSalariosAguinaldo != null ? Number(input.sumaSalariosAguinaldo) : null,
@@ -673,7 +676,10 @@ export const hrRouter = createRouter({
       )).limit(1);
       if (!emp) throw new Error("Empleado no encontrado");
 
-      const promedio = Number(input.promedioMensual || emp.salarioBase);
+      const tipoSalario = emp.tipoSalario as "semanal" | "quincenal" | "mensual";
+      const promedio = Number(
+        input.promedioMensual || salarioBaseAMensual(Number(emp.salarioBase), tipoSalario),
+      );
       if (!Number.isFinite(promedio) || promedio <= 0) throw new Error("Promedio salarial inválido");
 
       const result = calcularLiquidacion({

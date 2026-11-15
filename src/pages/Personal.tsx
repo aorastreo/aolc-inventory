@@ -42,6 +42,14 @@ function money(n: string | number) {
   return `₡${Number(n || 0).toLocaleString("es-CR", { maximumFractionDigits: 0 })}`;
 }
 
+/** Convierte salarioBase de ficha a estimado mensual (no usar quincena/semana cruda como promedio). */
+function monthlyFromBase(salarioBase: string | number, tipoSalario: string) {
+  const base = Number(salarioBase) || 0;
+  if (tipoSalario === "quincenal") return Math.round(base * 2 * 100) / 100;
+  if (tipoSalario === "semanal") return Math.round(((base * 52) / 12) * 100) / 100;
+  return base;
+}
+
 const TIPO_LABEL: Record<string, string> = {
   ausencia: "No llegó",
   tardanza: "Llegó tarde",
@@ -1376,7 +1384,7 @@ function LiquidacionTab({
         ...f,
         promedioMensual: earnings.promedio > 0
           ? String(earnings.promedio)
-          : (selected ? String(selected.salarioBase) : f.promedioMensual),
+          : (selected ? String(monthlyFromBase(selected.salarioBase, selected.tipoSalario)) : f.promedioMensual),
         sumaSalariosAguinaldo: earnings.sumaAguinaldo > 0 ? String(earnings.sumaAguinaldo) : f.sumaSalariosAguinaldo,
       }));
       setPreview(null);
@@ -1385,7 +1393,10 @@ function LiquidacionTab({
       setMesesGanados([]);
       setMesLabels([]);
       if (selected) {
-        setForm((f) => ({ ...f, promedioMensual: String(selected.salarioBase) }));
+        setForm((f) => ({
+          ...f,
+          promedioMensual: String(monthlyFromBase(selected.salarioBase, selected.tipoSalario)),
+        }));
       }
     }
   }, [earnings, empIdNum, selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1477,7 +1488,9 @@ function LiquidacionTab({
                   setForm({
                     ...form,
                     employeeId: e.target.value,
-                    promedioMensual: emp ? String(emp.salarioBase) : "",
+                    promedioMensual: emp
+                      ? String(monthlyFromBase(emp.salarioBase, emp.tipoSalario))
+                      : "",
                     sumaSalariosAguinaldo: "",
                   });
                   setPreview(null);

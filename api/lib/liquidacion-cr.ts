@@ -75,10 +75,24 @@ export function antigüedad(fechaIngreso: string, fechaSalida: string) {
   };
 }
 
-/** Divisor diario: mensual/quincenal ÷ 30; semanal ÷ 26 (práctica MTSS no comercio). */
-export function salarioDiario(promedioMensual: number, tipoSalario: TipoSalario): number {
-  const div = tipoSalario === "semanal" ? 26 : 30;
-  return promedioMensual / div;
+/**
+ * Divisor diario del promedio mensual (Art. 30 / práctica MTSS).
+ * Comercio (tiendas AO): siempre ÷ 30.
+ * Semanal no-comercio usaría ÷ 26; aquí el negocio es comercio → 30.
+ */
+export function salarioDiario(promedioMensual: number, _tipoSalario: TipoSalario): number {
+  return promedioMensual / 30;
+}
+
+/**
+ * Si no hay promedio de pagos, no usar salarioBase crudo:
+ * quincenal es ½ mes; semanal es ~1/4.33 mes.
+ */
+export function salarioBaseAMensual(salarioBase: number, tipoSalario: TipoSalario): number {
+  const base = Number(salarioBase) || 0;
+  if (tipoSalario === "quincenal") return base * 2;
+  if (tipoSalario === "semanal") return (base * 52) / 12;
+  return base;
 }
 
 export function diasPreaviso(anosCompletos: number, _mesesFraccion: number, mesesTotalesApprox: number): number {
@@ -234,6 +248,16 @@ export function calcularLiquidacion(input: LiquidacionInput): LiquidacionResult 
   }
   if (input.tipoSalida === "despido_sin_responsabilidad") {
     advertencias.push("Despido sin responsabilidad (falta grave): no incluye preaviso ni cesantía.");
+  }
+  if (input.tipoSalida === "despido_con_responsabilidad" && !input.pagaPreaviso && preDias > 0) {
+    advertencias.push(
+      `Preaviso no incluido en dinero (${preDias} día(s) ≈ ₡${round2(diario * preDias).toLocaleString("es-CR")}). Solo omitilo si el aviso se trabajó en tiempo.`,
+    );
+  }
+  if (input.diasVacaciones == null) {
+    advertencias.push(
+      "Vacaciones estimadas proporcionales al tiempo trabajado. Si ya disfrutó días, restalos manualmente para no pagar de más.",
+    );
   }
 
   const rubros: LiquidacionResult["rubros"] = [
