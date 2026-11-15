@@ -4,7 +4,12 @@ import { getDb } from "../queries/connection";
 import { hrEmployees, hrStoreSchedules, hrAttendanceEvents, hrLiquidaciones, hrPeriodPayments, stores } from "@db/schema";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { ensureEnterpriseSchema } from "../lib/enterprise-schema";
-import { calcularLiquidacion, salarioBaseAMensual } from "../lib/liquidacion-cr";
+import {
+  calcularLiquidacion,
+  estimarSumaAguinaldo,
+  quincenasAguinaldo,
+  salarioBaseAMensual,
+} from "../lib/liquidacion-cr";
 
 const BODEGA_STORE_ID = 1;
 
@@ -835,42 +840,154 @@ export const hrRouter = createRouter({
         cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1);
       }
 
-      const withPay = months.filter((m) => m.monto > 0);
-      const suma6 = withPay.reduce((s, m) => s + m.monto, 0);
-      // Promedio solo con meses que sí tienen pago (fracción real trabajada/pagada)
-      const promedio = withPay.length ? Math.round((suma6 / withPay.length) * 100) / 100 : 0;
+      const tipoSalario = emp.tipoSalario as "semanal" | "quincenal" | "mensual";
+      const mensualBase = salarioBaseAMensual(Number(emp.salarioBase), tipoSalario);
 
-      // Aguinaldo: 1 dic año anterior → fecha salida (o 1 dic este año si sale en dic)
+      /**
+       * Monto esperado de un mes si no hay registro en Pagos pasados:
+       * se asume que se pagó lo indicado en ficha (salarioBase).
+       * Quincenal: solo quincenas con ≥½ de días trabajados en ese mes.
+       */
+      function esperadoMes(yearMonth: string): number {
+        const [ys, ms] = yearMonth.split("-").map(Number);
+        if (!ys || !ms) return Math.round(mensualBase * 100) / 100;
+        const mesInicio = `${ys}-${String(ms).padStart(2, "0")}-01`;
+        const last = new Date(ys, ms, 0).getDate();
+        const mesFin = `${ys}-${String(ms).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+        // Recortar al tramo ingreso→salida
+        const desde = emp.fechaIngreso > mesInicio ? emp.fechaIngreso : mesInicio;
+        const hasta = input.fechaSalida < mesFin ? input.fechaSalida : mesFin;
+        if (hasta < desde) return 0;
+        if (tipoSalario === "quincenal") {
+          const q = quincenasAguinaldo(hasta, desde);
+          return Math.round((mensualBase / 2) * q * 100) / 100;
+        }
+        if (tipoSalario === "semanal") {
+          const days = Math.round(
+            (Date.parse(`${hasta}T12:00:00`) - Date.parse(`${desde}T12:00:00`)) / 86400000,
+          ) + 1;
+          const semanas = Math.max(0, Math.round(days / 7));
+          const porSemana = Number(emp.salarioBase) || 0;
+          return Math.round(porSemana * semanas * 100) / 100;
+        }
+        // mensual: prorrateo simple por días del mes
+        const daysInMonth = last;
+        const daysWorked = Math.round(
+          (Date.parse(`${hasta}T12:00:00`) - Date.parse(`${desde}T12:00:00`)) / 86400000,
+        ) + 1;
+        return Math.round(mensualBase * (daysWorked / daysInMonth) * 100) / 100;
+      }
+
+      // Rellenar huecos: sin registro → se pagó lo de ficha
+      const monthsFilled = months.map((m) => {
+        const registrado = m.monto > 0;
+        const monto = registrado ? m.monto : esperadoMes(m.key);
+        return {
+          ...m,
+          monto,
+          fuenteMes: registrado ? ("registrado" as const) : ("salario_ficha" as const),
+        };
+      });
+
+      const withPay = monthsFilled.filter((m) => m.monto > 0);
+      const suma6 = withPay.reduce((s, m) => s + m.monto, 0);
+      const promedio = withPay.length
+        ? Math.round((suma6 / withPay.length) * 100) / 100
+        : Math.round(mensualBase * 100) / 100;
+
+      // Aguinaldo MTSS
       let inicioAgui = new Date(salida.getFullYear() - 1, 11, 1);
       if (salida.getMonth() === 11) inicioAgui = new Date(salida.getFullYear(), 11, 1);
       if (ingreso > inicioAgui) inicioAgui = ingreso;
       const aguiStartKey = `${inicioAgui.getFullYear()}-${String(inicioAgui.getMonth() + 1).padStart(2, "0")}`;
       const aguiEndKey = `${salida.getFullYear()}-${String(salida.getMonth() + 1).padStart(2, "0")}`;
 
-      let sumaAguinaldo = 0;
+      let sumaRegistradaAgui = 0;
+      let mesesAguiConRegistro = 0;
       for (const [key, monto] of byMonth) {
-        if (key >= aguiStartKey && key <= aguiEndKey) sumaAguinaldo += monto;
+        if (key >= aguiStartKey && key <= aguiEndKey && monto > 0) {
+          sumaRegistradaAgui += monto;
+          mesesAguiConRegistro += 1;
+        }
       }
-      sumaAguinaldo = Math.round(sumaAguinaldo * 100) / 100;
+      sumaRegistradaAgui = Math.round(sumaRegistradaAgui * 100) / 100;
 
-      const mesesPosibles = months.length;
+      const estimadoAgui = estimarSumaAguinaldo({
+        fechaIngreso: emp.fechaIngreso,
+        fechaSalida: input.fechaSalida,
+        promedioMensual: mensualBase,
+        tipoSalario,
+      });
+
+      /**
+       * - Si hay pagos en el período de aguinaldo: sumar registrados y, en meses
+       *   sin registro, sumar lo esperado de ficha (porque “se pagó lo indicado”).
+       * - Si no hay ningún pago: usar estimación por quincenas × salario ficha.
+       */
+      let sumaAguinaldo = 0;
+      let fuenteAguinaldo: "pagos_pasados" | "mixto" | "salario_ficha" = "salario_ficha";
+      if (payments.length === 0) {
+        sumaAguinaldo = estimadoAgui.suma;
+        fuenteAguinaldo = "salario_ficha";
+      } else {
+        // Recorrer meses del período agui y mezclar
+        let cursorA = new Date(inicioAgui.getFullYear(), inicioAgui.getMonth(), 1);
+        const endA = new Date(salida.getFullYear(), salida.getMonth(), 1);
+        let huecos = 0;
+        while (cursorA <= endA) {
+          const key = `${cursorA.getFullYear()}-${String(cursorA.getMonth() + 1).padStart(2, "0")}`;
+          const reg = byMonth.get(key) || 0;
+          if (reg > 0) sumaAguinaldo += reg;
+          else {
+            sumaAguinaldo += esperadoMes(key);
+            huecos += 1;
+          }
+          cursorA = new Date(cursorA.getFullYear(), cursorA.getMonth() + 1, 1);
+        }
+        sumaAguinaldo = Math.round(sumaAguinaldo * 100) / 100;
+        fuenteAguinaldo = huecos > 0 ? "mixto" : "pagos_pasados";
+      }
+
+      const mesesPosibles = monthsFilled.length;
+      const mesesDesdeFicha = monthsFilled.filter((m) => m.fuenteMes === "salario_ficha").length;
+      const mesesRegistrados = monthsFilled.filter((m) => m.fuenteMes === "registrado").length;
+
+      let notaAntiguedad: string | null = null;
+      if (payments.length === 0) {
+        notaAntiguedad =
+          `Sin pagos en Pagos pasados: se usa el salario de ficha (${emp.tipoSalario} ₡${Number(emp.salarioBase).toLocaleString("es-CR")}). ` +
+          `Aguinaldo estimado: ${estimadoAgui.detalle}.`;
+      } else if (mesesDesdeFicha > 0) {
+        notaAntiguedad =
+          `${mesesRegistrados} mes(es) con monto registrado y ${mesesDesdeFicha} mes(es) sin registro → en esos se asume el salario indicado en ficha.`;
+      } else if (mesesPosibles < 6) {
+        notaAntiguedad =
+          `Lleva menos de 6 meses (ingreso ${emp.fechaIngreso}). Promedio con los ${mesesPosibles} mes(es) desde que entró.`;
+      }
+
       return {
         employeeId: emp.id,
         fechaIngreso: emp.fechaIngreso,
         salarioBase: emp.salarioBase,
+        tipoSalario,
+        mensualBase,
         pagosEncontrados: payments.length,
-        months, // solo desde ingreso (máx 6); Mes 1 = más reciente
+        months: monthsFilled,
         mesesPosibles,
-        mesesConPago: withPay.length,
+        mesesConPago: mesesRegistrados,
+        mesesDesdeFicha,
         suma6,
         promedio,
         sumaAguinaldo,
-        notaAntiguedad: mesesPosibles < 6
-          ? `Lleva menos de 6 meses (ingreso ${emp.fechaIngreso}). El promedio usa solo los ${withPay.length || mesesPosibles} mes(es) con pago desde que entró.`
-          : withPay.length < 6
-            ? `Se promedian solo los ${withPay.length} mes(es) que tienen pago registrado.`
-            : null,
-        fuente: payments.length > 0 ? "pagos_pasados" as const : "ninguno" as const,
+        sumaRegistradaAgui,
+        aguinaldoQuincenas: estimadoAgui.quincenas,
+        fuenteAguinaldo,
+        notaAntiguedad,
+        fuente: payments.length === 0
+          ? ("salario_ficha" as const)
+          : mesesDesdeFicha > 0
+            ? ("mixto" as const)
+            : ("pagos_pasados" as const),
       };
     }),
 

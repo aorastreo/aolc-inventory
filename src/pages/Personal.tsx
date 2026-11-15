@@ -1354,7 +1354,7 @@ function LiquidacionTab({
   const [mesesGanados, setMesesGanados] = useState<string[]>([]);
   const [mesLabels, setMesLabels] = useState<string[]>([]);
   const [notaAntiguedad, setNotaAntiguedad] = useState<string | null>(null);
-  const [pagosFuente, setPagosFuente] = useState<"pagos_pasados" | "ninguno" | null>(null);
+  const [pagosFuente, setPagosFuente] = useState<"pagos_pasados" | "salario_ficha" | "mixto" | "ninguno" | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
   const [error, setError] = useState("");
 
@@ -1372,32 +1372,38 @@ function LiquidacionTab({
     { enabled: empIdNum > 0 && !!form.fechaSalida },
   );
 
-  // Al elegir empleado / fecha: jalar lo pagado de Pagos pasados (solo meses desde el ingreso)
+  // Pagos registrados si existen; si no, salario de ficha (lo que se paga “de siempre”)
   useEffect(() => {
     if (!earnings || !empIdNum) return;
     setNotaAntiguedad(earnings.notaAntiguedad || null);
+    const fuente = (earnings.fuente || "ninguno") as "pagos_pasados" | "salario_ficha" | "mixto" | "ninguno";
+    setPagosFuente(fuente);
+
     if (earnings.months?.length) {
       setMesesGanados(earnings.months.map((m: any) => (m.monto > 0 ? String(m.monto) : "")));
-      setMesLabels(earnings.months.map((m: any) => m.label || m.key));
-      setPagosFuente(earnings.fuente === "pagos_pasados" ? "pagos_pasados" : "ninguno");
+      setMesLabels(earnings.months.map((m: any) => {
+        const base = m.label || m.key;
+        return m.fuenteMes === "salario_ficha" ? `${base} (ficha)` : base;
+      }));
       setForm((f) => ({
         ...f,
         promedioMensual: earnings.promedio > 0
           ? String(earnings.promedio)
           : (selected ? String(monthlyFromBase(selected.salarioBase, selected.tipoSalario)) : f.promedioMensual),
-        sumaSalariosAguinaldo: earnings.sumaAguinaldo > 0 ? String(earnings.sumaAguinaldo) : f.sumaSalariosAguinaldo,
+        sumaSalariosAguinaldo: earnings.sumaAguinaldo > 0
+          ? String(earnings.sumaAguinaldo)
+          : f.sumaSalariosAguinaldo,
       }));
       setPreview(null);
-    } else {
-      setPagosFuente("ninguno");
+    } else if (selected) {
       setMesesGanados([]);
       setMesLabels([]);
-      if (selected) {
-        setForm((f) => ({
-          ...f,
-          promedioMensual: String(monthlyFromBase(selected.salarioBase, selected.tipoSalario)),
-        }));
-      }
+      const mensual = monthlyFromBase(selected.salarioBase, selected.tipoSalario);
+      setForm((f) => ({
+        ...f,
+        promedioMensual: String(mensual),
+        sumaSalariosAguinaldo: earnings.sumaAguinaldo > 0 ? String(earnings.sumaAguinaldo) : "",
+      }));
     }
   }, [earnings, empIdNum, selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1534,10 +1540,12 @@ function LiquidacionTab({
                 {loadingEarnings
                   ? "Buscando en Pagos pasados…"
                   : pagosFuente === "pagos_pasados"
-                    ? `Se jaló de Pagos pasados (${earnings?.pagosEncontrados || 0} registro(s)). Si no lleva 6 meses, solo aparecen los meses desde su ingreso.`
-                    : pagosFuente === "ninguno"
-                      ? "No hay Pagos pasados para esta persona. Registralos en esa pestaña o escribilos acá a mano."
-                      : "Al elegir empleado se llenan solos desde Pagos pasados (solo meses trabajados)."}
+                    ? `Usando montos registrados en Pagos pasados (${earnings?.pagosEncontrados || 0} registro(s)).`
+                    : pagosFuente === "salario_ficha"
+                      ? "No hay Pagos pasados: se asume que siempre se le pagó el salario indicado en la ficha (base)."
+                      : pagosFuente === "mixto"
+                        ? "Hay meses con monto registrado y meses vacíos: en los vacíos se usa el salario de ficha (lo indicado desde el inicio)."
+                        : "Al elegir empleado se llenan solos desde Pagos pasados; si no hay, se usa el salario de ficha."}
               </p>
               {notaAntiguedad && (
                 <p className="text-xs rounded-md px-3 py-2" style={{ background: "rgba(217,119,6,0.12)", color: "#92400E" }}>
