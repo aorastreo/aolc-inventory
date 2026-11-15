@@ -213,7 +213,7 @@ export async function ensureEnterpriseSchema() {
         storeId BIGINT UNSIGNED NOT NULL,
         employeeId BIGINT UNSIGNED NOT NULL,
         fecha VARCHAR(20) NOT NULL,
-        tipo ENUM('ausencia','tardanza','salida_tarde','salida_parcial') NOT NULL,
+        tipo ENUM('ausencia','tardanza','salida_tarde','salida_parcial','salida_temprana') NOT NULL,
         horaProgramada VARCHAR(5) NULL,
         horaReal VARCHAR(5) NULL,
         minutos INT NOT NULL DEFAULT 0,
@@ -231,7 +231,7 @@ export async function ensureEnterpriseSchema() {
     await tryExec(
       conn,
       `ALTER TABLE hrAttendanceEvents
-       MODIFY COLUMN tipo ENUM('ausencia','tardanza','salida_tarde','salida_parcial') NOT NULL`,
+       MODIFY COLUMN tipo ENUM('ausencia','tardanza','salida_tarde','salida_parcial','salida_temprana') NOT NULL`,
     );
 
     await tryExec(

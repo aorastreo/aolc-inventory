@@ -47,6 +47,7 @@ const TIPO_LABEL: Record<string, string> = {
   tardanza: "Llegó tarde",
   salida_tarde: "Salió más tarde",
   salida_parcial: "Salió un rato",
+  salida_temprana: "Salió antes",
 };
 
 export default function PersonalPage() {
@@ -605,7 +606,7 @@ function ExceptionsTab({
     storeId: storeFilter === "all" ? "" : String(storeFilter),
     employeeId: "",
     fecha: todayStr(),
-    tipo: "tardanza" as "ausencia" | "tardanza" | "salida_tarde" | "salida_parcial",
+    tipo: "tardanza" as "ausencia" | "tardanza" | "salida_tarde" | "salida_parcial" | "salida_temprana",
     horaReal: "",
     horaDesde: "",
     justificada: false,
@@ -757,6 +758,7 @@ function ExceptionsTab({
               >
                 <option value="ausencia">No llegó</option>
                 <option value="tardanza">Llegó tarde</option>
+                <option value="salida_temprana">Salió antes (ej. a las 5)</option>
                 <option value="salida_parcial">Salió un rato (ej. 12 a 3)</option>
                 <option value="salida_tarde">Salió más tarde (hora extra)</option>
               </select>
@@ -803,9 +805,15 @@ function ExceptionsTab({
                 </div>
               </div>
             )}
-            {(form.tipo === "tardanza" || form.tipo === "salida_tarde") && (
+            {(form.tipo === "tardanza" || form.tipo === "salida_tarde" || form.tipo === "salida_temprana") && (
               <div>
-                <Label>{form.tipo === "tardanza" ? "Hora en que llegó" : "Hora en que salió"}</Label>
+                <Label>
+                  {form.tipo === "tardanza"
+                    ? "Hora en que llegó"
+                    : form.tipo === "salida_temprana"
+                      ? "Hora en que salió (antes de la programada)"
+                      : "Hora en que salió"}
+                </Label>
                 <Input type="time" value={form.horaReal} onChange={(e) => setForm({ ...form, horaReal: e.target.value })} />
               </div>
             )}
@@ -1127,7 +1135,7 @@ function QuincenaTab({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
                     <div style={{ color: "hsl(207 20% 45%)" }}>Bruto quincena</div>
                     <div className="font-semibold" style={{ color: "hsl(207 55% 15%)" }}>{money(r.brutoPeriodo)}</div>
@@ -1144,6 +1152,13 @@ function QuincenaTab({
                     <div className="font-semibold" style={{ color: r.descTardanzas ? BRAND_RED : "hsl(207 55% 15%)" }}>
                       −{money(r.descTardanzas)}
                       {r.minutosTarde ? ` (${r.minutosTarde} min)` : ""}
+                    </div>
+                  </div>
+                  <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
+                    <div style={{ color: "hsl(207 20% 45%)" }}>Desc. salió antes</div>
+                    <div className="font-semibold" style={{ color: r.descTempranas ? BRAND_RED : "hsl(207 55% 15%)" }}>
+                      −{money(r.descTempranas || 0)}
+                      {r.minutosTempranos ? ` (${r.minutosTempranos} min)` : ""}
                     </div>
                   </div>
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
@@ -1225,7 +1240,7 @@ function SummaryTab({
                   <h3 className="font-semibold text-sm" style={{ color: "hsl(207 55% 15%)" }}>{r.nombre}</h3>
                   <span className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>{storeName(r.storeId)} · {r.puesto}</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
                     <div style={{ color: "hsl(207 20% 45%)" }}>Ausencias</div>
                     <div className="font-bold text-sm" style={{ color: "hsl(207 55% 15%)" }}>
@@ -1236,6 +1251,12 @@ function SummaryTab({
                     <div style={{ color: "hsl(207 20% 45%)" }}>Tardanzas</div>
                     <div className="font-bold text-sm" style={{ color: "hsl(207 55% 15%)" }}>
                       {r.tardanzas} · {r.minutosTarde} min
+                    </div>
+                  </div>
+                  <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>
+                    <div style={{ color: "hsl(207 20% 45%)" }}>Salió antes</div>
+                    <div className="font-bold text-sm" style={{ color: "hsl(207 55% 15%)" }}>
+                      {r.salidasTempranas || 0} · {r.minutosTempranos || 0} min
                     </div>
                   </div>
                   <div className="rounded-lg px-3 py-2" style={{ background: "hsl(210 40% 98%)" }}>

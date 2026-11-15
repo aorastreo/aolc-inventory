@@ -9,7 +9,7 @@ import { calcularLiquidacion } from "../lib/liquidacion-cr";
 const BODEGA_STORE_ID = 1;
 
 const tipoSalarioEnum = z.enum(["semanal", "quincenal", "mensual"]);
-const eventoTipoEnum = z.enum(["ausencia", "tardanza", "salida_tarde", "salida_parcial"]);
+const eventoTipoEnum = z.enum(["ausencia", "tardanza", "salida_tarde", "salida_parcial", "salida_temprana"]);
 const tipoSalidaEnum = z.enum(["renuncia", "despido_con_responsabilidad", "despido_sin_responsabilidad"]);
 
 const liquidacionInputShape = z.object({
@@ -330,7 +330,7 @@ export const hrRouter = createRouter({
       employeeId: z.number(),
       fecha: z.string().min(1),
       tipo: eventoTipoEnum,
-      /** Tardanza / salida tarde: hora real. Salida parcial: hora de regreso (hasta). */
+      /** Tardanza / salida tarde / salida temprana: hora real. Salida parcial: hora de regreso (hasta). */
       horaReal: z.string().regex(/^\d{2}:\d{2}$/).optional(),
       /** Salida parcial: hora en que se fue (desde), ej. 12:00 */
       horaDesde: z.string().regex(/^\d{2}:\d{2}$/).optional(),
@@ -375,6 +375,11 @@ export const hrRouter = createRouter({
           horaProgramada = day.horaEntrada;
           minutos = Math.max(0, timeToMinutes(input.horaReal) - timeToMinutes(day.horaEntrada));
           if (minutos <= 0) throw new Error("La hora indicada no es después de la entrada programada");
+        } else if (input.tipo === "salida_temprana") {
+          // Salió antes del cierre programado (ej. salió a las 17:00 y cierra a las 18:00)
+          horaProgramada = day.horaSalida;
+          minutos = Math.max(0, timeToMinutes(day.horaSalida) - timeToMinutes(input.horaReal));
+          if (minutos <= 0) throw new Error("La hora indicada no es antes de la salida programada");
         } else {
           // salida_tarde
           horaProgramada = day.horaSalida;
@@ -435,6 +440,7 @@ export const hrRouter = createRouter({
         const ausencias = mine.filter((ev) => ev.tipo === "ausencia");
         const tardanzas = mine.filter((ev) => ev.tipo === "tardanza");
         const parciales = mine.filter((ev) => ev.tipo === "salida_parcial");
+        const tempranas = mine.filter((ev) => ev.tipo === "salida_temprana");
         const salidas = mine.filter((ev) => ev.tipo === "salida_tarde");
         return {
           employeeId: e.id,
@@ -447,6 +453,8 @@ export const hrRouter = createRouter({
           minutosTarde: tardanzas.reduce((s, t) => s + (t.minutos || 0), 0),
           salidasParciales: parciales.length,
           minutosParciales: parciales.reduce((s, t) => s + (t.minutos || 0), 0),
+          salidasTempranas: tempranas.length,
+          minutosTempranos: tempranas.reduce((s, t) => s + (t.minutos || 0), 0),
           salidasTarde: salidas.length,
           minutosExtra: salidas.reduce((s, t) => s + (t.minutos || 0), 0),
         };
@@ -456,7 +464,7 @@ export const hrRouter = createRouter({
   /**
    * Estimado a pagar en un periodo (ej. quincena), aplicando excepciones:
    * - Ausencia → descuenta 1 día (aunque esté marcada justificada)
-   * - Tardanza → descuenta minutos proporcionales (aunque esté justificada)
+   * - Tardanza / salida parcial / salida temprana → descuenta minutos proporcionales
    * - Salida tarde → suma horas extra a 1.5×
    */
   quincenaPay: authedQuery
@@ -523,6 +531,7 @@ export const hrRouter = createRouter({
         const ausencias = mine.filter((ev) => ev.tipo === "ausencia");
         const tardanzas = mine.filter((ev) => ev.tipo === "tardanza");
         const parciales = mine.filter((ev) => ev.tipo === "salida_parcial");
+        const tempranas = mine.filter((ev) => ev.tipo === "salida_temprana");
         const extras = mine.filter((ev) => ev.tipo === "salida_tarde");
 
         const descAusencias = round2(ausencias.length * diario);
@@ -542,6 +551,14 @@ export const hrRouter = createRouter({
         }
         descParciales = round2(descParciales);
 
+        let descTempranas = 0;
+        for (const t of tempranas) {
+          const jornada = jornadaMinutos(e.storeId, t.fecha);
+          const vMin = diario / jornada;
+          descTempranas += (t.minutos || 0) * vMin;
+        }
+        descTempranas = round2(descTempranas);
+
         let montoExtras = 0;
         for (const x of extras) {
           const jornada = jornadaMinutos(e.storeId, x.fecha);
@@ -553,7 +570,8 @@ export const hrRouter = createRouter({
 
         const minutosTarde = tardanzas.reduce((s, t) => s + (t.minutos || 0), 0);
         const minutosParciales = parciales.reduce((s, t) => s + (t.minutos || 0), 0);
-        const descuentos = round2(descAusencias + descTardanzas + descParciales);
+        const minutosTempranos = tempranas.reduce((s, t) => s + (t.minutos || 0), 0);
+        const descuentos = round2(descAusencias + descTardanzas + descParciales + descTempranas);
         const neto = round2(Math.max(0, bruto - descuentos + montoExtras));
 
         rows.push({
@@ -568,10 +586,12 @@ export const hrRouter = createRouter({
           ausencias: ausencias.length,
           minutosTarde,
           minutosParciales,
+          minutosTempranos,
           minutosExtra: extras.reduce((s, t) => s + (t.minutos || 0), 0),
           descAusencias,
           descTardanzas,
           descParciales,
+          descTempranas,
           descuentos,
           montoExtras,
           netoPagar: neto,
@@ -585,7 +605,7 @@ export const hrRouter = createRouter({
             horaReal: ev.horaReal,
             descuentoEstimado: ev.tipo === "ausencia"
               ? round2(diario)
-              : (ev.tipo === "tardanza" || ev.tipo === "salida_parcial")
+              : (ev.tipo === "tardanza" || ev.tipo === "salida_parcial" || ev.tipo === "salida_temprana")
                 ? round2((ev.minutos || 0) * (diario / jornadaMinutos(e.storeId, ev.fecha)))
                 : 0,
           })),

@@ -575,7 +575,7 @@ export const hrAttendanceEvents = mysqlTable("hrAttendanceEvents", {
   storeId: bigint("storeId", { mode: "number", unsigned: true }).notNull(),
   employeeId: bigint("employeeId", { mode: "number", unsigned: true }).notNull(),
   fecha: varchar("fecha", { length: 20 }).notNull(),
-  tipo: mysqlEnum("tipo", ["ausencia", "tardanza", "salida_tarde", "salida_parcial"]).notNull(),
+  tipo: mysqlEnum("tipo", ["ausencia", "tardanza", "salida_tarde", "salida_parcial", "salida_temprana"]).notNull(),
   horaProgramada: varchar("horaProgramada", { length: 5 }),
   horaReal: varchar("horaReal", { length: 5 }),
   minutos: int("minutos").default(0).notNull(),
