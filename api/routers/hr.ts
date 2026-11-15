@@ -497,8 +497,8 @@ export const hrRouter = createRouter({
           return { bruto: salarioBase / 2, diario: salarioBase / 30 };
         }
         if (tipo === "semanal") {
-          // Quincena ≈ 2 semanas
-          return { bruto: salarioBase * 2, diario: salarioBase / 6 };
+          // Se paga por semana: el estimado es 1 semana (no ×2 de la quincena)
+          return { bruto: salarioBase, diario: salarioBase / 6 };
         }
         // quincenal: el salarioBase es lo de la quincena
         return { bruto: salarioBase, diario: salarioBase / 15 };

@@ -1073,8 +1073,8 @@ function HistorialTab({
 function payPeriodLabels(tipoSalario: string) {
   if (tipoSalario === "semanal") {
     return {
-      neto: "A pagar en este periodo (2 semanas)",
-      bruto: "Bruto (2 semanas)",
+      neto: "A pagar esta semana",
+      bruto: "Bruto semanal",
       tipoLabel: "semanal",
     };
   }
@@ -1151,7 +1151,6 @@ function QuincenaTab({
                     <h3 className="font-semibold text-sm" style={{ color: "hsl(207 55% 15%)" }}>{r.nombre}</h3>
                     <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
                       {storeName(r.storeId)} · {r.puesto} · {labels.tipoLabel}
-                      {r.tipoSalario === "semanal" ? ` · base ${money(r.salarioBase)}/semana` : ""}
                     </p>
                   </div>
                   <div className="text-right">
