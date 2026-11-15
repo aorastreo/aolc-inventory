@@ -136,11 +136,34 @@ export function diasCesantia(anosCompletos: number, mesesFraccion: number, meses
   return { dias, unidades, factor, nota };
 }
 
-/** Vacaciones proporcionales: ~14 días por cada 50 semanas (350 días). */
-export function diasVacacionesProporcionales(diasTotales: number): number {
+/**
+ * Vacaciones Art. 153:
+ * - 14 días (2 semanas) por cada 50 semanas completas (350 días).
+ * - Si no cumple 50 semanas: mínimo 1 día por cada mes completo trabajado
+ *   (las fracciones de mes no se pagan — criterio MTSS DAJ-AE-177-2001).
+ * - Con períodos de 50 semanas ya cumplidos, el remanente también se paga
+ *   a 1 día por mes completo (~30 días).
+ */
+export function diasVacacionesProporcionales(
+  diasTotales: number,
+  mesesCompletosCalendario?: number,
+): number {
   if (diasTotales <= 0) return 0;
-  const raw = (diasTotales / (50 * 7)) * 14;
-  return Math.round(raw * 100) / 100;
+  const PERIODO = 50 * 7; // 350 días
+  const periodosCompletos = Math.floor(diasTotales / PERIODO);
+  const restoDias = diasTotales % PERIODO;
+
+  if (periodosCompletos === 0) {
+    const meses =
+      mesesCompletosCalendario != null && Number.isFinite(mesesCompletosCalendario)
+        ? Math.max(0, Math.floor(mesesCompletosCalendario))
+        : Math.floor(diasTotales / 30);
+    return meses;
+  }
+
+  const diasPorPeriodos = periodosCompletos * 14;
+  const mesesResto = Math.floor(restoDias / 30);
+  return diasPorPeriodos + mesesResto;
 }
 
 /** Inicio del período de aguinaldo MTSS (1 dic → 30 nov). */
@@ -392,10 +415,11 @@ export function calcularLiquidacion(input: LiquidacionInput): LiquidacionResult 
   const preavisoMonto = incluyePreaviso ? round2(diario * preDias) : 0;
   const cesantiaMonto = incluyeCesantia ? round2(diario * ces.dias) : 0;
 
+  const mesesCompletosCalendario = ant.anosCompletos * 12 + ant.mesesFraccion;
   const vacDias =
     input.diasVacaciones != null && Number.isFinite(Number(input.diasVacaciones))
       ? Number(input.diasVacaciones)
-      : diasVacacionesProporcionales(ant.diasTotales);
+      : diasVacacionesProporcionales(ant.diasTotales, mesesCompletosCalendario);
   const vacacionesMonto = round2(diario * vacDias);
 
   // MTSS: sumar brutos del período (1 dic–30 nov o ingreso→salida) y ÷ 12
@@ -431,7 +455,7 @@ export function calcularLiquidacion(input: LiquidacionInput): LiquidacionResult 
   }
   if (input.diasVacaciones == null) {
     advertencias.push(
-      "Vacaciones estimadas proporcionales al tiempo trabajado. Si ya disfrutó días, restalos manualmente para no pagar de más.",
+      "Vacaciones Art. 153: 14 días por cada 50 semanas; si no alcanza, 1 día por mes completo (sin fracción). Si ya disfrutó días, restalos manualmente.",
     );
   }
 
@@ -452,7 +476,12 @@ export function calcularLiquidacion(input: LiquidacionInput): LiquidacionResult 
       id: "vacaciones",
       label: "Vacaciones no disfrutadas",
       monto: vacacionesMonto,
-      detalle: `${vacDias} día(s) × ₡${round2(diario).toLocaleString("es-CR")} diario`,
+      detalle:
+        `${vacDias} día(s) × ₡${round2(diario).toLocaleString("es-CR")} diario (Art. 153: ` +
+        (ant.diasTotales >= 50 * 7
+          ? "14 días por cada 50 semanas + 1 día/mes del remanente"
+          : "1 día por mes completo; sin fracción") +
+        ")",
     },
     {
       id: "preaviso",
