@@ -6,14 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Users, Clock, AlertTriangle, Plus, Trash2, Pencil, CalendarDays, Store, Scale, Wallet, FileDown,
+  Users, Clock, AlertTriangle, Plus, Trash2, Pencil, CalendarDays, Store, Scale, Wallet, FileDown, Gift,
 } from "lucide-react";
 import { downloadLiquidacionPdf } from "@/lib/liquidacionPdf";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
 
-type Tab = "empleados" | "horarios" | "excepciones" | "resumen" | "quincena" | "historial" | "liquidacion";
+type Tab = "empleados" | "horarios" | "excepciones" | "resumen" | "quincena" | "historial" | "liquidacion" | "aguinaldos";
 
 function todayStr() {
   const d = new Date();
@@ -94,7 +94,7 @@ export default function PersonalPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight" style={{ color: "hsl(207 55% 15%)" }}>Personal</h1>
           <p className="text-sm mt-0.5" style={{ color: "hsl(207 20% 45%)" }}>
-            Empleados (tiendas + Bodega), horarios, excepciones, quincena y liquidación
+            Empleados (tiendas + Bodega), horarios, excepciones, quincena, aguinaldos y liquidación
           </p>
         </div>
       </div>
@@ -138,6 +138,7 @@ export default function PersonalPage() {
         {([
           ["quincena", "Quincena"],
           ["historial", "Pagos pasados"],
+          ["aguinaldos", "Aguinaldos"],
           ["excepciones", "Excepciones"],
           ["empleados", "Empleados"],
           ["horarios", "Horarios"],
@@ -213,6 +214,193 @@ export default function PersonalPage() {
           utils={utils}
         />
       )}
+      {tab === "aguinaldos" && (
+        <AguinaldosTab storeFilter={storeFilter} />
+      )}
+    </div>
+  );
+}
+
+function AguinaldosTab({ storeFilter }: { storeFilter: number | "all" }) {
+  const currentYear = new Date().getFullYear();
+  const [anioPago, setAnioPago] = useState(currentYear);
+  const storeIdNum = storeFilter === "all" ? undefined : storeFilter;
+
+  const { data, isLoading, error, isFetching } = trpc.hr.aguinaldoReport.useQuery({
+    storeId: storeIdNum,
+    anioPago,
+  });
+
+  const fuenteLabel: Record<string, string> = {
+    pagos_pasados: "Pagos registrados",
+    mixto: "Pagos + ficha",
+    salario_ficha: "Salario de ficha",
+  };
+
+  function money2(n: number) {
+    return `₡${Number(n || 0).toLocaleString("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  function exportCsv() {
+    if (!data?.rows?.length) return;
+    const header = ["Tienda", "Empleado", "Puesto", "Cedula", "Ingreso", "Tipo salario", "Suma salarios", "Aguinaldo", "Fuente"];
+    const lines = data.rows.map((r) => [
+      r.storeName,
+      r.nombre,
+      r.puesto,
+      r.cedula || "",
+      r.fechaIngreso,
+      r.tipoSalario,
+      String(r.sumaSalarios),
+      String(r.aguinaldoMonto),
+      fuenteLabel[r.fuente] || r.fuente,
+    ].map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","));
+    const csv = [header.join(","), ...lines].join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `aguinaldos_${data.anioPago}_${data.fechaCorte}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="border shadow-sm">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <Gift className="w-5 h-5 mt-0.5" style={{ color: BRAND_RED }} />
+              <div>
+                <h2 className="font-semibold" style={{ color: "hsl(207 55% 15%)" }}>Aguinaldos</h2>
+                <p className="text-xs mt-1" style={{ color: "hsl(207 20% 45%)" }}>
+                  MTSS: suma de salarios brutos del 1 de diciembre al 30 de noviembre ÷ 12.
+                  Usa Pagos pasados; si falta un mes, completa con el salario de ficha.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Label className="text-xs whitespace-nowrap">Año de pago</Label>
+              <select
+                className="h-10 border rounded-md px-3 text-sm bg-white"
+                style={{ borderColor: "hsl(210 20% 88%)" }}
+                value={anioPago}
+                onChange={(e) => setAnioPago(Number(e.target.value))}
+              >
+                {[currentYear - 1, currentYear, currentYear + 1].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <Button
+                variant="outline"
+                className="h-10"
+                disabled={!data?.rows?.length}
+                onClick={exportCsv}
+              >
+                Exportar CSV
+              </Button>
+            </div>
+          </div>
+
+          {data && (
+            <div
+              className="rounded-lg px-4 py-3 text-sm flex flex-wrap gap-x-6 gap-y-2"
+              style={{ background: "rgba(27,58,92,0.08)", color: BRAND_BLUE }}
+            >
+              <span>
+                Período: <strong>{data.periodoDesde}</strong> → <strong>{data.fechaCorte}</strong>
+              </span>
+              <span>Empleados: <strong>{data.empleados}</strong></span>
+              <span>Suma salarios: <strong>{money2(data.totalSuma)}</strong></span>
+              <span>
+                Total a pagar:{" "}
+                <strong style={{ color: BRAND_RED }}>{money2(data.totalAguinaldo)}</strong>
+              </span>
+              {isFetching && <span className="text-xs">Actualizando…</span>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {isLoading ? (
+        <p className="text-sm" style={{ color: "hsl(207 20% 45%)" }}>Calculando aguinaldos…</p>
+      ) : error ? (
+        <p className="text-sm text-red-600">{error.message}</p>
+      ) : !data?.rows?.length ? (
+        <Card className="border shadow-sm">
+          <CardContent className="p-5 text-sm" style={{ color: "hsl(207 20% 45%)" }}>
+            No hay empleados activos para este filtro / período.
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ background: "hsl(207 55% 15%)", color: "white" }}>
+                  <th className="text-left font-medium px-4 py-3">Empleado</th>
+                  <th className="text-left font-medium px-4 py-3">Tienda</th>
+                  <th className="text-left font-medium px-4 py-3">Ingreso</th>
+                  <th className="text-right font-medium px-4 py-3">Suma salarios</th>
+                  <th className="text-right font-medium px-4 py-3">Aguinaldo</th>
+                  <th className="text-left font-medium px-4 py-3">Fuente</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((r, idx) => (
+                  <tr
+                    key={r.employeeId}
+                    style={{
+                      background: idx % 2 === 0 ? "white" : "hsl(210 20% 98%)",
+                      borderBottom: "1px solid hsl(210 20% 92%)",
+                    }}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-medium" style={{ color: "hsl(207 55% 15%)" }}>{r.nombre}</div>
+                      <div className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
+                        {r.puesto}
+                        {r.cedula ? ` · ${r.cedula}` : ""}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3" style={{ color: "hsl(207 20% 35%)" }}>{r.storeName}</td>
+                    <td className="px-4 py-3 whitespace-nowrap" style={{ color: "hsl(207 20% 35%)" }}>
+                      {r.fechaIngreso}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">{money2(r.sumaSalarios)}</td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap font-bold" style={{ color: BRAND_RED }}>
+                      {money2(r.aguinaldoMonto)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
+                        {fuenteLabel[r.fuente] || r.fuente}
+                        {r.fuente === "mixto" ? ` (${r.mesesConRegistro} reg. / ${r.mesesDesdeFicha} ficha)` : ""}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: "rgba(178,34,52,0.08)" }}>
+                  <td className="px-4 py-3 font-bold" colSpan={3} style={{ color: "hsl(207 55% 15%)" }}>
+                    Total ({data.empleados} empleados)
+                  </td>
+                  <td className="px-4 py-3 text-right font-bold">{money2(data.totalSuma)}</td>
+                  <td className="px-4 py-3 text-right font-bold" style={{ color: BRAND_RED }}>
+                    {money2(data.totalAguinaldo)}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      <p className="text-xs" style={{ color: "hsl(207 20% 50%)" }}>
+        Quienes ya se liquidaron y quedaron inactivos no aparecen aquí (el aguinaldo proporcional ya iba en su liquidación).
+        Revisá que los montos de Pagos pasados estén completos para no subestimar.
+      </p>
     </div>
   );
 }

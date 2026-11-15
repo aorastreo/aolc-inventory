@@ -7,6 +7,7 @@ import { ensureEnterpriseSchema } from "../lib/enterprise-schema";
 import {
   calcularLiquidacion,
   estimarSumaAguinaldo,
+  inicioPeriodoAguinaldo,
   quincenasAguinaldo,
   salarioBaseAMensual,
 } from "../lib/liquidacion-cr";
@@ -1005,6 +1006,183 @@ export const hrRouter = createRouter({
           : mesesDesdeFicha > 0
             ? ("mixto" as const)
             : ("pagos_pasados" as const),
+      };
+    }),
+
+  /**
+   * Reporte de aguinaldo MTSS para todos los empleados activos.
+   * Período: 1 dic (año-1) → 30 nov (año), o hasta fechaCorte si se indica.
+   * Aguinaldo = suma brutos del período ÷ 12.
+   */
+  aguinaldoReport: authedQuery
+    .input(z.object({
+      storeId: z.number().optional(),
+      /** Año de pago (dic). Ej. 2026 = período 1 dic 2025 – 30 nov 2026. */
+      anioPago: z.number().int().min(2020).max(2100).optional(),
+      /** Cierre del período (default 30 nov del anioPago). */
+      fechaCorte: z.string().optional(),
+    }).optional())
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+
+      const now = new Date();
+      // Si estamos en dic, el pago es de este año; si no, el próximo cierre nov de este año
+      const defaultAnio = now.getMonth() === 11 ? now.getFullYear() : now.getFullYear();
+      const anioPago = input?.anioPago ?? defaultAnio;
+      const fechaCorte = input?.fechaCorte || `${anioPago}-11-30`;
+      const inicioPeriodo = inicioPeriodoAguinaldo(fechaCorte);
+      const periodoDesde = `${inicioPeriodo.getFullYear()}-${String(inicioPeriodo.getMonth() + 1).padStart(2, "0")}-01`;
+
+      const empConds = [
+        eq(hrEmployees.isActive, true),
+        eq(hrEmployees.estado, "activo"),
+      ];
+      if (input?.storeId != null) empConds.push(eq(hrEmployees.storeId, input.storeId));
+      const emps = await db.select().from(hrEmployees).where(and(...empConds)).orderBy(desc(hrEmployees.id));
+
+      const storeRows = await db.select().from(stores);
+      const storeMap = new Map(storeRows.map((s) => [s.id, s.name]));
+
+      // Pagos de todos en la ventana del período
+      const payments = await db.select().from(hrPeriodPayments).where(and(
+        eq(hrPeriodPayments.isActive, true),
+        gte(hrPeriodPayments.hasta, periodoDesde),
+        lte(hrPeriodPayments.desde, fechaCorte),
+      ));
+
+      const payByEmp = new Map<number, typeof payments>();
+      for (const p of payments) {
+        const list = payByEmp.get(p.employeeId) || [];
+        list.push(p);
+        payByEmp.set(p.employeeId, list);
+      }
+
+      const rows = [];
+      for (const emp of emps) {
+        // Si ingresó después del corte, no corresponde
+        if (emp.fechaIngreso > fechaCorte) continue;
+
+        const tipoSalario = emp.tipoSalario as "semanal" | "quincenal" | "mensual";
+        const mensualBase = salarioBaseAMensual(Number(emp.salarioBase), tipoSalario);
+        const mine = payByEmp.get(emp.id) || [];
+
+        const byMonth = new Map<string, number>();
+        for (const p of mine) {
+          const desde = String(p.desde || "");
+          const hasta = String(p.hasta || "");
+          let key = desde.slice(0, 7);
+          const d0 = Date.parse(`${desde}T12:00:00`);
+          const d1 = Date.parse(`${hasta}T12:00:00`);
+          if (Number.isFinite(d0) && Number.isFinite(d1) && (d1 - d0) / 86400000 > 40) {
+            key = hasta.slice(0, 7);
+          }
+          if (!/^\d{4}-\d{2}$/.test(key)) continue;
+          byMonth.set(key, (byMonth.get(key) || 0) + Number(p.montoPagado || 0));
+        }
+
+        const ingreso = new Date(`${emp.fechaIngreso}T12:00:00`);
+        let inicioAgui = new Date(inicioPeriodo);
+        if (ingreso > inicioAgui) inicioAgui = ingreso;
+
+        function esperadoMesAgui(yearMonth: string): number {
+          const [ys, ms] = yearMonth.split("-").map(Number);
+          if (!ys || !ms) return Math.round(mensualBase * 100) / 100;
+          const mesInicio = `${ys}-${String(ms).padStart(2, "0")}-01`;
+          const last = new Date(ys, ms, 0).getDate();
+          const mesFin = `${ys}-${String(ms).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+          const desde = emp.fechaIngreso > mesInicio ? emp.fechaIngreso : mesInicio;
+          const hasta = fechaCorte < mesFin ? fechaCorte : mesFin;
+          if (hasta < desde) return 0;
+          if (tipoSalario === "quincenal") {
+            const q = quincenasAguinaldo(hasta, desde);
+            return Math.round((mensualBase / 2) * q * 100) / 100;
+          }
+          if (tipoSalario === "semanal") {
+            const days = Math.round(
+              (Date.parse(`${hasta}T12:00:00`) - Date.parse(`${desde}T12:00:00`)) / 86400000,
+            ) + 1;
+            const semanas = Math.max(0, Math.round(days / 7));
+            return Math.round((Number(emp.salarioBase) || 0) * semanas * 100) / 100;
+          }
+          const daysWorked = Math.round(
+            (Date.parse(`${hasta}T12:00:00`) - Date.parse(`${desde}T12:00:00`)) / 86400000,
+          ) + 1;
+          return Math.round(mensualBase * (daysWorked / last) * 100) / 100;
+        }
+
+        const estimado = estimarSumaAguinaldo({
+          fechaIngreso: emp.fechaIngreso,
+          fechaSalida: fechaCorte,
+          promedioMensual: mensualBase,
+          tipoSalario,
+        });
+
+        let sumaAguinaldo = 0;
+        let mesesConRegistro = 0;
+        let mesesDesdeFicha = 0;
+        let fuente: "pagos_pasados" | "mixto" | "salario_ficha" = "salario_ficha";
+
+        if (mine.length === 0) {
+          sumaAguinaldo = estimado.suma;
+          fuente = "salario_ficha";
+        } else {
+          let cursorA = new Date(inicioAgui.getFullYear(), inicioAgui.getMonth(), 1);
+          const endA = new Date(
+            new Date(`${fechaCorte}T12:00:00`).getFullYear(),
+            new Date(`${fechaCorte}T12:00:00`).getMonth(),
+            1,
+          );
+          while (cursorA <= endA) {
+            const key = `${cursorA.getFullYear()}-${String(cursorA.getMonth() + 1).padStart(2, "0")}`;
+            const reg = byMonth.get(key) || 0;
+            if (reg > 0) {
+              sumaAguinaldo += reg;
+              mesesConRegistro += 1;
+            } else {
+              sumaAguinaldo += esperadoMesAgui(key);
+              mesesDesdeFicha += 1;
+            }
+            cursorA = new Date(cursorA.getFullYear(), cursorA.getMonth() + 1, 1);
+          }
+          sumaAguinaldo = Math.round(sumaAguinaldo * 100) / 100;
+          fuente = mesesDesdeFicha > 0 ? "mixto" : "pagos_pasados";
+        }
+
+        const aguinaldoMonto = Math.round((sumaAguinaldo / 12) * 100) / 100;
+
+        rows.push({
+          employeeId: emp.id,
+          storeId: emp.storeId,
+          storeName: storeMap.get(emp.storeId) || `Tienda ${emp.storeId}`,
+          nombre: `${emp.nombre} ${emp.apellidos}`.trim(),
+          puesto: emp.puesto,
+          cedula: emp.cedula,
+          fechaIngreso: emp.fechaIngreso,
+          tipoSalario,
+          salarioBase: Number(emp.salarioBase),
+          mensualBase,
+          sumaSalarios: sumaAguinaldo,
+          aguinaldoMonto,
+          fuente,
+          mesesConRegistro,
+          mesesDesdeFicha,
+          pagosRegistrados: mine.length,
+        });
+      }
+
+      rows.sort((a, b) => a.storeName.localeCompare(b.storeName, "es") || a.nombre.localeCompare(b.nombre, "es"));
+      const totalAguinaldo = Math.round(rows.reduce((s, r) => s + r.aguinaldoMonto, 0) * 100) / 100;
+      const totalSuma = Math.round(rows.reduce((s, r) => s + r.sumaSalarios, 0) * 100) / 100;
+
+      return {
+        anioPago,
+        periodoDesde,
+        fechaCorte,
+        empleados: rows.length,
+        totalSuma,
+        totalAguinaldo,
+        rows,
       };
     }),
 
