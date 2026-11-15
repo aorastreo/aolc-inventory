@@ -1295,9 +1295,10 @@ function LiquidacionTab({
     marcarInactivo: true,
     nota: "",
   });
-  /** Montos por mes (se llenan desde Pagos pasados; se pueden editar). */
-  const [mesesGanados, setMesesGanados] = useState<string[]>(["", "", "", "", "", ""]);
-  const [mesLabels, setMesLabels] = useState<string[]>(["Mes 1", "Mes 2", "Mes 3", "Mes 4", "Mes 5", "Mes 6"]);
+  /** Montos por mes desde el ingreso (máx 6); se llenan desde Pagos pasados. */
+  const [mesesGanados, setMesesGanados] = useState<string[]>([]);
+  const [mesLabels, setMesLabels] = useState<string[]>([]);
+  const [notaAntiguedad, setNotaAntiguedad] = useState<string | null>(null);
   const [pagosFuente, setPagosFuente] = useState<"pagos_pasados" | "ninguno" | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
   const [error, setError] = useState("");
@@ -1316,23 +1317,26 @@ function LiquidacionTab({
     { enabled: empIdNum > 0 && !!form.fechaSalida },
   );
 
-  // Al elegir empleado / fecha: jalar lo pagado de Pagos pasados
+  // Al elegir empleado / fecha: jalar lo pagado de Pagos pasados (solo meses desde el ingreso)
   useEffect(() => {
     if (!earnings || !empIdNum) return;
-    if (earnings.fuente === "pagos_pasados" && earnings.months?.length) {
+    setNotaAntiguedad(earnings.notaAntiguedad || null);
+    if (earnings.months?.length) {
       setMesesGanados(earnings.months.map((m: any) => (m.monto > 0 ? String(m.monto) : "")));
       setMesLabels(earnings.months.map((m: any) => m.label || m.key));
-      setPagosFuente("pagos_pasados");
+      setPagosFuente(earnings.fuente === "pagos_pasados" ? "pagos_pasados" : "ninguno");
       setForm((f) => ({
         ...f,
-        promedioMensual: earnings.promedio > 0 ? String(earnings.promedio) : (selected ? String(selected.salarioBase) : f.promedioMensual),
+        promedioMensual: earnings.promedio > 0
+          ? String(earnings.promedio)
+          : (selected ? String(selected.salarioBase) : f.promedioMensual),
         sumaSalariosAguinaldo: earnings.sumaAguinaldo > 0 ? String(earnings.sumaAguinaldo) : f.sumaSalariosAguinaldo,
       }));
       setPreview(null);
     } else {
       setPagosFuente("ninguno");
-      setMesesGanados(["", "", "", "", "", ""]);
-      setMesLabels(["Mes 1", "Mes 2", "Mes 3", "Mes 4", "Mes 5", "Mes 6"]);
+      setMesesGanados([]);
+      setMesLabels([]);
       if (selected) {
         setForm((f) => ({ ...f, promedioMensual: String(selected.salarioBase) }));
       }
@@ -1420,7 +1424,9 @@ function LiquidacionTab({
                 onChange={(e) => {
                   const emp = emps.find((x) => x.id === Number(e.target.value));
                   setPagosFuente(null);
-                  setMesesGanados(["", "", "", "", "", ""]);
+                  setNotaAntiguedad(null);
+                  setMesesGanados([]);
+                  setMesLabels([]);
                   setForm({
                     ...form,
                     employeeId: e.target.value,
@@ -1463,16 +1469,26 @@ function LiquidacionTab({
               />
             </div>
             <div className="sm:col-span-2 space-y-2">
-              <Label>Lo pagado por mes (últimos 6)</Label>
+              <Label>Lo pagado por mes (desde que entró, máx. 6)</Label>
               <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
                 {loadingEarnings
                   ? "Buscando en Pagos pasados…"
                   : pagosFuente === "pagos_pasados"
-                    ? `Se jaló de Pagos pasados (${earnings?.pagosEncontrados || 0} registro(s)). Podés corregir un mes si hace falta.`
+                    ? `Se jaló de Pagos pasados (${earnings?.pagosEncontrados || 0} registro(s)). Si no lleva 6 meses, solo aparecen los meses desde su ingreso.`
                     : pagosFuente === "ninguno"
                       ? "No hay Pagos pasados para esta persona. Registralos en esa pestaña o escribilos acá a mano."
-                      : "Al elegir empleado se llenan solos desde Pagos pasados."}
+                      : "Al elegir empleado se llenan solos desde Pagos pasados (solo meses trabajados)."}
               </p>
+              {notaAntiguedad && (
+                <p className="text-xs rounded-md px-3 py-2" style={{ background: "rgba(217,119,6,0.12)", color: "#92400E" }}>
+                  {notaAntiguedad}
+                </p>
+              )}
+              {selected && (
+                <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
+                  Fecha de ingreso en ficha: <strong>{selected.fechaIngreso}</strong>
+                </p>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {mesesGanados.map((val, idx) => (
                   <div key={idx}>
@@ -1491,12 +1507,17 @@ function LiquidacionTab({
                   </div>
                 ))}
               </div>
+              {mesesGanados.length === 0 && !loadingEarnings && empIdNum > 0 && (
+                <p className="text-xs" style={{ color: "hsl(207 20% 55%)" }}>
+                  Todavía no hay meses para mostrar. Revisá la fecha de ingreso del empleado.
+                </p>
+              )}
               {promedioFromMeses && (
                 <div
                   className="rounded-lg px-3 py-2 text-sm flex flex-wrap gap-x-4 gap-y-1"
                   style={{ background: "rgba(27,58,92,0.08)", color: BRAND_BLUE }}
                 >
-                  <span>Suma 6 meses: <strong>{money(promedioFromMeses.suma)}</strong></span>
+                  <span>Suma: <strong>{money(promedioFromMeses.suma)}</strong></span>
                   <span>Meses con pago: <strong>{promedioFromMeses.count}</strong></span>
                   <span>Promedio: <strong>{money(promedioFromMeses.promedio)}</strong></span>
                   {earnings && earnings.sumaAguinaldo > 0 && (

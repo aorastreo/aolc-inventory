@@ -765,23 +765,33 @@ export const hrRouter = createRouter({
         byMonth.set(key, (byMonth.get(key) || 0) + Number(p.montoPagado || 0));
       }
 
-      // Últimos 6 meses calendario hasta el mes de salida (inclusive)
+      /**
+       * Art. 30: promedio de últimos 6 meses, o fracción menor si no alcanzó ese lapso.
+       * Solo meses desde el ingreso (ej. Mariany desde ago) hasta la salida — máx. 6.
+       */
+      const ingreso = new Date(`${emp.fechaIngreso}T12:00:00`);
+      const ingresoMonth = new Date(ingreso.getFullYear(), ingreso.getMonth(), 1);
+      const earliestOf6 = new Date(salida.getFullYear(), salida.getMonth() - 5, 1);
+      const startMonth = ingresoMonth > earliestOf6 ? ingresoMonth : earliestOf6;
+
       const months: { key: string; label: string; monto: number }[] = [];
-      for (let i = 0; i < 6; i++) {
-        const d = new Date(salida.getFullYear(), salida.getMonth() - i, 1);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-        const label = d.toLocaleDateString("es-CR", { month: "short", year: "numeric" });
+      // De más reciente a más antiguo
+      let cursor = new Date(salida.getFullYear(), salida.getMonth(), 1);
+      while (cursor >= startMonth && months.length < 6) {
+        const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+        const label = cursor.toLocaleDateString("es-CR", { month: "short", year: "numeric" });
         months.push({ key, label, monto: Math.round((byMonth.get(key) || 0) * 100) / 100 });
+        cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1);
       }
 
       const withPay = months.filter((m) => m.monto > 0);
       const suma6 = withPay.reduce((s, m) => s + m.monto, 0);
+      // Promedio solo con meses que sí tienen pago (fracción real trabajada/pagada)
       const promedio = withPay.length ? Math.round((suma6 / withPay.length) * 100) / 100 : 0;
 
       // Aguinaldo: 1 dic año anterior → fecha salida (o 1 dic este año si sale en dic)
       let inicioAgui = new Date(salida.getFullYear() - 1, 11, 1);
       if (salida.getMonth() === 11) inicioAgui = new Date(salida.getFullYear(), 11, 1);
-      const ingreso = new Date(`${emp.fechaIngreso}T12:00:00`);
       if (ingreso > inicioAgui) inicioAgui = ingreso;
       const aguiStartKey = `${inicioAgui.getFullYear()}-${String(inicioAgui.getMonth() + 1).padStart(2, "0")}`;
       const aguiEndKey = `${salida.getFullYear()}-${String(salida.getMonth() + 1).padStart(2, "0")}`;
@@ -792,16 +802,23 @@ export const hrRouter = createRouter({
       }
       sumaAguinaldo = Math.round(sumaAguinaldo * 100) / 100;
 
+      const mesesPosibles = months.length;
       return {
         employeeId: emp.id,
         fechaIngreso: emp.fechaIngreso,
         salarioBase: emp.salarioBase,
         pagosEncontrados: payments.length,
-        months, // Mes 1 = más reciente
+        months, // solo desde ingreso (máx 6); Mes 1 = más reciente
+        mesesPosibles,
         mesesConPago: withPay.length,
         suma6,
         promedio,
         sumaAguinaldo,
+        notaAntiguedad: mesesPosibles < 6
+          ? `Lleva menos de 6 meses (ingreso ${emp.fechaIngreso}). El promedio usa solo los ${withPay.length || mesesPosibles} mes(es) con pago desde que entró.`
+          : withPay.length < 6
+            ? `Se promedian solo los ${withPay.length} mes(es) que tienen pago registrado.`
+            : null,
         fuente: payments.length > 0 ? "pagos_pasados" as const : "ninguno" as const,
       };
     }),
