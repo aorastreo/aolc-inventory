@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Users, Clock, AlertTriangle, Plus, Trash2, Pencil, CalendarDays, Store, Scale, Wallet,
+  Users, Clock, AlertTriangle, Plus, Trash2, Pencil, CalendarDays, Store, Scale, Wallet, FileDown,
 } from "lucide-react";
+import { downloadLiquidacionPdf } from "@/lib/liquidacionPdf";
 
 const BRAND_RED = "#B22234";
 const BRAND_BLUE = "#1B3A5C";
@@ -1693,16 +1694,59 @@ function LiquidacionTab({
                     </p>
                     <p className="text-sm font-bold mt-1" style={{ color: BRAND_RED }}>{money(row.total)}</p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-10 w-10 p-0"
-                    onClick={() => {
-                      if (confirm("¿Eliminar esta liquidación guardada?")) deleteMut.mutate({ id: row.id });
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
-                  </Button>
+                  <div className="flex gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-10 px-2"
+                      title="Descargar PDF para el empleado"
+                      onClick={() => {
+                        let detalle: any = null;
+                        try {
+                          detalle = row.detalleJson ? JSON.parse(row.detalleJson) : null;
+                        } catch {
+                          detalle = null;
+                        }
+                        downloadLiquidacionPdf({
+                          empleadoNombre: row.empleadoNombre,
+                          tiendaNombre: storeName(row.storeId),
+                          tipoSalida: row.tipoSalida,
+                          fechaIngreso: row.fechaIngreso,
+                          fechaSalida: row.fechaSalida,
+                          promedioMensual: row.promedioMensual,
+                          tipoSalario: row.tipoSalario,
+                          antigüedadLabel: detalle?.antigüedadLabel,
+                          salarioDiario: detalle?.salarioDiario,
+                          preavisoMonto: row.preavisoMonto,
+                          preavisoDias: detalle?.preavisoDias,
+                          cesantiaMonto: row.cesantiaMonto,
+                          cesantiaDias: detalle?.cesantiaDias,
+                          vacacionesMonto: row.vacacionesMonto,
+                          vacacionesDias: detalle?.vacacionesDias,
+                          aguinaldoMonto: row.aguinaldoMonto,
+                          salariosPendientes: row.salariosPendientes,
+                          total: row.total,
+                          rubros: detalle?.rubros,
+                          advertencias: detalle?.advertencias,
+                          nota: row.nota,
+                          generadoPor: "AO Gestion",
+                        });
+                      }}
+                    >
+                      <FileDown className="w-4 h-4 mr-1" style={{ color: BRAND_BLUE }} />
+                      PDF
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-10 w-10 p-0"
+                      onClick={() => {
+                        if (confirm("¿Eliminar esta liquidación guardada?")) deleteMut.mutate({ id: row.id });
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" style={{ color: BRAND_RED }} />
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
