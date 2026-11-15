@@ -1430,11 +1430,45 @@ function LiquidacionTab({
     onError: (e) => setError(e.message),
   });
   const saveMut = trpc.hr.saveLiquidacion.useMutation({
-    onSuccess: () => {
+    onSuccess: async (data) => {
       utils.hr.liquidaciones.invalidate();
       utils.hr.employees.invalidate();
       setError("");
-      alert("Liquidación guardada");
+      try {
+        const result = data.result;
+        await downloadLiquidacionPdf({
+          id: data.id,
+          empleadoNombre: selected
+            ? `${selected.nombre} ${selected.apellidos}`
+            : preview?.employee?.nombre || "Empleado",
+          puesto: selected?.puesto || preview?.employee?.puesto,
+          cedula: selected?.cedula || null,
+          tiendaNombre: selected ? storeName(selected.storeId) : undefined,
+          tipoSalida: form.tipoSalida,
+          fechaIngreso: selected?.fechaIngreso || preview?.employee?.fechaIngreso || "",
+          fechaSalida: form.fechaSalida,
+          promedioMensual: result.promedioMensual,
+          tipoSalario: selected?.tipoSalario || preview?.employee?.tipoSalario,
+          antigüedadLabel: result.antigüedadLabel,
+          salarioDiario: result.salarioDiario,
+          preavisoMonto: result.preavisoMonto,
+          preavisoDias: result.preavisoDias,
+          cesantiaMonto: result.cesantiaMonto,
+          cesantiaDias: result.cesantiaDias,
+          vacacionesMonto: result.vacacionesMonto,
+          vacacionesDias: result.vacacionesDias,
+          aguinaldoMonto: result.aguinaldoMonto,
+          salariosPendientes: result.salariosPendientes,
+          total: result.total,
+          rubros: result.rubros,
+          nota: form.nota || null,
+          generadoPor: "AO Gestion",
+          empresaNombre: "American Outlet",
+        });
+      } catch (err) {
+        console.error("PDF liquidación", err);
+      }
+      alert("Liquidación guardada. Se descargó el comprobante PDF.");
     },
     onError: (e) => setError(e.message),
   });
@@ -1767,15 +1801,18 @@ function LiquidacionTab({
                       size="sm"
                       className="h-10 px-2"
                       title="Descargar PDF para el empleado"
-                      onClick={() => {
+                      onClick={async () => {
                         let detalle: any = null;
                         try {
                           detalle = row.detalleJson ? JSON.parse(row.detalleJson) : null;
                         } catch {
                           detalle = null;
                         }
-                        downloadLiquidacionPdf({
+                        await downloadLiquidacionPdf({
+                          id: row.id,
                           empleadoNombre: row.empleadoNombre,
+                          puesto: row.empleadoPuesto || undefined,
+                          cedula: row.empleadoCedula || null,
                           tiendaNombre: storeName(row.storeId),
                           tipoSalida: row.tipoSalida,
                           fechaIngreso: row.fechaIngreso,
@@ -1794,9 +1831,9 @@ function LiquidacionTab({
                           salariosPendientes: row.salariosPendientes,
                           total: row.total,
                           rubros: detalle?.rubros,
-                          advertencias: detalle?.advertencias,
                           nota: row.nota,
                           generadoPor: "AO Gestion",
+                          empresaNombre: "American Outlet",
                         });
                       }}
                     >

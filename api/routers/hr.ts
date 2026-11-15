@@ -747,6 +747,8 @@ export const hrRouter = createRouter({
           ...r,
           tipoSalidaLabel: TIPO[r.tipoSalida] || r.tipoSalida,
           empleadoNombre: emp ? `${emp.nombre} ${emp.apellidos}` : `Empleado #${r.employeeId}`,
+          empleadoCedula: emp?.cedula || null,
+          empleadoPuesto: emp?.puesto || null,
         };
       });
     }),
