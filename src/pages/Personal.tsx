@@ -1613,7 +1613,7 @@ function LiquidacionTab({
                 type="number"
                 value={form.sumaSalariosAguinaldo}
                 onChange={(e) => setForm({ ...form, sumaSalariosAguinaldo: e.target.value })}
-                placeholder="Vacío = promedio × meses del período"
+                placeholder="Vacío = suma quincenas del período ÷ 12 (MTSS)"
               />
             </div>
             <div>
