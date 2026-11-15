@@ -729,6 +729,83 @@ export const hrRouter = createRouter({
       return { success: true };
     }),
 
+  /**
+   * Agrupa pagos registrados (Pagos pasados) por mes calendario
+   * para armar promedio de liquidación y suma de aguinaldo.
+   */
+  earningsForLiquidacion: authedQuery
+    .input(z.object({
+      employeeId: z.number(),
+      fechaSalida: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const [emp] = await db.select().from(hrEmployees).where(eq(hrEmployees.id, input.employeeId)).limit(1);
+      if (!emp) throw new Error("Empleado no encontrado");
+
+      const salida = new Date(`${input.fechaSalida}T12:00:00`);
+      // Ventana amplia: 12 meses atrás (aguinaldo) + un poco más
+      const windowStart = new Date(salida);
+      windowStart.setMonth(windowStart.getMonth() - 12);
+      const desdeWin = `${windowStart.getFullYear()}-${String(windowStart.getMonth() + 1).padStart(2, "0")}-01`;
+
+      const payments = await db.select().from(hrPeriodPayments).where(and(
+        eq(hrPeriodPayments.isActive, true),
+        eq(hrPeriodPayments.employeeId, input.employeeId),
+        gte(hrPeriodPayments.hasta, desdeWin),
+        lte(hrPeriodPayments.desde, input.fechaSalida),
+      ));
+
+      // Sumar por YYYY-MM (mes del inicio del periodo de pago)
+      const byMonth = new Map<string, number>();
+      for (const p of payments) {
+        const key = String(p.desde || "").slice(0, 7);
+        if (!/^\d{4}-\d{2}$/.test(key)) continue;
+        byMonth.set(key, (byMonth.get(key) || 0) + Number(p.montoPagado || 0));
+      }
+
+      // Últimos 6 meses calendario hasta el mes de salida (inclusive)
+      const months: { key: string; label: string; monto: number }[] = [];
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(salida.getFullYear(), salida.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const label = d.toLocaleDateString("es-CR", { month: "short", year: "numeric" });
+        months.push({ key, label, monto: Math.round((byMonth.get(key) || 0) * 100) / 100 });
+      }
+
+      const withPay = months.filter((m) => m.monto > 0);
+      const suma6 = withPay.reduce((s, m) => s + m.monto, 0);
+      const promedio = withPay.length ? Math.round((suma6 / withPay.length) * 100) / 100 : 0;
+
+      // Aguinaldo: 1 dic año anterior → fecha salida (o 1 dic este año si sale en dic)
+      let inicioAgui = new Date(salida.getFullYear() - 1, 11, 1);
+      if (salida.getMonth() === 11) inicioAgui = new Date(salida.getFullYear(), 11, 1);
+      const ingreso = new Date(`${emp.fechaIngreso}T12:00:00`);
+      if (ingreso > inicioAgui) inicioAgui = ingreso;
+      const aguiStartKey = `${inicioAgui.getFullYear()}-${String(inicioAgui.getMonth() + 1).padStart(2, "0")}`;
+      const aguiEndKey = `${salida.getFullYear()}-${String(salida.getMonth() + 1).padStart(2, "0")}`;
+
+      let sumaAguinaldo = 0;
+      for (const [key, monto] of byMonth) {
+        if (key >= aguiStartKey && key <= aguiEndKey) sumaAguinaldo += monto;
+      }
+      sumaAguinaldo = Math.round(sumaAguinaldo * 100) / 100;
+
+      return {
+        employeeId: emp.id,
+        fechaIngreso: emp.fechaIngreso,
+        salarioBase: emp.salarioBase,
+        pagosEncontrados: payments.length,
+        months, // Mes 1 = más reciente
+        mesesConPago: withPay.length,
+        suma6,
+        promedio,
+        sumaAguinaldo,
+        fuente: payments.length > 0 ? "pagos_pasados" as const : "ninguno" as const,
+      };
+    }),
+
   // ---------- Pagos de periodo (histórico / cierre) ----------
   periodPayments: authedQuery
     .input(z.object({

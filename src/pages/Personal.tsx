@@ -1295,8 +1295,10 @@ function LiquidacionTab({
     marcarInactivo: true,
     nota: "",
   });
-  /** Montos distintos por mes → el promedio se calcula solo. */
+  /** Montos por mes (se llenan desde Pagos pasados; se pueden editar). */
   const [mesesGanados, setMesesGanados] = useState<string[]>(["", "", "", "", "", ""]);
+  const [mesLabels, setMesLabels] = useState<string[]>(["Mes 1", "Mes 2", "Mes 3", "Mes 4", "Mes 5", "Mes 6"]);
+  const [pagosFuente, setPagosFuente] = useState<"pagos_pasados" | "ninguno" | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
   const [error, setError] = useState("");
 
@@ -1307,6 +1309,35 @@ function LiquidacionTab({
   }, [employees, storeFilter]);
 
   const selected = emps.find((e) => e.id === Number(form.employeeId));
+
+  const empIdNum = form.employeeId ? Number(form.employeeId) : 0;
+  const { data: earnings, isFetching: loadingEarnings } = trpc.hr.earningsForLiquidacion.useQuery(
+    { employeeId: empIdNum, fechaSalida: form.fechaSalida },
+    { enabled: empIdNum > 0 && !!form.fechaSalida },
+  );
+
+  // Al elegir empleado / fecha: jalar lo pagado de Pagos pasados
+  useEffect(() => {
+    if (!earnings || !empIdNum) return;
+    if (earnings.fuente === "pagos_pasados" && earnings.months?.length) {
+      setMesesGanados(earnings.months.map((m: any) => (m.monto > 0 ? String(m.monto) : "")));
+      setMesLabels(earnings.months.map((m: any) => m.label || m.key));
+      setPagosFuente("pagos_pasados");
+      setForm((f) => ({
+        ...f,
+        promedioMensual: earnings.promedio > 0 ? String(earnings.promedio) : (selected ? String(selected.salarioBase) : f.promedioMensual),
+        sumaSalariosAguinaldo: earnings.sumaAguinaldo > 0 ? String(earnings.sumaAguinaldo) : f.sumaSalariosAguinaldo,
+      }));
+      setPreview(null);
+    } else {
+      setPagosFuente("ninguno");
+      setMesesGanados(["", "", "", "", "", ""]);
+      setMesLabels(["Mes 1", "Mes 2", "Mes 3", "Mes 4", "Mes 5", "Mes 6"]);
+      if (selected) {
+        setForm((f) => ({ ...f, promedioMensual: String(selected.salarioBase) }));
+      }
+    }
+  }, [earnings, empIdNum, selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const promedioFromMeses = useMemo(() => {
     const nums = mesesGanados.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
@@ -1325,12 +1356,6 @@ function LiquidacionTab({
       setPreview(null);
     }
   }, [promedioFromMeses?.promedio]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (selected && !form.promedioMensual && !promedioFromMeses) {
-      setForm((f) => ({ ...f, promedioMensual: String(selected.salarioBase) }));
-    }
-  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const previewMut = trpc.hr.previewLiquidacion.useMutation({
     onSuccess: (data) => { setPreview(data); setError(""); },
@@ -1394,11 +1419,13 @@ function LiquidacionTab({
                 value={form.employeeId}
                 onChange={(e) => {
                   const emp = emps.find((x) => x.id === Number(e.target.value));
+                  setPagosFuente(null);
                   setMesesGanados(["", "", "", "", "", ""]);
                   setForm({
                     ...form,
                     employeeId: e.target.value,
                     promedioMensual: emp ? String(emp.salarioBase) : "",
+                    sumaSalariosAguinaldo: "",
                   });
                   setPreview(null);
                 }}
@@ -1436,14 +1463,20 @@ function LiquidacionTab({
               />
             </div>
             <div className="sm:col-span-2 space-y-2">
-              <Label>Lo que ganó cada mes (últimos hasta 6)</Label>
+              <Label>Lo pagado por mes (últimos 6)</Label>
               <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
-                Si cada mes fue distinto, poné acá lo pagado por mes. El promedio se calcula solo (suma ÷ cantidad de meses que llenaste).
+                {loadingEarnings
+                  ? "Buscando en Pagos pasados…"
+                  : pagosFuente === "pagos_pasados"
+                    ? `Se jaló de Pagos pasados (${earnings?.pagosEncontrados || 0} registro(s)). Podés corregir un mes si hace falta.`
+                    : pagosFuente === "ninguno"
+                      ? "No hay Pagos pasados para esta persona. Registralos en esa pestaña o escribilos acá a mano."
+                      : "Al elegir empleado se llenan solos desde Pagos pasados."}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {mesesGanados.map((val, idx) => (
                   <div key={idx}>
-                    <Label className="text-xs">Mes {idx + 1}</Label>
+                    <Label className="text-xs">{mesLabels[idx] || `Mes ${idx + 1}`}</Label>
                     <Input
                       type="number"
                       value={val}
@@ -1452,6 +1485,7 @@ function LiquidacionTab({
                         const next = [...mesesGanados];
                         next[idx] = e.target.value;
                         setMesesGanados(next);
+                        setPagosFuente(null);
                       }}
                     />
                   </div>
@@ -1462,21 +1496,12 @@ function LiquidacionTab({
                   className="rounded-lg px-3 py-2 text-sm flex flex-wrap gap-x-4 gap-y-1"
                   style={{ background: "rgba(27,58,92,0.08)", color: BRAND_BLUE }}
                 >
-                  <span>Suma: <strong>{money(promedioFromMeses.suma)}</strong></span>
-                  <span>Meses: <strong>{promedioFromMeses.count}</strong></span>
+                  <span>Suma 6 meses: <strong>{money(promedioFromMeses.suma)}</strong></span>
+                  <span>Meses con pago: <strong>{promedioFromMeses.count}</strong></span>
                   <span>Promedio: <strong>{money(promedioFromMeses.promedio)}</strong></span>
-                  <button
-                    type="button"
-                    className="underline text-xs"
-                    onClick={() => {
-                      setForm((f) => ({
-                        ...f,
-                        sumaSalariosAguinaldo: String(promedioFromMeses.suma),
-                      }));
-                    }}
-                  >
-                    Usar esta suma también para aguinaldo
-                  </button>
+                  {earnings && earnings.sumaAguinaldo > 0 && (
+                    <span>Aguinaldo (suma período): <strong>{money(earnings.sumaAguinaldo)}</strong></span>
+                  )}
                 </div>
               )}
             </div>
