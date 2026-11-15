@@ -757,10 +757,17 @@ export const hrRouter = createRouter({
         lte(hrPeriodPayments.desde, input.fechaSalida),
       ));
 
-      // Sumar por YYYY-MM (mes del inicio del periodo de pago)
+      // Sumar por YYYY-MM. Si el periodo es absurdomente largo (typo de año), usar mes de "hasta".
       const byMonth = new Map<string, number>();
       for (const p of payments) {
-        const key = String(p.desde || "").slice(0, 7);
+        const desde = String(p.desde || "");
+        const hasta = String(p.hasta || "");
+        let key = desde.slice(0, 7);
+        const d0 = Date.parse(`${desde}T12:00:00`);
+        const d1 = Date.parse(`${hasta}T12:00:00`);
+        if (Number.isFinite(d0) && Number.isFinite(d1) && (d1 - d0) / 86400000 > 40) {
+          key = hasta.slice(0, 7);
+        }
         if (!/^\d{4}-\d{2}$/.test(key)) continue;
         byMonth.set(key, (byMonth.get(key) || 0) + Number(p.montoPagado || 0));
       }
