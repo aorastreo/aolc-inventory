@@ -143,24 +143,125 @@ export function diasVacacionesProporcionales(diasTotales: number): number {
   return Math.round(raw * 100) / 100;
 }
 
-/** Meses del período de aguinaldo (1 dic año anterior → fecha salida), tope 12. */
+/** Inicio del período de aguinaldo MTSS (1 dic → 30 nov). */
+export function inicioPeriodoAguinaldo(fechaSalida: string): Date {
+  const salida = parseDate(fechaSalida);
+  const year = salida.getFullYear();
+  // Si sale en diciembre, ya corrió el período nuevo (1 dic de este año)
+  if (salida.getMonth() === 11) return new Date(year, 11, 1);
+  return new Date(year - 1, 11, 1);
+}
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Meses calendario del período de aguinaldo (informativo). */
 export function mesesAguinaldo(fechaSalida: string, fechaIngreso: string): number {
   const salida = parseDate(fechaSalida);
   const ingreso = parseDate(fechaIngreso);
-  const year = salida.getFullYear();
-  // Período legal: 1 dic año anterior — 30 nov año salida; en liquidación hasta fecha salida
-  let inicioPeriodo = new Date(year - 1, 11, 1); // 1 dic año anterior
-  if (salida.getMonth() === 11 && salida.getDate() >= 1) {
-    // Si sale en diciembre, el período nuevo ya empezó el 1 dic de este año
-    inicioPeriodo = new Date(year, 11, 1);
-  }
+  const inicioPeriodo = inicioPeriodoAguinaldo(fechaSalida);
   const start = ingreso > inicioPeriodo ? ingreso : inicioPeriodo;
   if (salida < start) return 0;
 
   let months = (salida.getFullYear() - start.getFullYear()) * 12 + (salida.getMonth() - start.getMonth());
-  // Contar mes de salida si trabajó al menos 1 día
   months += 1;
   return Math.min(12, Math.max(0, months));
+}
+
+/**
+ * Quincenas (1–15 y 16–fin de mes) que se solapan con [ingreso, salida]
+ * dentro del período de aguinaldo. Ej.: 1 ago → 15 nov = 7 quincenas.
+ */
+export function quincenasAguinaldo(fechaSalida: string, fechaIngreso: string): number {
+  const salida = parseDate(fechaSalida);
+  const ingreso = parseDate(fechaIngreso);
+  const inicioPeriodo = inicioPeriodoAguinaldo(fechaSalida);
+  const start = ingreso > inicioPeriodo ? ingreso : inicioPeriodo;
+  if (salida < start) return 0;
+
+  let count = 0;
+  let y = start.getFullYear();
+  let m = start.getMonth();
+  const endY = salida.getFullYear();
+  const endM = salida.getMonth();
+
+  while (y < endY || (y === endY && m <= endM)) {
+    const q1Start = new Date(y, m, 1, 12);
+    const q1End = new Date(y, m, 15, 12);
+    const q2Start = new Date(y, m, 16, 12);
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    const q2End = new Date(y, m, lastDay, 12);
+
+    if (q1End >= start && q1Start <= salida) count += 1;
+    if (q2End >= start && q2Start <= salida) count += 1;
+
+    m += 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+    if (count > 24) break;
+  }
+  return count;
+}
+
+/**
+ * Estimación de suma de salarios del período de aguinaldo cuando no hay
+ * registro de pagos: MTSS = sumar brutos del período (no meses × promedio a ciegas).
+ * Quincenal: quincenas × (promedioMensual/2).
+ */
+export function estimarSumaAguinaldo(opts: {
+  fechaIngreso: string;
+  fechaSalida: string;
+  promedioMensual: number;
+  tipoSalario: TipoSalario;
+}): { suma: number; quincenas: number; meses: number; detalle: string } {
+  const meses = mesesAguinaldo(opts.fechaSalida, opts.fechaIngreso);
+  const quincenas = quincenasAguinaldo(opts.fechaSalida, opts.fechaIngreso);
+  const avg = Number(opts.promedioMensual) || 0;
+
+  if (opts.tipoSalario === "quincenal") {
+    const porQuincena = avg / 2;
+    const suma = round2(porQuincena * quincenas);
+    return {
+      suma,
+      quincenas,
+      meses,
+      detalle: `${quincenas} quincena(s) × ₡${round2(porQuincena).toLocaleString("es-CR")} (estimado)`,
+    };
+  }
+  if (opts.tipoSalario === "semanal") {
+    const porSemana = (avg * 12) / 52;
+    const semanas = Math.max(0, Math.round(daysBetweenInclusive(
+      ymd(ingresoAguinaldoStart(opts.fechaIngreso, opts.fechaSalida)),
+      opts.fechaSalida,
+    ) / 7));
+    const suma = round2(porSemana * semanas);
+    return {
+      suma,
+      quincenas,
+      meses,
+      detalle: `${semanas} semana(s) × ₡${round2(porSemana).toLocaleString("es-CR")} (estimado)`,
+    };
+  }
+  const suma = round2(avg * meses);
+  return {
+    suma,
+    quincenas,
+    meses,
+    detalle: `${meses} mes(es) × ₡${round2(avg).toLocaleString("es-CR")} (estimado)`,
+  };
+}
+
+function ingresoAguinaldoStart(fechaIngreso: string, fechaSalida: string): Date {
+  const ingreso = parseDate(fechaIngreso);
+  const inicioPeriodo = inicioPeriodoAguinaldo(fechaSalida);
+  return ingreso > inicioPeriodo ? ingreso : inicioPeriodo;
+}
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
 }
 
 export type LiquidacionInput = {
@@ -174,7 +275,10 @@ export type LiquidacionInput = {
   pagaPreaviso: boolean;
   /** Días de vacaciones a pagar (si null, se estima proporcional). */
   diasVacaciones?: number | null;
-  /** Suma de salarios del período de aguinaldo; si null, promedio × meses período. */
+  /**
+   * Suma de salarios brutos del período de aguinaldo (1 dic–30 nov / ingreso→salida).
+   * MTSS: aguinaldo = esa suma ÷ 12. Si null, se estima por quincenas/semanas.
+   */
   sumaSalariosAguinaldo?: number | null;
   salariosPendientes?: number;
 };
@@ -195,6 +299,8 @@ export type LiquidacionResult = {
   vacacionesDias: number;
   vacacionesMonto: number;
   aguinaldoMeses: number;
+  aguinaldoQuincenas: number;
+  aguinaldoSuma: number;
   aguinaldoMonto: number;
   salariosPendientes: number;
   total: number;
@@ -203,10 +309,6 @@ export type LiquidacionResult = {
   incluyePreaviso: boolean;
   incluyeCesantia: boolean;
 };
-
-function round2(n: number) {
-  return Math.round(n * 100) / 100;
-}
 
 export function calcularLiquidacion(input: LiquidacionInput): LiquidacionResult {
   const avg = Number(input.promedioMensual) || 0;
@@ -234,12 +336,23 @@ export function calcularLiquidacion(input: LiquidacionInput): LiquidacionResult 
       : diasVacacionesProporcionales(ant.diasTotales);
   const vacacionesMonto = round2(diario * vacDias);
 
-  const mesesAgui = mesesAguinaldo(input.fechaSalida, input.fechaIngreso);
-  const sumaAgui =
-    input.sumaSalariosAguinaldo != null && Number.isFinite(Number(input.sumaSalariosAguinaldo))
-      ? Number(input.sumaSalariosAguinaldo)
-      : avg * mesesAgui;
+  // MTSS: sumar brutos del período (1 dic–30 nov o ingreso→salida) y ÷ 12
+  const estimadoAgui = estimarSumaAguinaldo({
+    fechaIngreso: input.fechaIngreso,
+    fechaSalida: input.fechaSalida,
+    promedioMensual: avg,
+    tipoSalario: input.tipoSalario,
+  });
+  const tieneSumaReal =
+    input.sumaSalariosAguinaldo != null && Number.isFinite(Number(input.sumaSalariosAguinaldo));
+  const sumaAgui = tieneSumaReal ? Number(input.sumaSalariosAguinaldo) : estimadoAgui.suma;
   const aguinaldoMonto = round2(sumaAgui / 12);
+  const mesesAgui = estimadoAgui.meses;
+  const quincenasAgui = estimadoAgui.quincenas;
+  const detalleAguinaldo = tieneSumaReal
+    ? `MTSS: suma brutos ₡${round2(sumaAgui).toLocaleString("es-CR")} ÷ 12` +
+      (input.tipoSalario === "quincenal" ? ` (${quincenasAgui} quincena(s) en el período)` : "")
+    : `MTSS estimado: ${estimadoAgui.detalle} = ₡${round2(sumaAgui).toLocaleString("es-CR")} ÷ 12`;
 
   const salariosPendientes = round2(Number(input.salariosPendientes || 0));
 
@@ -271,7 +384,7 @@ export function calcularLiquidacion(input: LiquidacionInput): LiquidacionResult 
       id: "aguinaldo",
       label: "Aguinaldo proporcional",
       monto: aguinaldoMonto,
-      detalle: `Suma período ₡${round2(sumaAgui).toLocaleString("es-CR")} ÷ 12 (${mesesAgui} mes(es) estimados)`,
+      detalle: detalleAguinaldo,
     },
     {
       id: "vacaciones",
@@ -325,6 +438,8 @@ export function calcularLiquidacion(input: LiquidacionInput): LiquidacionResult 
     vacacionesDias: vacDias,
     vacacionesMonto,
     aguinaldoMeses: mesesAgui,
+    aguinaldoQuincenas: quincenasAgui,
+    aguinaldoSuma: round2(sumaAgui),
     aguinaldoMonto,
     salariosPendientes,
     total,
