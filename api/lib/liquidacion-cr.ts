@@ -263,13 +263,57 @@ export function estimarSumaAguinaldo(opts: {
       detalle: `${semanas} semana(s) × ₡${round2(porSemana).toLocaleString("es-CR")} (estimado)`,
     };
   }
-  const suma = round2(avg * meses);
+  // Mensual: sumar mes a mes y prorratear solo el primer/último mes incompleto.
+  // No usar meses×avg a ciegas (ej. salida el 15 no vale un mes entero).
+  const suma = sumaAguinaldoMensualProrrateada(opts.fechaIngreso, opts.fechaSalida, avg);
   return {
     suma,
     quincenas,
     meses,
-    detalle: `${meses} mes(es) × ₡${round2(avg).toLocaleString("es-CR")} (estimado)`,
+    detalle: `suma brutos período (meses prorrateados) ₡${round2(suma).toLocaleString("es-CR")} (estimado)`,
   };
+}
+
+/**
+ * Suma de salarios mensuales fijos en el período de aguinaldo,
+ * prorrateando por días el mes de ingreso y/o el de salida.
+ */
+export function sumaAguinaldoMensualProrrateada(
+  fechaIngreso: string,
+  fechaSalida: string,
+  promedioMensual: number,
+): number {
+  const avg = Number(promedioMensual) || 0;
+  if (avg <= 0) return 0;
+  const salida = parseDate(fechaSalida);
+  const ingreso = parseDate(fechaIngreso);
+  const inicioPeriodo = inicioPeriodoAguinaldo(fechaSalida);
+  const start = ingreso > inicioPeriodo ? ingreso : inicioPeriodo;
+  if (salida < start) return 0;
+
+  let suma = 0;
+  let y = start.getFullYear();
+  let m = start.getMonth();
+  const endY = salida.getFullYear();
+  const endM = salida.getMonth();
+
+  while (y < endY || (y === endY && m <= endM)) {
+    const last = new Date(y, m + 1, 0).getDate();
+    const mesInicio = new Date(y, m, 1, 12);
+    const mesFin = new Date(y, m, last, 12);
+    const from = start > mesInicio ? start : mesInicio;
+    const to = salida < mesFin ? salida : mesFin;
+    if (to >= from) {
+      const daysWorked = Math.round((to.getTime() - from.getTime()) / 86400000) + 1;
+      suma += avg * (daysWorked / last);
+    }
+    m += 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+  }
+  return round2(suma);
 }
 
 function ingresoAguinaldoStart(fechaIngreso: string, fechaSalida: string): Date {

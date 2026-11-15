@@ -1542,7 +1542,7 @@ function LiquidacionTab({
                   : pagosFuente === "pagos_pasados"
                     ? `Usando montos registrados en Pagos pasados (${earnings?.pagosEncontrados || 0} registro(s)).`
                     : pagosFuente === "salario_ficha"
-                      ? "No hay Pagos pasados: se asume que siempre se le pagó el salario indicado en la ficha (base)."
+                      ? "No hay Pagos pasados: se usa el salario de ficha. Si es mensual fijo, el promedio Art. 30 no baja porque la salida caiga a mitad de mes."
                       : pagosFuente === "mixto"
                         ? "Hay meses con monto registrado y meses vacíos: en los vacíos se usa el salario de ficha (lo indicado desde el inicio)."
                         : "Al elegir empleado se llenan solos desde Pagos pasados; si no hay, se usa el salario de ficha."}

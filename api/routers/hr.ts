@@ -844,11 +844,13 @@ export const hrRouter = createRouter({
       const mensualBase = salarioBaseAMensual(Number(emp.salarioBase), tipoSalario);
 
       /**
-       * Monto esperado de un mes si no hay registro en Pagos pasados:
-       * se asume que se pagó lo indicado en ficha (salarioBase).
+       * Monto esperado de un mes si no hay registro en Pagos pasados.
+       * - Art. 30 (promedio): salario mensual fijo = mes completo (el diario no
+       *   debe bajar porque la salida cae a mitad de mes; eso va a salarios pendientes).
+       * - Aguinaldo: sí prorratea el mes incompleto (devengado real del período).
        * Quincenal: solo quincenas con ≥½ de días trabajados en ese mes.
        */
-      function esperadoMes(yearMonth: string): number {
+      function esperadoMes(yearMonth: string, modo: "promedio" | "aguinaldo"): number {
         const [ys, ms] = yearMonth.split("-").map(Number);
         if (!ys || !ms) return Math.round(mensualBase * 100) / 100;
         const mesInicio = `${ys}-${String(ms).padStart(2, "0")}-01`;
@@ -870,18 +872,21 @@ export const hrRouter = createRouter({
           const porSemana = Number(emp.salarioBase) || 0;
           return Math.round(porSemana * semanas * 100) / 100;
         }
-        // mensual: prorrateo simple por días del mes
-        const daysInMonth = last;
+        // mensual
+        if (modo === "promedio") {
+          // Salario fijo: el mes cuenta entero para el promedio Art. 30
+          return Math.round(mensualBase * 100) / 100;
+        }
         const daysWorked = Math.round(
           (Date.parse(`${hasta}T12:00:00`) - Date.parse(`${desde}T12:00:00`)) / 86400000,
         ) + 1;
-        return Math.round(mensualBase * (daysWorked / daysInMonth) * 100) / 100;
+        return Math.round(mensualBase * (daysWorked / last) * 100) / 100;
       }
 
-      // Rellenar huecos: sin registro → se pagó lo de ficha
+      // Rellenar huecos: sin registro → se pagó lo de ficha (promedio Art. 30)
       const monthsFilled = months.map((m) => {
         const registrado = m.monto > 0;
-        const monto = registrado ? m.monto : esperadoMes(m.key);
+        const monto = registrado ? m.monto : esperadoMes(m.key, "promedio");
         return {
           ...m,
           monto,
@@ -891,9 +896,16 @@ export const hrRouter = createRouter({
 
       const withPay = monthsFilled.filter((m) => m.monto > 0);
       const suma6 = withPay.reduce((s, m) => s + m.monto, 0);
-      const promedio = withPay.length
-        ? Math.round((suma6 / withPay.length) * 100) / 100
-        : Math.round(mensualBase * 100) / 100;
+      /**
+       * Si no hay pagos variables registrados y el salario es mensual fijo,
+       * el promedio Art. 30 es el de ficha (no mezclar un mes de salida a medias).
+       */
+      const soloFicha = monthsFilled.length > 0 && monthsFilled.every((m) => m.fuenteMes === "salario_ficha");
+      const promedio = soloFicha && tipoSalario === "mensual"
+        ? Math.round(mensualBase * 100) / 100
+        : withPay.length
+          ? Math.round((suma6 / withPay.length) * 100) / 100
+          : Math.round(mensualBase * 100) / 100;
 
       // Aguinaldo MTSS
       let inicioAgui = new Date(salida.getFullYear() - 1, 11, 1);
@@ -939,7 +951,7 @@ export const hrRouter = createRouter({
           const reg = byMonth.get(key) || 0;
           if (reg > 0) sumaAguinaldo += reg;
           else {
-            sumaAguinaldo += esperadoMes(key);
+            sumaAguinaldo += esperadoMes(key, "aguinaldo");
             huecos += 1;
           }
           cursorA = new Date(cursorA.getFullYear(), cursorA.getMonth() + 1, 1);
@@ -956,6 +968,9 @@ export const hrRouter = createRouter({
       if (payments.length === 0) {
         notaAntiguedad =
           `Sin pagos en Pagos pasados: se usa el salario de ficha (${emp.tipoSalario} ₡${Number(emp.salarioBase).toLocaleString("es-CR")}). ` +
+          (tipoSalario === "mensual"
+            ? "Promedio Art. 30 = salario mensual fijo (el mes de salida incompleto no rebaja el diario; esos días van a salarios pendientes). "
+            : "") +
           `Aguinaldo estimado: ${estimadoAgui.detalle}.`;
       } else if (mesesDesdeFicha > 0) {
         notaAntiguedad =
