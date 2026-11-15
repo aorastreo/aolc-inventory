@@ -749,6 +749,24 @@ export const hrRouter = createRouter({
       return { success: true };
     }),
 
+  /** Reactiva una liquidación borrada (soft-delete) y, si se pide, al empleado. */
+  restoreLiquidacion: managerQuery
+    .input(z.object({
+      id: z.number(),
+      reactivarEmpleado: z.boolean().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await ensureEnterpriseSchema();
+      const [row] = await db.select().from(hrLiquidaciones).where(eq(hrLiquidaciones.id, input.id)).limit(1);
+      if (!row) throw new Error("Liquidación no encontrada");
+      await db.update(hrLiquidaciones).set({ isActive: true }).where(eq(hrLiquidaciones.id, input.id));
+      if (input.reactivarEmpleado) {
+        await db.update(hrEmployees).set({ estado: "activo", isActive: true }).where(eq(hrEmployees.id, row.employeeId));
+      }
+      return { success: true, employeeId: row.employeeId };
+    }),
+
   /**
    * Agrupa pagos registrados (Pagos pasados) por mes calendario
    * para armar promedio de liquidación y suma de aguinaldo.
