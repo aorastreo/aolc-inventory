@@ -845,10 +845,10 @@ export const hrRouter = createRouter({
 
       /**
        * Monto esperado de un mes si no hay registro en Pagos pasados.
-       * - Art. 30 (promedio): salario mensual fijo = mes completo (el diario no
-       *   debe bajar porque la salida cae a mitad de mes; eso va a salarios pendientes).
+       * - Art. 30 (promedio): siempre el equivalente mensual de ficha completo.
+       *   El mes de salida a medias no debe bajar el diario (eso va a salarios pendientes).
+       *   Aplica igual si el pago es mensual, quincenal o semanal.
        * - Aguinaldo: sí prorratea el mes incompleto (devengado real del período).
-       * Quincenal: solo quincenas con ≥½ de días trabajados en ese mes.
        */
       function esperadoMes(yearMonth: string, modo: "promedio" | "aguinaldo"): number {
         const [ys, ms] = yearMonth.split("-").map(Number);
@@ -860,6 +860,13 @@ export const hrRouter = createRouter({
         const desde = emp.fechaIngreso > mesInicio ? emp.fechaIngreso : mesInicio;
         const hasta = input.fechaSalida < mesFin ? input.fechaSalida : mesFin;
         if (hasta < desde) return 0;
+
+        // Art. 30: remuneración ordinaria mensual de ficha (sin prorratear salida)
+        if (modo === "promedio") {
+          return Math.round(mensualBase * 100) / 100;
+        }
+
+        // Aguinaldo: prorrateo por quincenas / semanas / días
         if (tipoSalario === "quincenal") {
           const q = quincenasAguinaldo(hasta, desde);
           return Math.round((mensualBase / 2) * q * 100) / 100;
@@ -871,11 +878,6 @@ export const hrRouter = createRouter({
           const semanas = Math.max(0, Math.round(days / 7));
           const porSemana = Number(emp.salarioBase) || 0;
           return Math.round(porSemana * semanas * 100) / 100;
-        }
-        // mensual
-        if (modo === "promedio") {
-          // Salario fijo: el mes cuenta entero para el promedio Art. 30
-          return Math.round(mensualBase * 100) / 100;
         }
         const daysWorked = Math.round(
           (Date.parse(`${hasta}T12:00:00`) - Date.parse(`${desde}T12:00:00`)) / 86400000,
@@ -897,11 +899,11 @@ export const hrRouter = createRouter({
       const withPay = monthsFilled.filter((m) => m.monto > 0);
       const suma6 = withPay.reduce((s, m) => s + m.monto, 0);
       /**
-       * Si no hay pagos variables registrados y el salario es mensual fijo,
-       * el promedio Art. 30 es el de ficha (no mezclar un mes de salida a medias).
+       * Sin pagos variables: promedio Art. 30 = equivalente mensual de ficha
+       * (mensual / quincenal×2 / semanal anualizado). No diluir con mes de salida a medias.
        */
       const soloFicha = monthsFilled.length > 0 && monthsFilled.every((m) => m.fuenteMes === "salario_ficha");
-      const promedio = soloFicha && tipoSalario === "mensual"
+      const promedio = soloFicha
         ? Math.round(mensualBase * 100) / 100
         : withPay.length
           ? Math.round((suma6 / withPay.length) * 100) / 100
@@ -967,10 +969,8 @@ export const hrRouter = createRouter({
       let notaAntiguedad: string | null = null;
       if (payments.length === 0) {
         notaAntiguedad =
-          `Sin pagos en Pagos pasados: se usa el salario de ficha (${emp.tipoSalario} ₡${Number(emp.salarioBase).toLocaleString("es-CR")}). ` +
-          (tipoSalario === "mensual"
-            ? "Promedio Art. 30 = salario mensual fijo (el mes de salida incompleto no rebaja el diario; esos días van a salarios pendientes). "
-            : "") +
+          `Sin pagos en Pagos pasados: se usa el salario de ficha (${emp.tipoSalario} ₡${Number(emp.salarioBase).toLocaleString("es-CR")} → ₡${mensualBase.toLocaleString("es-CR")}/mes). ` +
+          `Promedio Art. 30 = ese mensual fijo (el mes de salida incompleto no rebaja el diario; esos días van a salarios pendientes). ` +
           `Aguinaldo estimado: ${estimadoAgui.detalle}.`;
       } else if (mesesDesdeFicha > 0) {
         notaAntiguedad =
