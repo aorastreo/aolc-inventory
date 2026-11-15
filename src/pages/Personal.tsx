@@ -1295,6 +1295,8 @@ function LiquidacionTab({
     marcarInactivo: true,
     nota: "",
   });
+  /** Montos distintos por mes → el promedio se calcula solo. */
+  const [mesesGanados, setMesesGanados] = useState<string[]>(["", "", "", "", "", ""]);
   const [preview, setPreview] = useState<any | null>(null);
   const [error, setError] = useState("");
 
@@ -1306,8 +1308,26 @@ function LiquidacionTab({
 
   const selected = emps.find((e) => e.id === Number(form.employeeId));
 
+  const promedioFromMeses = useMemo(() => {
+    const nums = mesesGanados.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
+    if (nums.length === 0) return null;
+    const suma = nums.reduce((s, n) => s + n, 0);
+    return {
+      suma,
+      count: nums.length,
+      promedio: Math.round((suma / nums.length) * 100) / 100,
+    };
+  }, [mesesGanados]);
+
   useEffect(() => {
-    if (selected && !form.promedioMensual) {
+    if (promedioFromMeses) {
+      setForm((f) => ({ ...f, promedioMensual: String(promedioFromMeses.promedio) }));
+      setPreview(null);
+    }
+  }, [promedioFromMeses?.promedio]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (selected && !form.promedioMensual && !promedioFromMeses) {
       setForm((f) => ({ ...f, promedioMensual: String(selected.salarioBase) }));
     }
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1374,6 +1394,7 @@ function LiquidacionTab({
                 value={form.employeeId}
                 onChange={(e) => {
                   const emp = emps.find((x) => x.id === Number(e.target.value));
+                  setMesesGanados(["", "", "", "", "", ""]);
                   setForm({
                     ...form,
                     employeeId: e.target.value,
@@ -1414,13 +1435,61 @@ function LiquidacionTab({
                 onChange={(e) => { setForm({ ...form, fechaSalida: e.target.value }); setPreview(null); }}
               />
             </div>
+            <div className="sm:col-span-2 space-y-2">
+              <Label>Lo que ganó cada mes (últimos hasta 6)</Label>
+              <p className="text-xs" style={{ color: "hsl(207 20% 45%)" }}>
+                Si cada mes fue distinto, poné acá lo pagado por mes. El promedio se calcula solo (suma ÷ cantidad de meses que llenaste).
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {mesesGanados.map((val, idx) => (
+                  <div key={idx}>
+                    <Label className="text-xs">Mes {idx + 1}</Label>
+                    <Input
+                      type="number"
+                      value={val}
+                      placeholder="₡"
+                      onChange={(e) => {
+                        const next = [...mesesGanados];
+                        next[idx] = e.target.value;
+                        setMesesGanados(next);
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+              {promedioFromMeses && (
+                <div
+                  className="rounded-lg px-3 py-2 text-sm flex flex-wrap gap-x-4 gap-y-1"
+                  style={{ background: "rgba(27,58,92,0.08)", color: BRAND_BLUE }}
+                >
+                  <span>Suma: <strong>{money(promedioFromMeses.suma)}</strong></span>
+                  <span>Meses: <strong>{promedioFromMeses.count}</strong></span>
+                  <span>Promedio: <strong>{money(promedioFromMeses.promedio)}</strong></span>
+                  <button
+                    type="button"
+                    className="underline text-xs"
+                    onClick={() => {
+                      setForm((f) => ({
+                        ...f,
+                        sumaSalariosAguinaldo: String(promedioFromMeses.suma),
+                      }));
+                    }}
+                  >
+                    Usar esta suma también para aguinaldo
+                  </button>
+                </div>
+              )}
+            </div>
             <div>
-              <Label>Promedio salarial mensual (últimos 6 meses)</Label>
+              <Label>Promedio mensual (se llena solo o a mano)</Label>
               <Input
                 type="number"
                 value={form.promedioMensual}
-                onChange={(e) => setForm({ ...form, promedioMensual: e.target.value })}
-                placeholder="Ej. 450000"
+                onChange={(e) => {
+                  setForm({ ...form, promedioMensual: e.target.value });
+                  setPreview(null);
+                }}
+                placeholder="O poné el promedio directo"
               />
             </div>
             <div>
